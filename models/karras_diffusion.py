@@ -10,12 +10,12 @@ import torch.nn.functional as F
 from piq import LPIPS
 from torchvision.transforms import RandomCrop
 from . import dist_util
-
+import math
 from .nn import mean_flat, append_dims, append_zero
 from .random_util import get_generator
 
 
-def get_weightings(weight_schedule, snrs, sigma_data):
+def get_weightings(weight_schedule, snrs, sigma_data, t2, t):
     if weight_schedule == "snr":
         weightings = snrs
     elif weight_schedule == "snr+1":
@@ -26,9 +26,14 @@ def get_weightings(weight_schedule, snrs, sigma_data):
         weightings = th.clamp(snrs, min=1.0)
     elif weight_schedule == "uniform":
         weightings = th.ones_like(snrs)
+    ### ICT weighting
+    elif weight_schedule == "ict":
+        weightings = 1/(t-t2)
     else:
         raise NotImplementedError()
     return weightings
+
+
 
 
 class KarrasDenoiser:
@@ -50,18 +55,15 @@ class KarrasDenoiser:
             self.lpips_loss = LPIPS(replace_pooling=True, reduction="none")
         self.rho = rho
         self.num_timesteps = 40
+        self.p_mean = -1.1
+        self.p_std = 2.0
+        self.c = None
 
     def get_snr(self, sigmas):
         return sigmas**-2
 
     def get_sigmas(self, sigmas):
         return sigmas
-
-    # def get_scalings(self, sigma):
-    #     c_skip = self.sigma_data**2 / (sigma**2 + self.sigma_data**2)
-    #     c_out = sigma * self.sigma_data / (sigma**2 + self.sigma_data**2) ** 0.5
-    #     c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
-    #     return c_skip, c_out, c_in
 
     def get_scalings_for_boundary_condition(self, sigma):
         c_skip = self.sigma_data**2 / (
@@ -100,6 +102,15 @@ class KarrasDenoiser:
             terms["loss"] = terms["mse"]
 
         return terms
+    
+    def icm_dist(self, num_scales):
+        indices = th.Tensor(range(num_scales))
+        sigmas = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
+                self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
+            )
+        erf_sigmas = th.erf((th.log(sigmas)-self.p_mean)/(math.sqrt(2)*self.p_std))
+        dist = th.distributions.categorical.Categorical(logits=erf_sigmas[1:]-erf_sigmas[:-1])
+        return dist
 
     def consistency_losses(
         self,
@@ -169,10 +180,13 @@ class KarrasDenoiser:
 
             return samples
 
-        indices = th.randint(
-            0, num_scales - 1, (x_start.shape[0],), device=x_start.device
-        )
-
+        ### Fix here. Define a categorical distribution
+        indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0],)).to(x_start.device)
+        # indices = th.randint(
+        #     0, num_scales - 1, (x_start.shape[0],), device=x_start.device
+        # )
+        
+        ### need check here since yang song using the difference scheduler compared to karras: dunno why ?
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
         )
@@ -198,14 +212,13 @@ class KarrasDenoiser:
         distiller_target = distiller_target.detach()
 
         snrs = self.get_snr(t)
-        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data)
+        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t) # ICT: weighting 1/(t2-t)
         if self.loss_norm == "l1":
             diffs = th.abs(distiller - distiller_target)
             loss = mean_flat(diffs) * weights
         elif self.loss_norm == "huber":
-            c = 0.03
             diffs = (distiller - distiller_target) ** 2
-            loss = (th.sqrt(mean_flat(diffs)+c**2)-c) * weights
+            loss = (th.sqrt(mean_flat(diffs)+self.c**2)-self.c) * weights
         elif self.loss_norm == "l2":
             diffs = (distiller - distiller_target) ** 2
             loss = mean_flat(diffs) * weights
@@ -307,7 +320,7 @@ class KarrasDenoiser:
         target_x = euler_to_denoiser(x_t, t, x_t3, t3).detach()
 
         snrs = self.get_snr(t)
-        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data)
+        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data) 
         if self.loss_norm == "l1":
             diffs = th.abs(denoised_x - target_x)
             loss = mean_flat(diffs) * weights

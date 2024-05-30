@@ -145,7 +145,7 @@ def main(args):
 
     # Setup an experiment folder:
     experiment_index = args.exp
-    experiment_dir = f"{args.results_dir}/{experiment_index}"  # Create an experiment folder 
+    experiment_dir = f"{args.results_dir}/{args.dataset}/{experiment_index}"  # Create an experiment folder 
     checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
     sample_dir = f"{experiment_dir}/samples"
     if rank == 0:
@@ -159,6 +159,8 @@ def main(args):
     
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
+    diffusion.c = 0.00054*math.sqrt(args.num_in_channels*args.image_size**2)
+    logger.info("c in huber loss is {}".format(diffusion.c))
     # create ema for training model
     logger.info("creating the ema model")
     ema = deepcopy(model)  # Create an EMA of the model for use after training
@@ -174,8 +176,6 @@ def main(args):
     opt = torch.optim.RAdam(
         model.parameters(), lr=args.lr, #weight_decay=args.weight_decay
     )
-    # define scheduler
-    schedule_sampler = UniformSampler(diffusion)
 
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -235,7 +235,8 @@ def main(args):
         start_scales=args.start_scales,
         end_scales=args.end_scales,
         total_steps=args.total_training_steps,
-    )
+    ) # already adding ict increasing discretized N to code
+    
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
@@ -251,7 +252,6 @@ def main(args):
             x = x.to(device)
             y = None if not use_label else y.to(device)
             ema_rate, num_scales = ema_scale_fn(train_steps)
-            t, weights = schedule_sampler.sample(x.shape[0], device)
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
             losses = diffusion.consistency_losses(model,
@@ -259,19 +259,15 @@ def main(args):
                                                 num_scales,
                                                 target_model=target_model,
                                                 model_kwargs=model_kwargs)
-            if isinstance(schedule_sampler, LossAwareSampler):
-                schedule_sampler.update_with_local_losses(
-                    t, losses["loss"].detach())
-            loss = (losses["loss"] * weights).mean()
+            loss = (losses["loss"]).mean()
             after_forward = torch.cuda.memory_allocated(device)
             opt.zero_grad()
             loss.backward()
             opt.step()
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
-            ema_rate, scales = ema_scale_fn(train_steps)
-            update_ema(target_model, model.module, decay=ema_rate)
-
+            ##### ema rate for teacher should be 0 (iCT)
+            update_ema(target_model, model.module, decay=0)
             # Log loss values:
             running_loss += loss.item()
             log_steps += 1
@@ -411,7 +407,7 @@ if __name__ == "__main__":
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
-    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr"], default="uniform")
+    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber"], default="huber")
     
     ###### consistency ######

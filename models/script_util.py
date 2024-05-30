@@ -148,6 +148,7 @@ def create_ema_and_scales_fn(
     start_scales,
     end_scales,
     total_steps,
+    ict = True,
 ):
     def ema_and_scales_fn(step):
         if target_ema_mode == "fixed" and scale_mode == "fixed":
@@ -180,8 +181,17 @@ def create_ema_and_scales_fn(
         else:
             raise NotImplementedError
         return float(target_ema), int(scales)
+    
+    # Discretization curriculum improvement
+    def improve_scale_fn(step):
+        temp = np.floor(total_steps/(np.log2(np.floor(end_scales/start_scales))+1))
+        scales = min(start_scales*2**np.floor(step/temp), end_scales) + 1
+        return None, int(scales)
 
-    return ema_and_scales_fn
+    if ict: 
+        return improve_scale_fn 
+    else: 
+        return ema_and_scales_fn
 
 
 def add_dict_to_argparser(parser, default_dict):
