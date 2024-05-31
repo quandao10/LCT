@@ -186,7 +186,7 @@ class KarrasDenoiser:
         #     0, num_scales - 1, (x_start.shape[0],), device=x_start.device
         # )
         
-        ### need check here since yang song using the difference scheduler compared to karras: dunno why ?
+        ### need check here since yang song using the difference scheduler compared to karras: dunno why ? Yang Song code differently from paper check carefully
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
         )

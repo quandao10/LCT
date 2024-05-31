@@ -338,7 +338,7 @@ def main(args):
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
-                    model,
+                    ema,
                     (64, 3, args.image_size, args.image_size),
                     steps=args.steps,
                     model_kwargs=model_kwargs,
@@ -414,8 +414,8 @@ if __name__ == "__main__":
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
     parser.add_argument("--scale-mode", type=str, choices=["progressive", "fixed"], default="fixed")
     parser.add_argument("--start-ema", type=float, default=0.0)
-    parser.add_argument("--start-scales", type=float, default=40)
-    parser.add_argument("--end-scales", type=float, default=40)
+    parser.add_argument("--start-scales", type=float, default=2)
+    parser.add_argument("--end-scales", type=float, default=200)
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)

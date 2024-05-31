@@ -38,9 +38,9 @@ CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --scale-mode fixed \
         --start-scales 10 \
         --end-scales 1280 \
-        --global-batch-size 96 \
+        --global-batch-size 196 \
         --epochs 1800 \
-        --lr 0.0001 \
+        --lr 0.00002 \
         --num-channels 192 \
         --num-head-channels 64 \
         --num-res-blocks 2 \
