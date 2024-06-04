@@ -109,7 +109,8 @@ class KarrasDenoiser:
                 self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
             )
         erf_sigmas = th.erf((th.log(sigmas)-self.p_mean)/(math.sqrt(2)*self.p_std))
-        dist = th.distributions.categorical.Categorical(logits=erf_sigmas[1:]-erf_sigmas[:-1])
+        unnorm_prob = erf_sigmas[:-1]-erf_sigmas[1:]
+        dist = th.distributions.categorical.Categorical(probs=unnorm_prob)
         return dist
 
     def consistency_losses(
@@ -196,6 +197,8 @@ class KarrasDenoiser:
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
         )
         t2 = t2**self.rho
+        
+        # t2 < t, indices > indices + 1
 
         x_t = x_start + noise * append_dims(t, dims)
 

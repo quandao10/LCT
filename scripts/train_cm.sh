@@ -24,8 +24,8 @@ export MASTER_PORT=10122
 
 ### improved CT
 
-CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm.py \
-        --exp icm_exp1 \
+CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm.py \
+        --exp icm_fix_sampling_dist_lr1e-4 \
         --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset cifar10 \
         --image-size 32 \
@@ -40,7 +40,7 @@ CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --end-scales 1280 \
         --global-batch-size 196 \
         --epochs 1800 \
-        --lr 0.00002 \
+        --lr 0.0001 \
         --num-channels 192 \
         --num-head-channels 64 \
         --num-res-blocks 2 \

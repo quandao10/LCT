@@ -338,7 +338,7 @@ def main(args):
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
-                    ema,
+                    model,
                     (64, 3, args.image_size, args.image_size),
                     steps=args.steps,
                     model_kwargs=model_kwargs,
