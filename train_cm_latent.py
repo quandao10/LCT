@@ -37,6 +37,7 @@ from models.script_util import (
 from models.resample import LossAwareSampler, UniformSampler
 from models.karras_diffusion import karras_sample
 from diffusers.models import AutoencoderKL
+from models.edm2 import StabilityVAEEncoder
 
 
 #################################################################################
@@ -161,7 +162,9 @@ def main(args):
         logger = create_logger(None)
     # create vae model
     logger.info("creating the vae model")
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    vae = StabilityVAEEncoder(f"stabilityai/sd-vae-ft-mse")
+    vae.init(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
     # create ema for training model
@@ -213,6 +216,7 @@ def main(args):
     ema.eval()
 
     dataset = get_dataset(args)
+    import pdb; pdb.set_trace()
     sampler = DistributedSampler(
         dataset,
         num_replicas=world_size,
@@ -420,6 +424,8 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-max", type=float, default=80.0)
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr"], default="uniform")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber"], default="huber")
+    parser.add_argument("--p-mean", type=float, default=-1.1)
+    parser.add_argument("--p-std", type=float, default=2.0)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
@@ -457,6 +463,10 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=40)
     parser.add_argument("--num-sampling", type=int, default=4)
     parser.add_argument("--ts", type=str, default="0,22,39")
+    
+    ###### edm2 ######
+    parser.add_argument("--edm2", action="store_true", default=False)
 
     args = parser.parse_args()
     main(args)
+    
