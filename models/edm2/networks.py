@@ -289,13 +289,13 @@ class Precond(torch.nn.Module):
         self.use_fp16 = use_fp16
         self.sigma_data = sigma_data
         self.unet = UNet(img_resolution=img_resolution, img_channels=img_channels, label_dim=label_dim, **unet_kwargs)
-        self.logvar_fourier = MPFourier(logvar_channels)
-        self.logvar_linear = MPConv(logvar_channels, 1, kernel=[])
+        # self.logvar_fourier = MPFourier(logvar_channels)
+        # self.logvar_linear = MPConv(logvar_channels, 1, kernel=[])
 
-    def forward(self, x, sigma, class_labels=None, force_fp32=False, return_logvar=False, **unet_kwargs):
+    def forward(self, x, sigma, y=None, force_fp32=False, return_logvar=False, **unet_kwargs):
         x = x.to(torch.float32)
         sigma = sigma.to(torch.float32).reshape(-1, 1, 1, 1)
-        class_labels = None if self.label_dim == 0 else torch.zeros([1, self.label_dim], device=x.device) if class_labels is None else class_labels.to(torch.float32).reshape(-1, self.label_dim)
+        y = None if self.label_dim == 0 else torch.zeros([1, self.label_dim], device=x.device) if y is None else y.to(torch.float32).reshape(-1, self.label_dim)
         dtype = torch.float16 if (self.use_fp16 and not force_fp32 and x.device.type == 'cuda') else torch.float32
 
         # Preconditioning weights.
@@ -306,13 +306,13 @@ class Precond(torch.nn.Module):
 
         # Run the model.
         x_in = (c_in * x).to(dtype)
-        F_x = self.unet(x_in, c_noise, class_labels, **unet_kwargs)
+        F_x = self.unet(x_in, c_noise, y, **unet_kwargs)
         D_x = c_skip * x + c_out * F_x.to(torch.float32)
 
-        # Estimate uncertainty if requested.
-        if return_logvar:
-            logvar = self.logvar_linear(self.logvar_fourier(c_noise)).reshape(-1, 1, 1, 1)
-            return D_x, logvar # u(sigma) in Equation 21
+        # # Estimate uncertainty if requested.
+        # if return_logvar:
+        #     logvar = self.logvar_linear(self.logvar_fourier(c_noise)).reshape(-1, 1, 1, 1)
+        #     return D_x, logvar # u(sigma) in Equation 21
         return D_x
 
 #----------------------------------------------------------------------------

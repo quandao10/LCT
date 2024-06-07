@@ -45,8 +45,9 @@ class KarrasDenoiser:
         rho=7.0,
         weight_schedule="karras",
         loss_norm="lpips",
-        p_mean = -1.1,
-        p_std = 2.0,
+        p_mean=-1.1,
+        p_std=2.0,
+        edm2=False,
     ):
         self.sigma_data = sigma_data
         self.sigma_max = sigma_max
@@ -59,6 +60,7 @@ class KarrasDenoiser:
         self.num_timesteps = 40
         self.p_mean = p_mean
         self.p_std = p_std
+        self.edm2 = edm2
         self.c = None
 
     def get_snr(self, sigmas):
@@ -356,8 +358,14 @@ class KarrasDenoiser:
             append_dims(x, x_t.ndim)
             for x in self.get_scalings_for_boundary_condition(sigmas)
         ]
-        rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
-        model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
+        if self.edm2:
+            rescaled_t = sigmas
+        else:
+            rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
+        try:
+            model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
+        except:
+            import pdb; pdb.set_trace()
         denoised = c_out * model_output + c_skip * x_t
         return model_output, denoised
 
@@ -429,7 +437,8 @@ def karras_sample(
         callback=callback,
         **sampler_args,
     )
-    return x_0.clamp(-1, 1)
+    # return x_0.clamp(-1, 1)
+    return x_0
 
 
 def get_sigmas_karras(n, sigma_min, sigma_max, rho=7.0, device="cpu"):

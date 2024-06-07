@@ -58,7 +58,7 @@ def create_model_and_diffusion(args):
             img_resolution=args.image_size,
             img_channels=args.num_in_channels,
             label_dim=1000 if args.class_cond else 0,
-            use_fp16=True,
+            use_fp16=False,
             sigma_data=0.5,
             logvar_channels=128,
             model_channels=args.num_channels,
@@ -92,6 +92,7 @@ def create_model_and_diffusion(args):
         loss_norm=args.loss_norm,
         p_mean=args.p_mean,
         p_std=args.p_std,
+        edm2=args.edm2,
     )
     return model, diffusion
 
@@ -201,7 +202,8 @@ def create_ema_and_scales_fn(
     def improve_scale_fn(step):
         temp = np.floor(total_steps/(np.log2(np.floor(end_scales/start_scales))+1))
         scales = min(start_scales*2**np.floor(step/temp), end_scales) + 1
-        return None, int(scales)
+        # return None, int(scales)
+        return 0, int(scales)
 
     if ict: 
         return improve_scale_fn 

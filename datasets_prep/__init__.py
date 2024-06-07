@@ -177,7 +177,7 @@ def get_dataset(args):
         )
         dataset = LMDBDataset(root=args.datadir, name="ffhq", train=True, transform=train_transform)
     elif args.dataset == "latent_celeb256":
-        dataset = PreprocessedLatentDataset()
+        dataset = PreprocessedLatentDataset(path=args.datadir, use_labels=False)
     # elif args.dataset == "latent_ffhq256":
     #     dataset = CustomDataset("ffhq", "features/ffhq256_features")
     # elif args.dataset == "latent_ffhq256_flip":

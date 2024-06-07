@@ -18,7 +18,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from torchvision.utils import save_image
+from torchvision.utils import save_image, make_grid
 import numpy as np
 from collections import OrderedDict
 from PIL import Image
@@ -167,6 +167,9 @@ def main(args):
     vae.init(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
+    if args.ict:
+        diffusion.c = 0.00054*math.sqrt(args.num_in_channels*args.image_size**2)
+        logger.info("c in huber loss is {}".format(diffusion.c))
     # create ema for training model
     logger.info("creating the ema model")
     ema = deepcopy(model)  # Create an EMA of the model for use after training
@@ -182,8 +185,6 @@ def main(args):
     opt = torch.optim.RAdam(
         model.parameters(), lr=args.lr, #weight_decay=args.weight_decay
     )
-    # define scheduler
-    schedule_sampler = UniformSampler(diffusion)
 
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -216,7 +217,6 @@ def main(args):
     ema.eval()
 
     dataset = get_dataset(args)
-    import pdb; pdb.set_trace()
     sampler = DistributedSampler(
         dataset,
         num_replicas=world_size,
@@ -244,6 +244,7 @@ def main(args):
         start_scales=args.start_scales,
         end_scales=args.end_scales,
         total_steps=args.total_training_steps,
+        ict=args.ict,
     )
     # Variables for monitoring/logging purposes:
     log_steps = 0
@@ -257,10 +258,10 @@ def main(args):
         logger.info(f"Beginning epoch {epoch}...")
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
+            x = vae.encode_latents(x)
             x = x.to(device)
             y = None if not use_label else y.to(device)
             ema_rate, num_scales = ema_scale_fn(train_steps)
-            t, weights = schedule_sampler.sample(x.shape[0], device)
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
             losses = diffusion.consistency_losses(model,
@@ -268,10 +269,7 @@ def main(args):
                                                 num_scales,
                                                 target_model=target_model,
                                                 model_kwargs=model_kwargs)
-            if isinstance(schedule_sampler, LossAwareSampler):
-                schedule_sampler.update_with_local_losses(
-                    t, losses["loss"].detach())
-            loss = (losses["loss"] * weights).mean()
+            loss = (losses["loss"]).mean()
             after_forward = torch.cuda.memory_allocated(device)
             opt.zero_grad()
             loss.backward()
@@ -371,9 +369,13 @@ def main(args):
             # sample = sample.permute(0, 2, 3, 1)
             # sample = sample.contiguous()
             # Save and display images:
-            sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
-            sample = torch.concat(sample, dim=0)
-            save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
+            # sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
+            # sample = torch.concat(sample, dim=0)
+            # save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
+            # modified for EDMv2 specificly
+            sample = vae.decode(sample)
+            sample = make_grid(sample, nrow=args.num_sampling)
+            Image.fromarray(sample.permute(1, 2, 0).cpu().numpy(), "RGB").save(f"{sample_dir}/image_{epoch:07d}.jpg")
             del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
@@ -463,6 +465,9 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=40)
     parser.add_argument("--num-sampling", type=int, default=4)
     parser.add_argument("--ts", type=str, default="0,22,39")
+    
+    ###### ict ######
+    parser.add_argument("--ict", action="store_true", default=False)
     
     ###### edm2 ######
     parser.add_argument("--edm2", action="store_true", default=False)
