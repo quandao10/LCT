@@ -2,6 +2,7 @@ import argparse
 
 from .karras_diffusion import KarrasDenoiser
 from .unet import UNetModel
+from .edm2 import EDM2
 import numpy as np
 
 NUM_CLASSES = 1000
@@ -52,31 +53,45 @@ def model_and_diffusion_defaults():
 
 
 def create_model_and_diffusion(args):
-    model = create_model(
-        args.image_size,
-        args.num_in_channels,
-        args.num_channels,
-        args.num_res_blocks,
-        channel_mult=args.channel_mult,
-        learn_sigma=args.learn_sigma,
-        class_cond=args.class_cond,
-        use_checkpoint=args.use_checkpoint,
-        attention_resolutions=args.attention_resolutions,
-        num_heads=args.num_heads,
-        num_head_channels=args.num_head_channels,
-        num_heads_upsample=args.num_heads_upsample,
-        use_scale_shift_norm=args.use_scale_shift_norm,
-        dropout=args.dropout,
-        resblock_updown=args.resblock_updown,
-        use_fp16=args.use_fp16,
-        use_new_attention_order=args.use_new_attention_order,
-    )
+    if args.edm2:
+        model = EDM2(
+            img_resolution=args.image_size,
+            img_channels=args.num_in_channels,
+            label_dim=1000 if args.class_cond else 0,
+            use_fp16=True,
+            sigma_data=0.5,
+            logvar_channels=128,
+            model_channels=args.num_channels,
+            dropout=args.dropout,
+        )
+    else:
+        model = create_model(
+            args.image_size,
+            args.num_in_channels,
+            args.num_channels,
+            args.num_res_blocks,
+            channel_mult=args.channel_mult,
+            learn_sigma=args.learn_sigma,
+            class_cond=args.class_cond,
+            use_checkpoint=args.use_checkpoint,
+            attention_resolutions=args.attention_resolutions,
+            num_heads=args.num_heads,
+            num_head_channels=args.num_head_channels,
+            num_heads_upsample=args.num_heads_upsample,
+            use_scale_shift_norm=args.use_scale_shift_norm,
+            dropout=args.dropout,
+            resblock_updown=args.resblock_updown,
+            use_fp16=args.use_fp16,
+            use_new_attention_order=args.use_new_attention_order,
+        )
     diffusion = KarrasDenoiser(
         sigma_data=0.5,
         sigma_max=args.sigma_max,
         sigma_min=args.sigma_min,
         weight_schedule=args.weight_schedule,
-        loss_norm=args.loss_norm
+        loss_norm=args.loss_norm,
+        p_mean=args.p_mean,
+        p_std=args.p_std,
     )
     return model, diffusion
 

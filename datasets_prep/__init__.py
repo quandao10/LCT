@@ -43,6 +43,34 @@ class CustomDataset(Dataset):
             return torch.from_numpy(features), torch.tensor(0)
         return torch.from_numpy(features.copy()), torch.from_numpy(labels)
 
+
+class PreprocessedLatentDataset(torch.utils.data.Dataset):
+    def __init__(self,
+        path,
+        use_labels,
+    ):
+        self._path = path
+        self._use_labels = use_labels
+        data = np.load(self._path, allow_pickle=True)
+        self.mean = data.item()['mean']
+        self.std = data.item()['std']
+        if self._use_labels:
+            self.label = data.item()['label']
+        self.num_channels = 8
+        self.has_labels = self._use_labels
+        
+    def __len__(self):
+        return self.mean.shape[0]
+    
+    def __getitem__(self, index):
+        latent_dist = np.concatenate([self.mean[index], self.std[index]], axis=0)
+        if self._use_labels:
+            label = self.label[index]
+        else:
+            label = np.array([])
+        return latent_dist, label
+
+
 def get_dataset(args):
     if args.dataset == "cifar10":
         dataset = CIFAR10(
@@ -148,26 +176,28 @@ def get_dataset(args):
             ]
         )
         dataset = LMDBDataset(root=args.datadir, name="ffhq", train=True, transform=train_transform)
-    elif args.dataset == "latent_ffhq256":
-        dataset = CustomDataset("ffhq", "features/ffhq256_features")
-    elif args.dataset == "latent_ffhq256_flip":
-        dataset = CustomDataset("ffhq_flip", "features/ffhq256_feature_flip")
-    elif args.dataset == "latent_church256":
-        dataset = CustomDataset("church256", "features/church256_features")
-    elif args.dataset == "latent_church256_flip":
-        dataset = CustomDataset("church256_flip", "features/lsun_flip")
     elif args.dataset == "latent_celeb256":
-        dataset = CustomDataset("celebhq256", "/research/cbim/vast/qd66/workspace/dataset/features/latent_celeba_256")
-    elif args.dataset == "latent_celeb512":
-        dataset = CustomDataset("celebhq", "features/celebahq512_features")
-    elif args.dataset == "latent_celeb512_flip":
-        dataset = CustomDataset("celebhq_flip", "features/celeb512_feature_flip")
-    elif args.dataset == "latent_celeb1024":
-        dataset = CustomDataset("celebhq", "features/celebahq1024_features")
-    elif args.dataset == "latent_imagenet256":
-        dataset = CustomDataset("imagenet", "features/imagenet256_features", "features/imagenet256_labels")
-    elif args.dataset == "latent_imagenet512":
-        dataset = CustomDataset("imagenet", "features/imagenet512_features", "features/imagenet512_labels")
+        dataset = PreprocessedLatentDataset()
+    # elif args.dataset == "latent_ffhq256":
+    #     dataset = CustomDataset("ffhq", "features/ffhq256_features")
+    # elif args.dataset == "latent_ffhq256_flip":
+    #     dataset = CustomDataset("ffhq_flip", "features/ffhq256_feature_flip")
+    # elif args.dataset == "latent_church256":
+    #     dataset = CustomDataset("church256", "features/church256_features")
+    # elif args.dataset == "latent_church256_flip":
+    #     dataset = CustomDataset("church256_flip", "features/lsun_flip")
+    # elif args.dataset == "latent_celeb256":
+    #     dataset = CustomDataset("celebhq256", "/research/cbim/vast/qd66/workspace/dataset/features/latent_celeba_256")
+    # elif args.dataset == "latent_celeb512":
+    #     dataset = CustomDataset("celebhq", "features/celebahq512_features")
+    # elif args.dataset == "latent_celeb512_flip":
+    #     dataset = CustomDataset("celebhq_flip", "features/celeb512_feature_flip")
+    # elif args.dataset == "latent_celeb1024":
+    #     dataset = CustomDataset("celebhq", "features/celebahq1024_features")
+    # elif args.dataset == "latent_imagenet256":
+    #     dataset = CustomDataset("imagenet", "features/imagenet256_features", "features/imagenet256_labels")
+    # elif args.dataset == "latent_imagenet512":
+    #     dataset = CustomDataset("imagenet", "features/imagenet512_features", "features/imagenet512_labels")
     return dataset
 
 

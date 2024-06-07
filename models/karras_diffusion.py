@@ -45,6 +45,8 @@ class KarrasDenoiser:
         rho=7.0,
         weight_schedule="karras",
         loss_norm="lpips",
+        p_mean = -1.1,
+        p_std = 2.0,
     ):
         self.sigma_data = sigma_data
         self.sigma_max = sigma_max
@@ -55,8 +57,8 @@ class KarrasDenoiser:
             self.lpips_loss = LPIPS(replace_pooling=True, reduction="none")
         self.rho = rho
         self.num_timesteps = 40
-        self.p_mean = -1.1
-        self.p_std = 2.0
+        self.p_mean = p_mean
+        self.p_std = p_std
         self.c = None
 
     def get_snr(self, sigmas):
