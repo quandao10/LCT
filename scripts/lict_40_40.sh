@@ -31,3 +31,4 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --p-mean $P_MEAN \
         --p-std $P_STD \
         
+python ~/envs/slack_workflow/running_finished.py
