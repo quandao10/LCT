@@ -189,7 +189,7 @@ def main(args):
         train_steps = checkpoint["train_steps"]
         logger.info("=> loaded checkpoint (epoch {})".format(epoch))
         del checkpoint
-    elif args.resume:
+    elif args.resume or os.path.exists(os.path.join(checkpoint_dir, "content.pth")):
         checkpoint_file = os.path.join(checkpoint_dir, "content.pth")
         checkpoint = torch.load(checkpoint_file, map_location=torch.device(f'cuda:{device}'))
         init_epoch = checkpoint["epoch"]
@@ -334,11 +334,11 @@ def main(args):
                 ts = tuple(int(x) for x in args.ts.split(","))
             else:
                 ts = None
-            generator = get_generator("determ", 64, seed)
+            generator = get_generator("dummy", 64, seed)
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
-                    model,
+                    model.module,
                     (64, 3, args.image_size, args.image_size),
                     steps=args.steps,
                     model_kwargs=model_kwargs,
