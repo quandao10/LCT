@@ -164,7 +164,6 @@ def create_ema_and_scales_fn(
     start_scales,
     end_scales,
     total_steps,
-    ict = True,
 ):
     def ema_and_scales_fn(step):
         if target_ema_mode == "fixed" and scale_mode == "fixed":
@@ -205,10 +204,7 @@ def create_ema_and_scales_fn(
         # return None, int(scales)
         return 0, int(scales)
 
-    if ict: 
-        return improve_scale_fn 
-    else: 
-        return ema_and_scales_fn
+    return ema_and_scales_fn
 
 
 def add_dict_to_argparser(parser, default_dict):

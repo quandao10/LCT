@@ -182,6 +182,7 @@ def main(args):
     target_model.train()
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
+    ema = DDP(ema.to(device), device_ids=[rank], find_unused_parameters=False)
     opt = torch.optim.RAdam(
         model.parameters(), lr=args.lr, #weight_decay=args.weight_decay
     )
@@ -244,7 +245,6 @@ def main(args):
         start_scales=args.start_scales,
         end_scales=args.end_scales,
         total_steps=args.total_training_steps,
-        ict=args.ict,
     )
     # Variables for monitoring/logging purposes:
     log_steps = 0
@@ -275,8 +275,8 @@ def main(args):
             loss.backward()
             opt.step()
             after_backward = torch.cuda.memory_allocated(device)
-            update_ema(ema, model.module)
-            ema_rate, scales = ema_scale_fn(train_steps)
+            update_ema(ema, model.module, decay=args.model_ema_rate)
+            ##### ema rate for teacher should be 0 (iCT)
             update_ema(target_model, model.module, decay=ema_rate)
 
             # Log loss values:
@@ -346,6 +346,7 @@ def main(args):
             else:
                 ts = None
             generator = get_generator("determ", args.num_sampling, seed)
+            # model
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
@@ -365,17 +366,35 @@ def main(args):
                     generator=generator,
                     ts=ts,
                 )
-            # sample = ((sample + 1) * 127.5).clamp(0, 255).to(torch.uint8)
-            # sample = sample.permute(0, 2, 3, 1)
-            # sample = sample.contiguous()
-            # Save and display images:
-            # sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
-            # sample = torch.concat(sample, dim=0)
-            # save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
             # modified for EDMv2 specificly
             sample = vae.decode(sample)
             sample = make_grid(sample, nrow=args.num_sampling)
             Image.fromarray(sample.permute(1, 2, 0).cpu().numpy(), "RGB").save(f"{sample_dir}/image_{epoch:07d}.jpg")
+            del sample
+            # EMA model
+            with torch.no_grad():
+                sample = karras_sample(
+                    diffusion,
+                    ema,
+                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                    steps=args.steps,
+                    model_kwargs=model_kwargs,
+                    device=device,
+                    clip_denoised=args.clip_denoised,
+                    sampler=args.sampler,
+                    sigma_min=args.sigma_min,
+                    sigma_max=args.sigma_max,
+                    s_churn=args.s_churn,
+                    s_tmin=args.s_tmin,
+                    s_tmax=args.s_tmax,
+                    s_noise=args.s_noise,
+                    generator=generator,
+                    ts=ts,
+                )
+            # modified for EDMv2 specificly
+            sample = vae.decode(sample)
+            sample = make_grid(sample, nrow=args.num_sampling)
+            Image.fromarray(sample.permute(1, 2, 0).cpu().numpy(), "RGB").save(f"{sample_dir}/image_{epoch:07d}_ema.jpg")
             del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
@@ -437,6 +456,7 @@ if __name__ == "__main__":
     parser.add_argument("--end-scales", type=float, default=40)
     
     ###### training ######
+    parser.add_argument("--model-ema-rate", type=float, default="fixed", default=0.9999, help="0.9999 for 32x32, 0.999943 for 64x64")
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--no-lr-decay", action='store_true', default=False)
     parser.add_argument("--epochs", type=int, default=2000)
@@ -465,9 +485,6 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=40)
     parser.add_argument("--num-sampling", type=int, default=4)
     parser.add_argument("--ts", type=str, default="0,22,39")
-    
-    ###### ict ######
-    parser.add_argument("--ict", action="store_true", default=False)
     
     ###### edm2 ######
     parser.add_argument("--edm2", action="store_true", default=False)

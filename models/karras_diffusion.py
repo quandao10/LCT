@@ -124,8 +124,6 @@ class KarrasDenoiser:
         num_scales,
         model_kwargs=None,
         target_model=None,
-        teacher_model=None,
-        teacher_diffusion=None,
         noise=None,
     ):
         if model_kwargs is None:
@@ -147,49 +145,19 @@ class KarrasDenoiser:
         else:
             raise NotImplementedError("Must have a target model")
 
-        if teacher_model:
-
-            @th.no_grad()
-            def teacher_denoise_fn(x, t):
-                return teacher_diffusion.denoise(teacher_model, x, t, **model_kwargs)[1]
-
-        @th.no_grad()
-        def heun_solver(samples, t, next_t, x0):
-            x = samples
-            if teacher_model is None:
-                denoiser = x0
-            else:
-                denoiser = teacher_denoise_fn(x, t)
-
-            d = (x - denoiser) / append_dims(t, dims)
-            samples = x + d * append_dims(next_t - t, dims)
-            if teacher_model is None:
-                denoiser = x0
-            else:
-                denoiser = teacher_denoise_fn(samples, next_t)
-
-            next_d = (samples - denoiser) / append_dims(next_t, dims)
-            samples = x + (d + next_d) * append_dims((next_t - t) / 2, dims)
-
-            return samples
-
         @th.no_grad()
         def euler_solver(samples, t, next_t, x0):
             x = samples
-            if teacher_model is None:
-                denoiser = x0
-            else:
-                denoiser = teacher_denoise_fn(x, t)
+            denoiser = x0
             d = (x - denoiser) / append_dims(t, dims)
             samples = x + d * append_dims(next_t - t, dims)
 
             return samples
 
         ### Fix here. Define a categorical distribution
-        indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0],)).to(x_start.device)
-        # indices = th.randint(
-        #     0, num_scales - 1, (x_start.shape[0],), device=x_start.device
-        # )
+        indices = th.randint(
+            0, num_scales - 1, (x_start.shape[0],), device=x_start.device
+        )
         
         ### need check here since yang song using the difference scheduler compared to karras: dunno why ? Yang Song code differently from paper check carefully
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
@@ -209,10 +177,7 @@ class KarrasDenoiser:
         dropout_state = th.get_rng_state()
         distiller = denoise_fn(x_t, t)
 
-        if teacher_model is None:
-            x_t2 = euler_solver(x_t, t, t2, x_start).detach()
-        else:
-            x_t2 = heun_solver(x_t, t, t2, x_start).detach()
+        x_t2 = euler_solver(x_t, t, t2, x_start).detach()
 
         th.set_rng_state(dropout_state)
         distiller_target = target_denoise_fn(x_t2, t2)

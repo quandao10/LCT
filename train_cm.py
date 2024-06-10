@@ -265,9 +265,9 @@ def main(args):
             loss.backward()
             opt.step()
             after_backward = torch.cuda.memory_allocated(device)
-            update_ema(ema, model.module)
+            update_ema(ema, model.module, decay=args.model_ema_rate)
             ##### ema rate for teacher should be 0 (iCT)
-            update_ema(target_model, model.module, decay=0)
+            update_ema(target_model, model.module, decay=ema_rate)
             # Log loss values:
             running_loss += loss.item()
             log_steps += 1
@@ -411,13 +411,14 @@ if __name__ == "__main__":
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber"], default="huber")
     
     ###### consistency ######
-    parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
+    parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"])
     parser.add_argument("--scale-mode", type=str, choices=["progressive", "fixed"], default="fixed")
     parser.add_argument("--start-ema", type=float, default=0.0)
     parser.add_argument("--start-scales", type=float, default=2)
     parser.add_argument("--end-scales", type=float, default=200)
     
     ###### training ######
+    parser.add_argument("--model-ema-rate", type=float, default="fixed", default=0.9999, help="0.9999 for 32x32, 0.999943 for 64x64")
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--no-lr-decay", action='store_true', default=False)
     parser.add_argument("--epochs", type=int, default=2000)
