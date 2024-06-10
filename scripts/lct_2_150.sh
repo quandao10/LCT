@@ -1,4 +1,4 @@
-export MASTER_PORT=10121
+export MASTER_PORT=10122
 
 LOSS_NORM=l2
 START_SCALES=2
@@ -7,7 +7,7 @@ P_MEAN=-1.1
 P_STD=2.0
 LR=0.0004
 
-CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
+CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_ct_latent.py \
         --exp CT1/loss-norm=$LOSS_NORM/start-scales=$START_SCALES-end-scales=$END_SCALES/p-mean=$P_MEAN-p-std=$P_STD/lr=$LR \
         --datadir features/celeba256.npy \
         --dataset latent_celeb256 \
@@ -19,7 +19,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --scale-mode progressive \
         --start-scales $START_SCALES \
         --end-scales $END_SCALES \
-        --global-batch-size 512 \
+        --global-batch-size 128 \
         --epochs 800 \
         --lr $LR \
         --num-sampling 8 \

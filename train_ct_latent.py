@@ -54,7 +54,10 @@ def update_ema(ema_model, model, decay=0.9999):
 
     for name, param in model_params.items():
         # TODO: Consider applying only to params that require_grad to avoid small numerical changes of pos_embed
-        ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
+        try:
+            ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
+        except:
+            import pdb; pdb.set_trace()
 
 
 def requires_grad(model, flag=True):
@@ -167,9 +170,6 @@ def main(args):
     vae.init(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
-    if args.ict:
-        diffusion.c = 0.00054*math.sqrt(args.num_in_channels*args.image_size**2)
-        logger.info("c in huber loss is {}".format(diffusion.c))
     # create ema for training model
     logger.info("creating the ema model")
     ema = deepcopy(model)  # Create an EMA of the model for use after training
@@ -182,7 +182,6 @@ def main(args):
     target_model.train()
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
-    ema = DDP(ema.to(device), device_ids=[rank], find_unused_parameters=False)
     opt = torch.optim.RAdam(
         model.parameters(), lr=args.lr, #weight_decay=args.weight_decay
     )
@@ -456,7 +455,7 @@ if __name__ == "__main__":
     parser.add_argument("--end-scales", type=float, default=40)
     
     ###### training ######
-    parser.add_argument("--model-ema-rate", type=float, default="fixed", default=0.9999, help="0.9999 for 32x32, 0.999943 for 64x64")
+    parser.add_argument("--model-ema-rate", type=float, default=0.9999, help="0.9999 for 32x32, 0.999943 for 64x64")
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--no-lr-decay", action='store_true', default=False)
     parser.add_argument("--epochs", type=int, default=2000)

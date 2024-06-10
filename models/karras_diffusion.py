@@ -327,10 +327,7 @@ class KarrasDenoiser:
             rescaled_t = sigmas
         else:
             rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
-        try:
-            model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
-        except:
-            import pdb; pdb.set_trace()
+        model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
         denoised = c_out * model_output + c_skip * x_t
         return model_output, denoised
 
