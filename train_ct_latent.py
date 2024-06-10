@@ -248,8 +248,10 @@ def main(args):
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
+    num_substeps = 0
     start_time = time()
     use_label = True if "imagenet" in args.dataset else False
+    accumulate_steps = args.desired_batch_size // args.global_batch_size
 
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     for epoch in range(init_epoch, args.epochs+1):
@@ -262,46 +264,53 @@ def main(args):
             y = None if not use_label else y.to(device)
             ema_rate, num_scales = ema_scale_fn(train_steps)
             model_kwargs = dict(y=y)
-            before_forward = torch.cuda.memory_allocated(device)
+            # before_forward = torch.cuda.memory_allocated(device)
             losses = diffusion.consistency_losses(model,
                                                 x,
                                                 num_scales,
                                                 target_model=target_model,
                                                 model_kwargs=model_kwargs)
-            loss = (losses["loss"]).mean()
-            after_forward = torch.cuda.memory_allocated(device)
-            opt.zero_grad()
+            loss = (losses["loss"]).mean() / accumulate_steps
+            # after_forward = torch.cuda.memory_allocated(device)
+            # opt.zero_grad()
             loss.backward()
-            opt.step()
-            after_backward = torch.cuda.memory_allocated(device)
-            update_ema(ema, model.module, decay=args.model_ema_rate)
-            ##### ema rate for teacher should be 0 (iCT)
-            update_ema(target_model, model.module, decay=ema_rate)
+            # opt.step()
+            # after_backward = torch.cuda.memory_allocated(device)
+            # update_ema(ema, model.module, decay=args.model_ema_rate)
+            # ##### ema rate for teacher should be 0 (iCT)
+            # update_ema(target_model, model.module, decay=ema_rate)
 
             # Log loss values:
             running_loss += loss.item()
-            log_steps += 1
-            train_steps += 1
-            if train_steps % args.log_every == 0:
-                # Measure training speed:
-                torch.cuda.synchronize()
-                end_time = time()
-                steps_per_sec = log_steps / (end_time - start_time)
-                # Reduce loss history over all processes:
-                avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
-                avg_loss = avg_loss.item() / world_size
-                logger.info(
-                    f"(step={train_steps:07d}) Train Loss: {avg_loss:.4f}, "
-                    f"Train Steps/Sec: {steps_per_sec:.2f}, "
-                    f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
-                    f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
-                    f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
-                )
-                # Reset monitoring variables:
-                running_loss = 0
-                log_steps = 0
-                start_time = time()
+            num_substeps += 1
+            if num_substeps % accumulate_steps == 0:
+                opt.step()
+                opt.zero_grad()
+                update_ema(ema, model.module, decay=args.model_ema_rate)
+                ##### ema rate for teacher should be 0 (iCT)
+                update_ema(target_model, model.module, decay=ema_rate)
+                log_steps += 1
+                train_steps += 1
+                if train_steps % args.log_every == 0:
+                    # Measure training speed:
+                    torch.cuda.synchronize()
+                    end_time = time()
+                    steps_per_sec = log_steps / (end_time - start_time)
+                    # Reduce loss history over all processes:
+                    avg_loss = torch.tensor(running_loss / log_steps, device=device)
+                    dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
+                    avg_loss = avg_loss.item() / world_size
+                    logger.info(
+                        f"(step={train_steps:07d}) Train Loss: {avg_loss:.4f}, "
+                        f"Train Steps/Sec: {steps_per_sec:.2f}, "
+                        # f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
+                        # f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
+                        # f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
+                    )
+                    # Reset monitoring variables:
+                    running_loss = 0
+                    log_steps = 0
+                    start_time = time()
 
         # if not args.no_lr_decay:
         #     scheduler.step()
@@ -460,6 +469,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-lr-decay", action='store_true', default=False)
     parser.add_argument("--epochs", type=int, default=2000)
     parser.add_argument("--global-batch-size", type=int, default=256)
+    parser.add_argument("--desired-batch-size", type=int, default=1024)
     
     ###### ploting & saving ######
     parser.add_argument("--log-every", type=int, default=100)
