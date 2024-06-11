@@ -8,8 +8,6 @@
 A minimal training script for DiT using PyTorch DDP.
 """
 import math
-import sys
-from pathlib import Path
 import torch
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -18,7 +16,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from torchvision.utils import save_image, make_grid
+from torchvision.utils import save_image
 import numpy as np
 from collections import OrderedDict
 from PIL import Image
@@ -36,9 +34,7 @@ from models.script_util import (
 )
 from models.resample import LossAwareSampler, UniformSampler
 from models.karras_diffusion import karras_sample
-from diffusers.models import AutoencoderKL
-from models.edm2 import StabilityVAEEncoder
-
+# import dnnlib
 
 #################################################################################
 #                             Training Helper Functions                         #
@@ -54,10 +50,7 @@ def update_ema(ema_model, model, decay=0.9999):
 
     for name, param in model_params.items():
         # TODO: Consider applying only to params that require_grad to avoid small numerical changes of pos_embed
-        try:
-            ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
-        except:
-            import pdb; pdb.set_trace()
+        ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
 
 
 def requires_grad(model, flag=True):
@@ -163,11 +156,7 @@ def main(args):
         logger.info(f"Experiment directory created at {experiment_dir}")
     else:
         logger = create_logger(None)
-    # create vae model
-    logger.info("creating the vae model")
-    # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
-    vae = StabilityVAEEncoder(f"stabilityai/sd-vae-ft-mse")
-    vae.init(device)
+    
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
     # create ema for training model
@@ -244,7 +233,8 @@ def main(args):
         start_scales=args.start_scales,
         end_scales=args.end_scales,
         total_steps=args.total_training_steps,
-    )
+    ) # already adding ict increasing discretized N to code
+    
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
@@ -259,7 +249,6 @@ def main(args):
         logger.info(f"Beginning epoch {epoch}...")
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
-            x = vae.encode_latents(x)
             x = x.to(device)
             y = None if not use_label else y.to(device)
             ema_rate, num_scales = ema_scale_fn(train_steps)
@@ -279,7 +268,6 @@ def main(args):
             # update_ema(ema, model.module, decay=args.model_ema_rate)
             # ##### ema rate for teacher should be 0 (iCT)
             # update_ema(target_model, model.module, decay=ema_rate)
-
             # Log loss values:
             running_loss += loss.item()
             num_substeps += 1
@@ -353,13 +341,13 @@ def main(args):
                 ts = tuple(int(x) for x in args.ts.split(","))
             else:
                 ts = None
-            generator = get_generator("determ", args.num_sampling, seed)
+            generator = get_generator("determ", 64, seed)
             # model
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
                     model,
-                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                    (64, 3, args.image_size, args.image_size),
                     steps=args.steps,
                     model_kwargs=model_kwargs,
                     device=device,
@@ -374,17 +362,15 @@ def main(args):
                     generator=generator,
                     ts=ts,
                 )
-            # modified for EDMv2 specificly
-            sample = vae.decode(sample)
-            sample = make_grid(sample, nrow=args.num_sampling)
-            Image.fromarray(sample.permute(1, 2, 0).cpu().numpy(), "RGB").save(f"{sample_dir}/image_{epoch:07d}.jpg")
+            # Save and display images:
+            save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
             del sample
             # EMA model
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
                     ema,
-                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                    (64, 3, args.image_size, args.image_size),
                     steps=args.steps,
                     model_kwargs=model_kwargs,
                     device=device,
@@ -399,10 +385,8 @@ def main(args):
                     generator=generator,
                     ts=ts,
                 )
-            # modified for EDMv2 specificly
-            sample = vae.decode(sample)
-            sample = make_grid(sample, nrow=args.num_sampling)
-            Image.fromarray(sample.permute(1, 2, 0).cpu().numpy(), "RGB").save(f"{sample_dir}/image_{epoch:07d}_ema.jpg")
+            # Save and display images:
+            save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
             del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
@@ -451,17 +435,17 @@ if __name__ == "__main__":
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
-    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr"], default="uniform")
+    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber"], default="huber")
     parser.add_argument("--p-mean", type=float, default=-1.1)
     parser.add_argument("--p-std", type=float, default=2.0)
     
     ###### consistency ######
-    parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
+    parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"])
     parser.add_argument("--scale-mode", type=str, choices=["progressive", "fixed"], default="fixed")
     parser.add_argument("--start-ema", type=float, default=0.0)
-    parser.add_argument("--start-scales", type=float, default=40)
-    parser.add_argument("--end-scales", type=float, default=40)
+    parser.add_argument("--start-scales", type=float, default=2)
+    parser.add_argument("--end-scales", type=float, default=200)
     
     ###### training ######
     parser.add_argument("--model-ema-rate", type=float, default=0.9999, help="0.9999 for 32x32, 0.999943 for 64x64")
@@ -492,7 +476,6 @@ if __name__ == "__main__":
     parser.add_argument("--s-tmax", type=float, default=float("inf"))
     parser.add_argument("--s-noise", type=float, default=1.0)
     parser.add_argument("--steps", type=int, default=40)
-    parser.add_argument("--num-sampling", type=int, default=4)
     parser.add_argument("--ts", type=str, default="0,22,39")
     
     ###### edm2 ######
