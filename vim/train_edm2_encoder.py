@@ -22,8 +22,10 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision.datasets import ImageFolder
-from torchvision.utils import save_image
+# from torchvision.utils import save_image
+from torchvision.utils import make_grid
 from torchvision import transforms
+from PIL import Image
 import numpy as np
 from collections import OrderedDict
 from PIL import Image
@@ -37,7 +39,8 @@ from datasets_prep import get_dataset
 from models_dim import DiM_models
 from models_dmm import mamba_models
 from diffusion import create_diffusion
-from diffusers.models import AutoencoderKL
+# from diffusers.models import AutoencoderKL
+from encoder import StabilityVAEEncoder
 from download import find_model
 from tqdm import tqdm
 from ptflops import get_model_complexity_info
@@ -212,7 +215,9 @@ def main(args):
 
     model = DDP(model, device_ids=[rank])
     diffusion = create_diffusion(timestep_respacing="", learn_sigma=args.learn_sigma)  # default: 1000 steps, linear noise schedule
-    vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device)
+    # vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device)
+    vae = StabilityVAEEncoder("stabilityai/sd-vae-ft-mse")
+    vae.init(device)
     if args.use_wavelet:
         logger.info(f"Using Wavelet Decomposition for training")
         dwt = DWTForward(J=1, mode='zero', wave='haar').to(device)
@@ -265,7 +270,8 @@ def main(args):
             # y = y.to(device)
             with torch.no_grad():
                 # Map input images to latent space + normalize latents:
-                x = vae.encode(x).latent_dist.sample().mul_(0.18215)
+                # x = vae.encode(x).latent_dist.sample().mul_(0.18215)
+                x = vae.encode_latents(x)
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
             if args.use_wavelet:
                 xll, xh = dwt(x)  # [b, 4, h, w], [b, 4, 3, h, w]
@@ -318,6 +324,7 @@ def main(args):
         if rank == 0:
             # vae = AutoencoderKL.from_pretrained(f"./vim/stabilityai/sd-vae-ft-mse").to(device)
             z = torch.randn_like(x, device=device)[:4]
+            # model
             with torch.no_grad():
                 model.eval()
                 samples = diffusion.p_sample_loop(
@@ -326,12 +333,32 @@ def main(args):
                 if args.use_wavelet:
                     samples = iwt((samples[:, :4], [torch.stack(
                         (samples[:, 4:8], samples[:, 8:12], samples[:, 12:16]), dim=2)]))
-                samples = vae.decode(samples / 0.18215).sample
+                # samples = vae.decode(samples / 0.18215).sample
+                samples = vae.decode(samples)
                 model.train()
             # del vae
 
             # Save and display images:
-            save_image(samples, f"{checkpoint_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
+            # save_image(samples, f"{checkpoint_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
+            samples = make_grid(samples, nrow=4)
+            Image.fromarray(samples.permute(1, 2, 0).cpu().numpy(), "RGB").save(f"{checkpoint_dir}/image_{epoch:07d}.jpg")
+            
+            # EMA model
+            with torch.no_grad():
+                samples = diffusion.p_sample_loop(
+                    ema, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+                )
+                if args.use_wavelet:
+                    samples = iwt((samples[:, :4], [torch.stack(
+                        (samples[:, 4:8], samples[:, 8:12], samples[:, 12:16]), dim=2)]))
+                # samples = vae.decode(samples / 0.18215).sample
+                samples = vae.decode(samples)
+            # del vae
+
+            # Save and display images:
+            # save_image(samples, f"{checkpoint_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
+            samples = make_grid(samples, nrow=4)
+            Image.fromarray(samples.permute(1, 2, 0).cpu().numpy(), "RGB").save(f"{checkpoint_dir}/image_{epoch:07d}_ema.jpg")
 
     model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...

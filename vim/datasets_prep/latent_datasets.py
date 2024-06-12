@@ -28,3 +28,31 @@ class LatentDataset(data.Dataset):
 
     def __len__(self):
         return len(self.data)
+
+
+class PreprocessedLatentDataset(data.Dataset):
+    def __init__(self,
+        path,
+        use_labels,
+    ):
+        self._path = path
+        self._use_labels = use_labels
+        data = np.load(self._path, allow_pickle=True)
+        self.mean = data.item()['mean']
+        self.std = data.item()['std']
+        if self._use_labels:
+            self.label = data.item()['label']
+        self.num_channels = 8
+        self.has_labels = self._use_labels
+        
+    def __len__(self):
+        return self.mean.shape[0]
+    
+    def __getitem__(self, index):
+        latent_dist = np.concatenate([self.mean[index], self.std[index]], axis=0)
+        if self._use_labels:
+            label = self.label[index]
+        else:
+            label = np.array([])
+        return latent_dist, label
+    

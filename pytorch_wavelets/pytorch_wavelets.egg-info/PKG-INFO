@@ -1,5 +1,5 @@
 Metadata-Version: 2.1
-Name: pytorch-wavelets
+Name: pytorch_wavelets
 Version: 1.3.0
 Summary: A port of the DTCWT toolbox to run on pytorch
 Home-page: https://github.com/fbcotter/pytorch_wavelets

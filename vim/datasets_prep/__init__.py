@@ -4,7 +4,7 @@ from torchvision.datasets import CIFAR10, ImageNet
 from datasets_prep.lsun import LSUN
 from datasets_prep.stackmnist_data import StackedMNIST, _data_transforms_stacked_mnist
 from datasets_prep.lmdb_datasets import LMDBDataset
-from datasets_prep.latent_datasets import LatentDataset
+from datasets_prep.latent_datasets import LatentDataset, PreprocessedLatentDataset
 from datasets_prep.data_transforms import center_crop_arr
 
 
@@ -89,4 +89,7 @@ def get_dataset(args):
         ])
         dataset = LMDBDataset(root=args.datadir, name='ffhq',
                               train=True, transform=train_transform)
+        
+    elif args.dataset == 'latent_celeba_256':
+        dataset = PreprocessedLatentDataset(path=args.datadir, use_labels=False)
     return dataset
