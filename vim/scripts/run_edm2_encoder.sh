@@ -5,7 +5,7 @@ torchrun \
     --rdzv_endpoint 0.0.0.0:8006 \
     --nproc_per_node=1 \
     vim/train_edm2_encoder.py \
-    --exp L_2_linear_block_cpe_dilated_style_EDM2_encoder \
+    --exp L_2_linear_block_cpe_dilated_style-DiM-L-2_Jamba_EDM2-norm-celeba256-pixelwise \
     --model DiM-L/2_Jamba \
     --datadir ./features/celeba256.npy \
     --dataset latent_celeba_256 \

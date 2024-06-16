@@ -79,14 +79,22 @@ class StandardRGBEncoder(Encoder):
 class StabilityVAEEncoder(Encoder):
     def __init__(self,
         vae_name    = 'stabilityai/sd-vae-ft-mse',  # Name of the VAE to use.
-        raw_mean    = [5.81, 3.25, 0.12, -2.15],    # Assumed mean of the raw latents.
-        raw_std     = [4.17, 4.62, 3.71, 3.28],     # Assumed standard deviation of the raw latents.
+        # raw_mean    = [5.81, 3.25, 0.12, -2.15],    # Assumed mean of the raw latents.
+        # raw_std     = [4.17, 4.62, 3.71, 3.28],     # Assumed standard deviation of the raw latents.
+        # raw_mean    = [6.0361185, 2.7583575, -0.90076184, -2.1828032],
+        # raw_std     = [3.920178, 4.3760457, 3.8211877, 2.900044],
+        raw_mean    = './features/celeba256_pixelstat_mean.npy',
+        raw_std     = './features/celeba256_pixelstat_std.npy',
         final_mean  = 0,                            # Desired mean of the final latents.
         final_std   = 0.5,                          # Desired standard deviation of the final latents.
         batch_size  = 8,                            # Batch size to use when running the VAE.
     ):
         super().__init__()
         self.vae_name = vae_name
+        with open(raw_mean, 'rb') as f:
+            raw_mean = np.load(f)
+        with open(raw_std, 'rb') as f:
+            raw_std = np.load(f)
         self.scale = np.float32(final_std) / np.float32(raw_std)
         self.bias = np.float32(final_mean) - np.float32(raw_mean) * self.scale
         self.batch_size = int(batch_size)
@@ -118,15 +126,19 @@ class StabilityVAEEncoder(Encoder):
     def encode_latents(self, x): # raw latents => final latents
         mean, std = x.to(torch.float32).chunk(2, dim=1)
         x = mean + torch.randn_like(mean) * std
-        x = x * const_like(x, self.scale).reshape(1, -1, 1, 1)
-        x = x + const_like(x, self.bias).reshape(1, -1, 1, 1)
+        # x = x * const_like(x, self.scale).reshape(1, -1, 1, 1)
+        # x = x + const_like(x, self.bias).reshape(1, -1, 1, 1)
+        x = x * const_like(x, self.scale)
+        x = x + const_like(x, self.bias)
         return x
 
     def decode(self, x): # final latents => raw pixels
         self.init(x.device)
         x = x.to(torch.float32)
-        x = x - const_like(x, self.bias).reshape(1, -1, 1, 1)
-        x = x / const_like(x, self.scale).reshape(1, -1, 1, 1)
+        # x = x - const_like(x, self.bias).reshape(1, -1, 1, 1)
+        # x = x / const_like(x, self.scale).reshape(1, -1, 1, 1)
+        x = x - const_like(x, self.bias)
+        x = x / const_like(x, self.scale)
         x = torch.cat([self._run_vae_decoder(batch) for batch in x.split(self.batch_size)])
         x = x.clamp(0, 1).mul(255).to(torch.uint8)
         return x
