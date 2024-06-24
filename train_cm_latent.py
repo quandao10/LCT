@@ -164,6 +164,8 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
+    diffusion.c = 0.00054*math.sqrt(args.num_in_channels*args.image_size**2)
+    logger.info("c in huber loss is {}".format(diffusion.c))
     # create ema for training model
     logger.info("creating the ema model")
     ema = deepcopy(model)  # Create an EMA of the model for use after training
@@ -180,8 +182,6 @@ def main(args):
         model.parameters(), lr=args.lr, #weight_decay=args.weight_decay
     )
     # define scheduler
-    schedule_sampler = UniformSampler(diffusion)
-
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
         epoch = init_epoch = checkpoint["epoch"]
