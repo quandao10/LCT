@@ -189,7 +189,7 @@ def main(args):
         train_steps = checkpoint["train_steps"]
         logger.info("=> loaded checkpoint (epoch {})".format(epoch))
         del checkpoint
-    elif args.resume or os.path.exists(os.path.join(checkpoint_dir, "content.pth")):
+    elif args.resume:
         checkpoint_file = os.path.join(checkpoint_dir, "content.pth")
         checkpoint = torch.load(checkpoint_file, map_location=torch.device(f'cuda:{device}'))
         init_epoch = checkpoint["epoch"]
@@ -235,6 +235,7 @@ def main(args):
         start_scales=args.start_scales,
         end_scales=args.end_scales,
         total_steps=args.total_training_steps,
+        ict=args.ict,
     ) # already adding ict increasing discretized N to code
     
     # Variables for monitoring/logging purposes:
@@ -242,6 +243,9 @@ def main(args):
     running_loss = 0
     start_time = time()
     use_label = True if "imagenet" in args.dataset else False
+    
+    if rank == 0:
+        noise = torch.randn((64, 3, args.image_size, args.image_size), device=device)*args.sigma_max
 
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     for epoch in range(init_epoch, args.epochs+1):
@@ -266,8 +270,11 @@ def main(args):
             opt.step()
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
-            ##### ema rate for teacher should be 0 (iCT)
-            update_ema(target_model, model.module, decay=0)
+            ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
+            if args.ict:
+                update_ema(target_model, model.module, 0)
+            else:
+                update_ema(target_model, model.module, ema_rate)
             # Log loss values:
             running_loss += loss.item()
             log_steps += 1
@@ -334,7 +341,6 @@ def main(args):
                 ts = tuple(int(x) for x in args.ts.split(","))
             else:
                 ts = None
-            generator = get_generator("dummy", 64, seed)
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
@@ -351,12 +357,9 @@ def main(args):
                     s_tmin=args.s_tmin,
                     s_tmax=args.s_tmax,
                     s_noise=args.s_noise,
-                    generator=generator,
+                    noise=noise,
                     ts=ts,
                 )
-            # sample = ((sample + 1) * 127.5).clamp(0, 255).to(torch.uint8)
-            # sample = sample.permute(0, 2, 3, 1)
-            # sample = sample.contiguous()
             # Save and display images:
             save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
             del sample
@@ -408,6 +411,7 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
+    parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber"], default="huber")
     
     ###### consistency ######
@@ -416,6 +420,7 @@ if __name__ == "__main__":
     parser.add_argument("--start-ema", type=float, default=0.0)
     parser.add_argument("--start-scales", type=float, default=2)
     parser.add_argument("--end-scales", type=float, default=200)
+    parser.add_argument("--ict", action="store_true", default=False)
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)

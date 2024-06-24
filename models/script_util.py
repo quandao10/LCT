@@ -72,6 +72,7 @@ def create_model_and_diffusion(args):
         use_new_attention_order=args.use_new_attention_order,
     )
     diffusion = KarrasDenoiser(
+        args=args,
         sigma_data=0.5,
         sigma_max=args.sigma_max,
         sigma_min=args.sigma_min,
@@ -186,7 +187,12 @@ def create_ema_and_scales_fn(
     def improve_scale_fn(step):
         temp = np.floor(total_steps/(np.log2(np.floor(end_scales/start_scales))+1))
         scales = min(start_scales*2**np.floor(step/temp), end_scales) + 1
-        return None, int(scales)
+        if target_ema_mode == "adaptive":
+            c = -np.log(start_ema) * start_scales
+            target_ema = np.exp(-c / scales)
+        elif target_ema_mode == "fix":
+            target_ema = start_ema
+        return float(target_ema), int(scales)
 
     if ict: 
         return improve_scale_fn 

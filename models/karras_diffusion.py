@@ -39,6 +39,7 @@ def get_weightings(weight_schedule, snrs, sigma_data, t2, t):
 class KarrasDenoiser:
     def __init__(
         self,
+        args,
         sigma_data: float = 0.5,
         sigma_max=80.0,
         sigma_min=0.002,
@@ -46,6 +47,7 @@ class KarrasDenoiser:
         weight_schedule="karras",
         loss_norm="lpips",
     ):
+        self.args = args
         self.sigma_data = sigma_data
         self.sigma_max = sigma_max
         self.sigma_min = sigma_min
@@ -182,10 +184,10 @@ class KarrasDenoiser:
             return samples
 
         ### Fix here. Define a categorical distribution
-        indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0],)).to(x_start.device)
-        # indices = th.randint(
-        #     0, num_scales - 1, (x_start.shape[0],), device=x_start.device
-        # )
+        if self.args.noise_sampler == "ict":
+            indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0],)).to(x_start.device)
+        else:
+            indices = th.randint(0, num_scales - 1, (x_start.shape[0],), device=x_start.device)
         
         ### need check here since yang song using the difference scheduler compared to karras: dunno why ? Yang Song code differently from paper check carefully
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
@@ -256,98 +258,6 @@ class KarrasDenoiser:
 
         return terms
 
-    def progdist_losses(
-        self,
-        model,
-        x_start,
-        num_scales,
-        model_kwargs=None,
-        teacher_model=None,
-        teacher_diffusion=None,
-        noise=None,
-    ):
-        if model_kwargs is None:
-            model_kwargs = {}
-        if noise is None:
-            noise = th.randn_like(x_start)
-
-        dims = x_start.ndim
-
-        def denoise_fn(x, t):
-            return self.denoise(model, x, t, **model_kwargs)[1]
-
-        @th.no_grad()
-        def teacher_denoise_fn(x, t):
-            return teacher_diffusion.denoise(teacher_model, x, t, **model_kwargs)[1]
-
-        @th.no_grad()
-        def euler_solver(samples, t, next_t):
-            x = samples
-            denoiser = teacher_denoise_fn(x, t)
-            d = (x - denoiser) / append_dims(t, dims)
-            samples = x + d * append_dims(next_t - t, dims)
-
-            return samples
-
-        @th.no_grad()
-        def euler_to_denoiser(x_t, t, x_next_t, next_t):
-            denoiser = x_t - append_dims(t, dims) * (x_next_t - x_t) / append_dims(
-                next_t - t, dims
-            )
-            return denoiser
-
-        indices = th.randint(0, num_scales, (x_start.shape[0],), device=x_start.device)
-
-        t = self.sigma_max ** (1 / self.rho) + indices / num_scales * (
-            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
-        )
-        t = t**self.rho
-
-        t2 = self.sigma_max ** (1 / self.rho) + (indices + 0.5) / num_scales * (
-            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
-        )
-        t2 = t2**self.rho
-
-        t3 = self.sigma_max ** (1 / self.rho) + (indices + 1) / num_scales * (
-            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
-        )
-        t3 = t3**self.rho
-
-        x_t = x_start + noise * append_dims(t, dims)
-
-        denoised_x = denoise_fn(x_t, t)
-
-        x_t2 = euler_solver(x_t, t, t2).detach()
-        x_t3 = euler_solver(x_t2, t2, t3).detach()
-
-        target_x = euler_to_denoiser(x_t, t, x_t3, t3).detach()
-
-        snrs = self.get_snr(t)
-        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data) 
-        if self.loss_norm == "l1":
-            diffs = th.abs(denoised_x - target_x)
-            loss = mean_flat(diffs) * weights
-        elif self.loss_norm == "l2":
-            diffs = (denoised_x - target_x) ** 2
-            loss = mean_flat(diffs) * weights
-        elif self.loss_norm == "lpips":
-            if x_start.shape[-1] < 256:
-                denoised_x = F.interpolate(denoised_x, size=224, mode="bilinear")
-                target_x = F.interpolate(target_x, size=224, mode="bilinear")
-            loss = (
-                self.lpips_loss(
-                    (denoised_x + 1) / 2.0,
-                    (target_x + 1) / 2.0,
-                )
-                * weights
-            )
-        else:
-            raise ValueError(f"Unknown loss norm {self.loss_norm}")
-
-        terms = {}
-        terms["loss"] = loss
-
-        return terms
 
     def denoise(self, model, x_t, sigmas, **model_kwargs):
         c_skip, c_out, c_in = [
@@ -378,27 +288,22 @@ def karras_sample(
     s_tmin=0.0,
     s_tmax=float("inf"),
     s_noise=1.0,
-    generator=None,
-    ts=None,
-):
-    if generator is None:
-        generator = get_generator("dummy")
-
-    if sampler == "progdist":
-        sigmas = get_sigmas_karras(steps + 1, sigma_min, sigma_max, rho, device=device)
+    noise=None,
+    ts=None,):
+    if noise is None:
+        x_T = th.randn(*shape, device=device) * sigma_max
     else:
-        sigmas = get_sigmas_karras(steps, sigma_min, sigma_max, rho, device=device)
+        x_T = noise
 
-    x_T = generator.randn(*shape, device=device) * sigma_max
+    sigmas = get_sigmas_karras(steps, sigma_min, sigma_max, rho, device=device)
 
     sample_fn = {
-        "heun": sample_heun,
-        "dpm": sample_dpm,
-        "ancestral": sample_euler_ancestral,
+        # "heun": sample_heun,
+        # "dpm": sample_dpm,
+        # "ancestral": sample_euler_ancestral,
         "onestep": sample_onestep,
-        "progdist": sample_progdist,
         "euler": sample_euler,
-        "multistep": stochastic_iterative_sampler,
+        # "multistep": stochastic_iterative_sampler,
     }[sampler]
 
     if sampler in ["heun", "dpm"]:
@@ -422,7 +327,6 @@ def karras_sample(
         denoiser,
         x_T,
         sigmas,
-        generator,
         progress=progress,
         callback=callback,
         **sampler_args,
@@ -566,7 +470,6 @@ def sample_euler(
     denoiser,
     x,
     sigmas,
-    generator,
     progress=False,
     callback=None,
 ):
@@ -655,7 +558,6 @@ def sample_onestep(
     distiller,
     x,
     sigmas,
-    generator=None,
     progress=False,
     callback=None,
 ):
@@ -688,43 +590,6 @@ def stochastic_iterative_sampler(
         next_t = (t_max_rho + ts[i + 1] / (steps - 1) * (t_min_rho - t_max_rho)) ** rho
         next_t = np.clip(next_t, t_min, t_max)
         x = x0 + generator.randn_like(x) * np.sqrt(next_t**2 - t_min**2)
-
-    return x
-
-
-@th.no_grad()
-def sample_progdist(
-    denoiser,
-    x,
-    sigmas,
-    generator=None,
-    progress=False,
-    callback=None,
-):
-    s_in = x.new_ones([x.shape[0]])
-    sigmas = sigmas[:-1]  # skip the zero sigma
-
-    indices = range(len(sigmas) - 1)
-    if progress:
-        from tqdm.auto import tqdm
-
-        indices = tqdm(indices)
-
-    for i in indices:
-        sigma = sigmas[i]
-        denoised = denoiser(x, sigma * s_in)
-        d = to_d(x, sigma, denoised)
-        if callback is not None:
-            callback(
-                {
-                    "x": x,
-                    "i": i,
-                    "sigma": sigma,
-                    "denoised": denoised,
-                }
-            )
-        dt = sigmas[i + 1] - sigma
-        x = x + d * dt
 
     return x
 

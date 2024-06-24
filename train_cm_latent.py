@@ -240,6 +240,7 @@ def main(args):
         start_scales=args.start_scales,
         end_scales=args.end_scales,
         total_steps=args.total_training_steps,
+        ict=args.ict,
     )
     # Variables for monitoring/logging purposes:
     log_steps = 0
@@ -256,7 +257,6 @@ def main(args):
             x = x.to(device)
             y = None if not use_label else y.to(device)
             ema_rate, num_scales = ema_scale_fn(train_steps)
-            t, weights = schedule_sampler.sample(x.shape[0], device)
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
             losses = diffusion.consistency_losses(model,
@@ -264,18 +264,19 @@ def main(args):
                                                 num_scales,
                                                 target_model=target_model,
                                                 model_kwargs=model_kwargs)
-            if isinstance(schedule_sampler, LossAwareSampler):
-                schedule_sampler.update_with_local_losses(
-                    t, losses["loss"].detach())
-            loss = (losses["loss"] * weights).mean()
+            
+            loss = losses["loss"].mean()
             after_forward = torch.cuda.memory_allocated(device)
             opt.zero_grad()
             loss.backward()
             opt.step()
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
-            ema_rate, scales = ema_scale_fn(train_steps)
-            update_ema(target_model, model.module, decay=ema_rate)
+            ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
+            if args.ict:
+                update_ema(target_model, model.module, 0)
+            else:
+                update_ema(target_model, model.module, ema_rate)
 
             # Log loss values:
             running_loss += loss.item()
@@ -363,13 +364,9 @@ def main(args):
                     generator=generator,
                     ts=ts,
                 )
-            # sample = ((sample + 1) * 127.5).clamp(0, 255).to(torch.uint8)
-            # sample = sample.permute(0, 2, 3, 1)
-            # sample = sample.contiguous()
-            # Save and display images:
             sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
-            save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
+            save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
             del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
@@ -418,7 +415,8 @@ if __name__ == "__main__":
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
-    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr"], default="uniform")
+    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
+    parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber"], default="huber")
     
     ###### consistency ######
@@ -427,6 +425,7 @@ if __name__ == "__main__":
     parser.add_argument("--start-ema", type=float, default=0.0)
     parser.add_argument("--start-scales", type=float, default=40)
     parser.add_argument("--end-scales", type=float, default=40)
+    parser.add_argument("--ict", action="store_true", default=False)
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
