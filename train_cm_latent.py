@@ -247,6 +247,9 @@ def main(args):
     running_loss = 0
     start_time = time()
     use_label = True if "imagenet" in args.dataset else False
+    
+    if rank == 0:
+        noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
 
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     for epoch in range(init_epoch, args.epochs+1):
@@ -344,7 +347,6 @@ def main(args):
                 ts = tuple(int(x) for x in args.ts.split(","))
             else:
                 ts = None
-            generator = get_generator("determ", args.num_sampling, seed)
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
@@ -361,7 +363,7 @@ def main(args):
                     s_tmin=args.s_tmin,
                     s_tmax=args.s_tmax,
                     s_noise=args.s_noise,
-                    generator=generator,
+                    noise=noise,
                     ts=ts,
                 )
             sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]

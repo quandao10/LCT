@@ -1,9 +1,10 @@
 export MASTER_PORT=10121
 
 CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp exp1 \
+        --exp ict \
         --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset latent_celeb256 \
+        --results-dir /research/cbim/medical/qd66/lct_exp/ \
         --image-size 32 \
         --num-in-channels 4 \
         --num-classes -1 \
@@ -15,7 +16,7 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --start-scales 10 \
         --end-scales 1280 \
         --noise-sampler ict \
-        --global-batch-size $((32*1)) \
+        --global-batch-size $((64*1)) \
         --epochs $((2000*1)) \
         --lr 0.00002 \
         --num-sampling 8 \
