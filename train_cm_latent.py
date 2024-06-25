@@ -246,6 +246,7 @@ def main(args):
     log_steps = 0
     running_loss = 0
     start_time = time()
+    nan_count = 0
     use_label = True if "imagenet" in args.dataset else False
     
     if rank == 0:
@@ -271,8 +272,16 @@ def main(args):
             loss = losses["loss"].mean()
             after_forward = torch.cuda.memory_allocated(device)
             opt.zero_grad()
-            loss.backward()
-            opt.step()
+            if not torch.isnan(loss):
+                loss.backward()
+                opt.step()
+            else:
+                nan_count += 1
+                logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
+                if nan_count > 100:
+                    logger.info(f"Reduce lr from {g['lr']} to {g['lr']/2}")
+                    for g in opt.param_groups:
+                        g['lr'] = g['lr']/2
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)

@@ -25,3 +25,4 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --num-res-blocks 2 \
         --resblock-updown \
         --ict \
+        --resume \
