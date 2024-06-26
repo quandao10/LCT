@@ -189,8 +189,6 @@ def main(args):
         ema.load_state_dict(checkpoint["ema"])
         opt.load_state_dict(checkpoint["opt"])
         target_model.load_state_dict(checkpoint["target"])
-        for g in opt.param_groups:
-            g['lr'] = args.lr
         train_steps = checkpoint["train_steps"]
         logger.info("=> loaded checkpoint (epoch {})".format(epoch))
         del checkpoint
@@ -278,10 +276,12 @@ def main(args):
             else:
                 nan_count += 1
                 logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
-                if nan_count > 100:
-                    logger.info(f"Reduce lr from {g['lr']} to {g['lr']/2}")
+                if nan_count  > 100:
+                    args.lr = args.lr/2
+                    logger.info(f"Reduce lr a half to new lr {args.lr}")
                     for g in opt.param_groups:
-                        g['lr'] = g['lr']/2
+                        g['lr'] = args.lr
+                    nan_count = 0
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
