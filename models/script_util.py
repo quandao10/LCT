@@ -75,6 +75,10 @@ def create_model_and_diffusion(args):
             use_new_attention_order=args.use_new_attention_order,
         )
     elif args.model_type in ["song_unet", "dhariwal_unet"]:
+        attention_ds = tuple(int(res) for res in args.attention_resolutions.split(","))
+        channel_mult = tuple(int(ch_mult) for ch_mult in args.channel_mult.split(","))
+        print(f"Atten Res: {attention_ds}")
+        print(f"Channel Mult: {channel_mult}")
         if args.model_type == "song_unet":
             unet = SongUNet
         else:
@@ -85,10 +89,10 @@ def create_model_and_diffusion(args):
                      label_dim=args.num_classes,
                      augment_dim=0,
                      model_channels=args.num_channels,
-                     channel_mult=args.channel_mult,
+                     channel_mult=channel_mult,
                      channel_mult_emb=4,
                      num_blocks=args.num_res_blocks,
-                     attn_resolutions=args.attention_resolutions,
+                     attn_resolutions=attention_ds,
                      dropout=args.dropout,
                      label_dropout=0)
     else:

@@ -9,6 +9,7 @@ A minimal training script for DiT using PyTorch DDP.
 """
 import math
 import sys
+import json
 from pathlib import Path
 import torch
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
@@ -34,7 +35,6 @@ from models.script_util import (
     create_model_and_diffusion,
     create_ema_and_scales_fn,
 )
-from models.resample import LossAwareSampler, UniformSampler
 from models.karras_diffusion import karras_sample
 from diffusers.models import AutoencoderKL
 from models.network_dit import DiT_models
@@ -230,6 +230,11 @@ def main(args):
     )
     logger.info(f"Dataset contains {len(dataset):,} images ({args.datadir})")
     args.total_training_steps = math.ceil(len(dataset)//args.global_batch_size)*args.epochs
+    if rank == 0:
+        config = vars(args)
+        with open(f"{experiment_dir}/config.json", 'w') as out:
+            json.dump(config, out)
+
     # create ema schedule
     logger.info("creating model and diffusion and ema scale function")
     ema_scale_fn = create_ema_and_scales_fn(
@@ -426,7 +431,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-fp16", action="store_true", default=False)
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
-    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+DiT_models.keys(), default="openai_unet")
+    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys()), default="openai_unet")
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
