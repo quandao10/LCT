@@ -272,12 +272,15 @@ def main(args):
             opt.zero_grad()
             if not torch.isnan(loss):
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 opt.step()
+                running_loss += loss.item()
             else:
                 nan_count += 1
                 logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
                 if nan_count  > 100:
                     args.lr = args.lr/2
+                    args.max_grad_norm = args.max_grad_norm * 0.8
                     logger.info(f"Reduce lr a half to new lr {args.lr}")
                     for g in opt.param_groups:
                         g['lr'] = args.lr
@@ -291,7 +294,6 @@ def main(args):
                 update_ema(target_model, model.module, ema_rate)
 
             # Log loss values:
-            running_loss += loss.item()
             log_steps += 1
             train_steps += 1
             if train_steps % args.log_every == 0:
@@ -443,6 +445,8 @@ if __name__ == "__main__":
     parser.add_argument("--no-lr-decay", action='store_true', default=False)
     parser.add_argument("--epochs", type=int, default=2000)
     parser.add_argument("--global-batch-size", type=int, default=256)
+    parser.add_argument("--max-grad-norm", type=float, default=2.0)
+    
     
     ###### ploting & saving ######
     parser.add_argument("--log-every", type=int, default=100)

@@ -18,11 +18,12 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --noise-sampler ict \
         --global-batch-size $((64*1)) \
         --epochs $((2000*1)) \
-        --lr 0.00002 \
+        --lr 0.00001 \
         --num-sampling 8 \
         --num-channels 192 \
         --num-head-channels 64 \
         --num-res-blocks 2 \
         --resblock-updown \
         --ict \
-        --resume \
+        --max-grad-norm 2.0 \
+        --model-ckpt /research/cbim/medical/qd66/lct_exp/latent_celeb256/ict/checkpoints/0000900.pt \
