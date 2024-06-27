@@ -255,6 +255,7 @@ class KarrasDenoiser:
 
         terms = {}
         terms["loss"] = loss
+        terms["t"] = t
 
         return terms
 

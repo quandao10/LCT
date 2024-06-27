@@ -328,53 +328,6 @@ class AttentionBlock(nn.Module):
         h = self.proj_out(h)
         return x + h
 
-
-class QKVFlashAttention(nn.Module):
-    def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        batch_first=True,
-        attention_dropout=0.0,
-        causal=False,
-        device=None,
-        dtype=None,
-        **kwargs,
-    ) -> None:
-        from einops import rearrange
-        from flash_attn.flash_attention import FlashAttention
-
-        assert batch_first
-        factory_kwargs = {"device": device, "dtype": dtype}
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.causal = causal
-
-        assert (
-            self.embed_dim % num_heads == 0
-        ), "self.kdim must be divisible by num_heads"
-        self.head_dim = self.embed_dim // num_heads
-        assert self.head_dim in [16, 32, 64], "Only support head_dim == 16, 32, or 64"
-
-        self.inner_attn = FlashAttention(
-            attention_dropout=attention_dropout, **factory_kwargs
-        )
-        self.rearrange = rearrange
-
-    def forward(self, qkv, attn_mask=None, key_padding_mask=None, need_weights=False):
-        qkv = self.rearrange(
-            qkv, "b (three h d) s -> b s three h d", three=3, h=self.num_heads
-        )
-        qkv, _ = self.inner_attn(
-            qkv,
-            key_padding_mask=key_padding_mask,
-            need_weights=need_weights,
-            causal=self.causal,
-        )
-        return self.rearrange(qkv, "b s h d -> b (h d) s")
-
-
 def count_flops_attn(model, _x, y):
     """
     A counter for the `thop` package to count the operations in an
@@ -754,7 +707,7 @@ class UNetModel(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    def forward(self, x, timesteps, y=None):
+    def forward(self, x, timesteps, class_labels=None):
         """
         Apply the model to an input batch.
 
@@ -763,16 +716,15 @@ class UNetModel(nn.Module):
         :param y: an [N] Tensor of labels, if class-conditional.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert (y is not None) == (
+        assert (class_labels is not None) == (
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
 
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-
         if self.num_classes is not None:
-            assert y.shape == (x.shape[0],)
-            emb = emb + self.label_emb(y)
+            assert class_labels.shape == (x.shape[0],)
+            emb = emb + self.label_emb(class_labels)
 
         h = x.type(self.dtype)
         for module in self.input_blocks:

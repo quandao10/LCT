@@ -3,6 +3,8 @@ import argparse
 from .karras_diffusion import KarrasDenoiser
 from .unet import UNetModel
 import numpy as np
+from .network_karras import SongUNet, DhariwalUNet
+from .network_dit import DiT_models
 
 NUM_CLASSES = 1000
 
@@ -52,25 +54,49 @@ def model_and_diffusion_defaults():
 
 
 def create_model_and_diffusion(args):
-    model = create_model(
-        args.image_size,
-        args.num_in_channels,
-        args.num_channels,
-        args.num_res_blocks,
-        channel_mult=args.channel_mult,
-        learn_sigma=args.learn_sigma,
-        class_cond=args.class_cond,
-        use_checkpoint=args.use_checkpoint,
-        attention_resolutions=args.attention_resolutions,
-        num_heads=args.num_heads,
-        num_head_channels=args.num_head_channels,
-        num_heads_upsample=args.num_heads_upsample,
-        use_scale_shift_norm=args.use_scale_shift_norm,
-        dropout=args.dropout,
-        resblock_updown=args.resblock_updown,
-        use_fp16=args.use_fp16,
-        use_new_attention_order=args.use_new_attention_order,
-    )
+    if args.model_type == "openai_unet":
+        model = create_model(
+            args.image_size,
+            args.num_in_channels,
+            args.num_channels,
+            args.num_res_blocks,
+            channel_mult=args.channel_mult,
+            learn_sigma=args.learn_sigma,
+            num_classes=args.num_classes,
+            use_checkpoint=args.use_checkpoint,
+            attention_resolutions=args.attention_resolutions,
+            num_heads=args.num_heads,
+            num_head_channels=args.num_head_channels,
+            num_heads_upsample=args.num_heads_upsample,
+            use_scale_shift_norm=args.use_scale_shift_norm,
+            dropout=args.dropout,
+            resblock_updown=args.resblock_updown,
+            use_fp16=args.use_fp16,
+            use_new_attention_order=args.use_new_attention_order,
+        )
+    elif args.model_type in ["song_unet", "dhariwal_unet"]:
+        if args.model_type == "song_unet":
+            unet = SongUNet
+        else:
+            unet = DhariwalUNet
+        model = unet(img_resolution=args.image_size,
+                     in_channels=args.num_in_channels,
+                     out_channels=(args.num_in_channels if not args.learn_sigma else args.num_in_channels*2),
+                     label_dim=args.num_classes,
+                     augment_dim=0,
+                     model_channels=args.num_channels,
+                     channel_mult=args.channel_mult,
+                     channel_mult_emb=4,
+                     num_blocks=args.num_res_blocks,
+                     attn_resolutions=args.attention_resolutions,
+                     dropout=args.dropout,
+                     label_dropout=0)
+    else:
+        model = DiT_models[args.model_type](input_size=args.image_size,
+                                            in_channels=args.num_in_channels,
+                                            num_classes=args.num_classes,
+                                            learn_sigma=args.learn_sigma)
+            
     diffusion = KarrasDenoiser(
         args=args,
         sigma_data=0.5,
@@ -89,7 +115,7 @@ def create_model(
     num_res_blocks,
     channel_mult="",
     learn_sigma=False,
-    class_cond=False,
+    num_classes=0,
     use_checkpoint=False,
     attention_resolutions="16",
     num_heads=1,
@@ -130,7 +156,7 @@ def create_model(
         attention_resolutions=tuple(attention_ds),
         dropout=dropout,
         channel_mult=channel_mult,
-        num_classes=(NUM_CLASSES if class_cond else None),
+        num_classes=(num_classes if num_classes>0 else None),
         use_checkpoint=use_checkpoint,
         use_fp16=use_fp16,
         num_heads=num_heads,

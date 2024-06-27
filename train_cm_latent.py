@@ -37,6 +37,7 @@ from models.script_util import (
 from models.resample import LossAwareSampler, UniformSampler
 from models.karras_diffusion import karras_sample
 from diffusers.models import AutoencoderKL
+from models.network_dit import DiT_models
 
 
 #################################################################################
@@ -277,6 +278,8 @@ def main(args):
                 running_loss += loss.item()
             else:
                 nan_count += 1
+                nan_t_list = losses["t"][torch.isnan(losses["loss"])]
+                logger.info(f"NaN time list: {nan_t_list}")
                 logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
                 if nan_count  > 100:
                     args.lr = args.lr/2
@@ -417,13 +420,13 @@ if __name__ == "__main__":
     parser.add_argument("--attention-resolutions", type=str, default="32,16,8")
     parser.add_argument("--channel-mult", type=str, default="1,2,2,2")
     parser.add_argument("--dropout", type=float, default=0.0)
-    parser.add_argument("--class-cond", action="store_true", default=False)
     parser.add_argument("--use-checkpoint", action="store_true", default=False)
     parser.add_argument("--use-scale-shift-norm", action="store_true", default=True)
     parser.add_argument("--resblock-updown", action="store_true", default=False)
     parser.add_argument("--use-fp16", action="store_true", default=False)
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
+    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+DiT_models.keys(), default="openai_unet")
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)

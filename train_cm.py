@@ -399,7 +399,6 @@ if __name__ == "__main__":
     parser.add_argument("--attention-resolutions", type=str, default="32,16,8")
     parser.add_argument("--channel-mult", type=str, default="1,2,2,2")
     parser.add_argument("--dropout", type=float, default=0.0)
-    parser.add_argument("--class-cond", action="store_true", default=False)
     parser.add_argument("--use-checkpoint", action="store_true", default=False)
     parser.add_argument("--use-scale-shift-norm", action="store_true", default=True)
     parser.add_argument("--resblock-updown", action="store_true", default=False)
