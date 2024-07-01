@@ -125,6 +125,10 @@ def adjust_learning_rate(optimizer, epoch, args):
             param_group["lr"] = lr
     return lr
 
+def norm_dim(x):
+    _, C, H, W = x.shape
+    return torch.sqrt(torch.sum(x**2, dim=(1,2,3))/(C*H*W))
+
 
 #################################################################################
 #                                  Training Loop                                #
@@ -264,6 +268,7 @@ def main(args):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
             y = None if not use_label else y.to(device)
+            n = torch.randn_like(x)
             ema_rate, num_scales = ema_scale_fn(train_steps)
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
@@ -271,9 +276,16 @@ def main(args):
                                                 x,
                                                 num_scales,
                                                 target_model=target_model,
-                                                model_kwargs=model_kwargs)
-            
-            loss = losses["loss"].mean()
+                                                model_kwargs=model_kwargs,
+                                                noise=n)
+            if args.l2_reweight:
+                # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
+                distances = norm_dim(x-n)
+                # weight = (distances-distances.min())/(distances.max()-distances.min()) + distances.min()
+                weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
+                loss = (losses["loss"]*weight).mean()
+            else:
+                loss = losses["loss"].mean()
             after_forward = torch.cuda.memory_allocated(device)
             opt.zero_grad()
             if not torch.isnan(loss):
@@ -319,6 +331,7 @@ def main(args):
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
                     f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
+                    f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
                 # Reset monitoring variables:
                 running_loss = 0
@@ -385,7 +398,7 @@ def main(args):
                     noise=noise,
                     ts=ts,
                 )
-            sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
+                sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
             save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
             del sample
@@ -447,6 +460,7 @@ if __name__ == "__main__":
     parser.add_argument("--start-scales", type=float, default=40)
     parser.add_argument("--end-scales", type=float, default=40)
     parser.add_argument("--ict", action="store_true", default=False)
+    parser.add_argument("--l2-reweight", action="store_true", default=False)
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)

@@ -1,7 +1,7 @@
 export MASTER_PORT=10121
 
 CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp dhariwal_unet_ict \
+        --exp dhariwal_unet_ict_l2_reweight_minmax_0.1 \
         --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_exp/ \
@@ -29,4 +29,5 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --model-type dhariwal_unet \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 32,16,8 \
+        --l2-reweight \
         # --model-ckpt /research/cbim/medical/qd66/lct_exp/latent_celeb256/ict/checkpoints/0001000.pt \

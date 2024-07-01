@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch as th
 import math
+import torch
 
 def test_scale():
     total_steps = 459000
@@ -37,4 +38,23 @@ def test_erf_dist():
         dist = th.distributions.categorical.Categorical(probs=unnorm_prob)
         return dist, erf_sigmas, unnorm_prob
 
-test_erf_dist()
+
+def norm_dim(x):
+    C, H, W = x.shape
+    return torch.sqrt(torch.sum(x**2)/(C*H*W))
+
+
+def test_scale_reweight():
+    x = torch.randn((4, 32, 32))
+    distances = []
+    for _ in range(1000):
+        n = torch.randn_like(x)
+        distances.append(1/norm_dim(x-n))
+    distances = torch.Tensor(distances)
+    distances = (distances-distances.min())/(distances.max()-distances.min()) + distances.min()
+    print(distances.min(), distances.max())
+    print(norm_dim(x)**2)
+
+# test_erf_dist()
+
+test_scale_reweight()
