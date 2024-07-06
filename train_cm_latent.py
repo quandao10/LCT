@@ -8,9 +8,7 @@
 A minimal training script for DiT using PyTorch DDP.
 """
 import math
-import sys
 import json
-from pathlib import Path
 import torch
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -30,7 +28,6 @@ import logging
 import os
 from datasets_prep import get_dataset
 from tqdm import tqdm
-from models.random_util import get_generator
 from models.script_util import (
     create_model_and_diffusion,
     create_ema_and_scales_fn,
@@ -38,8 +35,8 @@ from models.script_util import (
 from models.karras_diffusion import karras_sample
 from diffusers.models import AutoencoderKL
 from models.network_dit import DiT_models
-
-
+import robust_loss_pytorch
+from sampler.random_util import get_generator
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -183,9 +180,12 @@ def main(args):
     target_model.train()
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
-    opt = torch.optim.RAdam(
-        model.parameters(), lr=args.lr, #weight_decay=args.weight_decay
-    )
+    if args.loss_norm=="adaptive":
+        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, float_dtype=np.float32, device=device)
+        opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
+    else:
+        adaptive_loss = None
+        opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4)
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -277,7 +277,8 @@ def main(args):
                                                 num_scales,
                                                 target_model=target_model,
                                                 model_kwargs=model_kwargs,
-                                                noise=n)
+                                                noise=n,
+                                                adaptive=adaptive_loss)
             if args.l2_reweight:
                 # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
                 distances = norm_dim(x-n)
@@ -287,8 +288,9 @@ def main(args):
             else:
                 loss = losses["loss"].mean()
             after_forward = torch.cuda.memory_allocated(device)
-            opt.zero_grad()
+            
             if not torch.isnan(loss):
+                opt.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 opt.step()
@@ -331,7 +333,7 @@ def main(args):
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
                     f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
-                    f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
+                    # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
                 # Reset monitoring variables:
                 running_loss = 0
@@ -374,6 +376,7 @@ def main(args):
 
         if rank == 0 and epoch % args.plot_every == 0:
             logger.info("Generating EMA samples...")
+            generator = get_generator("dummy", 4, seed)
             if args.sampler == "multistep":
                 assert len(args.ts) > 0
                 ts = tuple(int(x) for x in args.ts.split(","))
@@ -382,6 +385,7 @@ def main(args):
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
+                    generator,
                     model,
                     (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
                     steps=args.steps,
@@ -451,7 +455,7 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-max", type=float, default=80.0)
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
-    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber"], default="huber")
+    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive"], default="huber")
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")

@@ -13,6 +13,7 @@ from . import dist_util
 import math
 from .nn import mean_flat, append_dims, append_zero
 from .random_util import get_generator
+import robust_loss_pytorch
 
 
 def get_weightings(weight_schedule, snrs, sigma_data, t2, t):
@@ -125,6 +126,7 @@ class KarrasDenoiser:
         teacher_model=None,
         teacher_diffusion=None,
         noise=None,
+        adaptive=None,
     ):
         if model_kwargs is None:
             model_kwargs = {}
@@ -250,6 +252,9 @@ class KarrasDenoiser:
                 )
                 * weights
             )
+        elif adaptive is not None:
+            diffs = th.abs(distiller - distiller_target).flatten(1, -1)
+            loss = adaptive.lossfun(diffs)
         else:
             raise ValueError(f"Unknown loss norm {self.loss_norm}")
 
@@ -273,6 +278,7 @@ class KarrasDenoiser:
 
 def karras_sample(
     diffusion,
+    generator,
     model,
     shape,
     steps,
@@ -292,7 +298,7 @@ def karras_sample(
     noise=None,
     ts=None,):
     if noise is None:
-        x_T = th.randn(*shape, device=device) * sigma_max
+        x_T = generator.randn(*shape, device=device) * sigma_max
     else:
         x_T = noise
 
@@ -304,16 +310,16 @@ def karras_sample(
         # "ancestral": sample_euler_ancestral,
         "onestep": sample_onestep,
         "euler": sample_euler,
-        # "multistep": stochastic_iterative_sampler,
+        "multistep": stochastic_iterative_sampler,
     }[sampler]
 
     if sampler in ["heun", "dpm"]:
         sampler_args = dict(
-            s_churn=s_churn, s_tmin=s_tmin, s_tmax=s_tmax, s_noise=s_noise
+            s_churn=s_churn, s_tmin=s_tmin, s_tmax=s_tmax, s_noise=s_noise, generator=generator,
         )
     elif sampler == "multistep":
         sampler_args = dict(
-            ts=ts, t_min=sigma_min, t_max=sigma_max, rho=diffusion.rho, steps=steps
+            ts=ts, t_min=sigma_min, t_max=sigma_max, rho=diffusion.rho, steps=steps, generator=generator,
         )
     else:
         sampler_args = {}
@@ -469,6 +475,7 @@ def sample_heun(
 @th.no_grad()
 def sample_euler(
     denoiser,
+    generator,
     x,
     sigmas,
     progress=False,
