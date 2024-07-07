@@ -15,6 +15,6 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --model-type dhariwal_unet \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 32,16,8 \
-        --sampler multistep \
+        --sampler onestep \
         --ts 0,160,320,640,960,1279 \
         --ema \

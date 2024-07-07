@@ -256,7 +256,12 @@ def main(args):
     start_time = time()
     nan_count = 0
     use_label = True if "imagenet" in args.dataset else False
-    
+    use_normalize = args.normalize_matrix is not None
+    if use_normalize:
+        data = np.load(args.normalize_matrix, allow_pickle=True).item()
+        mean = data["mean"].to(device)
+        std = data["std"].to(device)
+        
     if rank == 0:
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
 
@@ -267,6 +272,9 @@ def main(args):
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
+            if use_normalize:
+                x = x/0.18215
+                x = (x - mean)/std
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
             ema_rate, num_scales = ema_scale_fn(train_steps)
@@ -402,7 +410,10 @@ def main(args):
                     noise=noise,
                     ts=ts,
                 )
-                sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
+                if use_normalize:
+                    sample = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in sample]
+                else:
+                    sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
             save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
             del sample
@@ -431,6 +442,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-in-channels", type=int, default=3)
     parser.add_argument("--num-classes", type=int, default=0)
     parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--normalize-matrix", type=str, default=None)
     
     ###### model ######
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
