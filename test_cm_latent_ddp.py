@@ -20,7 +20,7 @@ from models.script_util import (
     create_model_and_diffusion,
 )
 from models.karras_diffusion import karras_sample
-
+import numpy as np
 
 def main(args):
     torch.backends.cuda.matmul.allow_tf32 = True  # True: fast but may lead to some small numerical differences
@@ -67,7 +67,7 @@ def main(args):
     
     del ckpt
     args.exp = args.ckpt.split("/")[-3]
-    args.epoch_id = args.ckpt.split("/")[-1][:-2]
+    args.epoch_id = args.ckpt.split("/")[-1][:-3]
     save_dir = "./generated_samples/{}/exp{}_ep{}".format(args.dataset, args.exp, args.epoch_id)
     
     if args.cfg_scale > 1.0:
@@ -79,6 +79,11 @@ def main(args):
     # seed should be aligned with rank
     generator = get_generator(args.generator, args.num_sampling, seed)
     use_label = True if "imagenet" in args.dataset else False
+    use_normalize = args.normalize_matrix is not None
+    if use_normalize:
+        data = np.load(args.normalize_matrix, allow_pickle=True).item()
+        mean = data["mean"].to(device)
+        std = data["std"].to(device)
 
     def run_sampling(num_samples, generator):
         noise = generator.randn(num_samples, 4, args.image_size, args.image_size).to(device)*args.sigma_max
@@ -121,8 +126,11 @@ def main(args):
                         ts=ts,
                     )
         if args.cfg_scale > 1.0:
-            fake_sample, _ = fake_sample.chunk(2, dim=0)  # Remove null class samples
-        fake_image = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in fake_sample]
+            fake_sample, _ = fake_sample.chunk(2, dim=0)  # Remove null class samples        
+        if use_normalize:
+            fake_image = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in fake_sample]
+        else:
+            fake_image = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in fake_sample]
         return fake_image
     
     if args.compute_fid:
@@ -170,7 +178,8 @@ def main(args):
     else:
         fake_image = run_sampling(args.batch_size, generator)
         fake_image = torch.cat(fake_image)
-        torchvision.utils.save_image(fake_image, 'image.jpg', nrow=4, normalize=True, value_range=(-1, 1))
+        ema = "" if not args.ema else "_ema"
+        torchvision.utils.save_image(fake_image, f'{args.exp}_{args.epoch_id}{ema}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
         dist.barrier()
         dist.destroy_process_group()
 
@@ -226,6 +235,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", default="cifar10", help="name of dataset")
     parser.add_argument("--num-in-channels", type=int, default=3)
     parser.add_argument("--num-classes", type=int, default=0)
+    parser.add_argument("--normalize-matrix", type=str, default=None)
     
     ###### compute fid ######
     parser.add_argument("--compute-fid", action="store_true", default=False, help="whether or not compute FID")

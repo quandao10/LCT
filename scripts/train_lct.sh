@@ -1,7 +1,7 @@
-export MASTER_PORT=10123
+export MASTER_PORT=10122
 
-CUDA_VISIBLE_DEVICES=3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize \
+CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
+        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_adaptive \
         --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_exp/ \
@@ -9,7 +9,7 @@ CUDA_VISIBLE_DEVICES=3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --num-in-channels 4 \
         --num-classes 0 \
         --weight-schedule ict \
-        --loss-norm huber \
+        --loss-norm adaptive \
         --target-ema-mode adaptive \
         --start-ema 0.95 \
         --scale-mode progressive \

@@ -181,7 +181,7 @@ def main(args):
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
     if args.loss_norm=="adaptive":
-        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, float_dtype=np.float32, device=device)
+        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, scale_lo=1.0, float_dtype=np.float32, device=device)
         opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
     else:
         adaptive_loss = None
