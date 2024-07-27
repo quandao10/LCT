@@ -181,7 +181,8 @@ def main(args):
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
     if args.loss_norm=="adaptive":
-        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, scale_lo=1.0, float_dtype=np.float32, device=device)
+        # adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, scale_lo=1.0, float_dtype=np.float32, device=device)
+        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, scale_init=diffusion.c, float_dtype=np.float32, device=device)
         opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
     else:
         adaptive_loss = None
@@ -274,7 +275,7 @@ def main(args):
             x = x.to(device)
             if use_normalize:
                 x = x/0.18215
-                x = (x - mean)/std
+                x = (x - mean)/std * args.normalize_desired_std
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
             ema_rate, num_scales = ema_scale_fn(train_steps)
@@ -411,7 +412,7 @@ def main(args):
                     ts=ts,
                 )
                 if use_normalize:
-                    sample = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in sample]
+                    sample = [vae.decode(x.unsqueeze(0) / args.normalize_desired_std * std + mean).sample for x in sample]
                 else:
                     sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
@@ -443,6 +444,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-classes", type=int, default=0)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--normalize-matrix", type=str, default=None)
+    parser.add_argument("--normalize-desired-std", type=float, default=1.0)
     
     ###### model ######
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training

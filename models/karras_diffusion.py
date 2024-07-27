@@ -257,6 +257,9 @@ class KarrasDenoiser:
             loss = adaptive.lossfun(diffs)
         else:
             raise ValueError(f"Unknown loss norm {self.loss_norm}")
+        
+        diffusion_loss = (1 / t ** 2) * mean_flat((distiller - x_start) ** 2) * th.where(indices > num_scales * (1.0 - 1.0 / 5.0), 1.0, 0.0)
+        loss = loss + 1.0 * diffusion_loss
 
         terms = {}
         terms["loss"] = loss

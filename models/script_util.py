@@ -103,7 +103,8 @@ def create_model_and_diffusion(args):
             
     diffusion = KarrasDenoiser(
         args=args,
-        sigma_data=0.5,
+        # sigma_data=0.5,
+        sigma_data=args.normalize_desired_std,
         sigma_max=args.sigma_max,
         sigma_min=args.sigma_min,
         weight_schedule=args.weight_schedule,
