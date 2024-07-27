@@ -57,4 +57,7 @@ def test_scale_reweight():
 
 # test_erf_dist()
 
-test_scale_reweight()
+# test_scale_reweight()
+
+def test_ckpt():
+    pass

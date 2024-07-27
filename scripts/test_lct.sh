@@ -1,12 +1,12 @@
 export MASTER_PORT=10120
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 test_cm_latent_ddp.py \
-        --ckpt /research/cbim/medical/qd66/lct_exp/latent_celeb256/dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize/checkpoints/0001700.pt \
+        --ckpt /research/cbim/medical/qd66/lct_exp/latent_celeb256/dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize/checkpoints/0004000.pt \
         --dataset latent_celeb256 \
         --image-size 32 \
         --num-in-channels 4 \
         --num-classes 0 \
-        --steps 80 \
+        --steps 1280 \
         --batch-size $((8*1)) \
         --num-channels 128 \
         --num-head-channels 64 \
@@ -19,3 +19,4 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --ts 0,160,320,640,960,1279 \
         --normalize-matrix celeb256_stat.npy \
         --ema \
+        --test-interval \

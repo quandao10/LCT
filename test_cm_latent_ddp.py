@@ -21,6 +21,11 @@ from models.script_util import (
 )
 from models.karras_diffusion import karras_sample
 import numpy as np
+from datasets_prep import get_dataset
+from torch.utils.data import DataLoader
+from models.nn import mean_flat, append_dims, append_zero
+from tqdm import tqdm
+from models.karras_diffusion import get_sigmas_karras
 
 def main(args):
     torch.backends.cuda.matmul.allow_tf32 = True  # True: fast but may lead to some small numerical differences
@@ -28,6 +33,7 @@ def main(args):
     # Setup DDP:
     dist.init_process_group("nccl")
     rank = dist.get_rank()
+    world_size = dist.get_world_size()
     device = rank % torch.cuda.device_count()
     seed = args.seed + rank
     torch.manual_seed(seed)
@@ -182,6 +188,59 @@ def main(args):
         torchvision.utils.save_image(fake_image, f'{args.exp}_{args.epoch_id}{ema}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
         dist.barrier()
         dist.destroy_process_group()
+        
+    if args.test_interval:
+        test_dir = "./test_x0"
+        os.makedirs(test_dir, exist_ok=True)
+        dataset = get_dataset(args)
+        loader = DataLoader(
+            dataset,
+            batch_size=4,
+            shuffle=False,
+            num_workers=4,
+            pin_memory=True,
+            drop_last=True
+        )
+        args.rho = 7
+        num_scales = 1280
+        image, _ = next(iter(loader))
+        image = image.to(device)
+        if use_normalize:
+            image = image/0.18215
+            image = (image - mean)/std
+        dims = image.ndim
+        noise = torch.randn_like(image)
+        image_last = image + noise * append_dims(0.002*torch.ones((4,), device=device), dims)
+        print("#####################")
+        print(get_sigmas_karras(num_scales, args.sigma_min, args.sigma_max, args.rho))
+        print("#####################")
+        if use_normalize:
+            ori_image = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in image]
+            image_last = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in image_last]
+        else:
+            ori_image = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in image]
+            image_last = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in image_last]
+        ori_image = torch.cat(ori_image)
+        image_last = torch.cat(image_last)
+        torchvision.utils.save_image(ori_image, f"{test_dir}/x0_t=original.png", normalize=True, value_range=(-1, 1))
+        torchvision.utils.save_image(image_last, f"{test_dir}/x0_t=last.png", normalize=True, value_range=(-1, 1))
+        # indices = torch.randint(0, num_scales - 1, (image.shape[0],), device=image.device)
+        for ind in tqdm(range(1279, -1, -80)):
+            indices = ind*torch.ones(size=(4, ), device=device)
+            t = args.sigma_max ** (1 / args.rho) + indices / (num_scales - 1) * (
+                args.sigma_min ** (1 / args.rho) - args.sigma_max ** (1 / args.rho)
+            )
+            t = t**args.rho
+            x_t = image + noise * append_dims(t, dims)
+            model_kwargs = dict(y=None)
+            _, x0 = diffusion.denoise(model, x_t, t, **model_kwargs)
+            x0 = x0.clamp(-1, 1)
+            if use_normalize:
+                x0 = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in x0]
+            else:
+                x0 = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in x0]
+            x0 = torch.cat(x0)
+            torchvision.utils.save_image(x0, f"{test_dir}/x0_t={ind}.png", normalize=True, value_range=(-1, 1))
 
 
 if __name__ == "__main__":
@@ -190,6 +249,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="seed used for initialization")
     parser.add_argument("--ckpt", default="experiment_cifar_default", help="name of experiment")
     parser.add_argument("--ema", action="store_true", default=False)
+    parser.add_argument("--test-interval", action="store_true", default=False)
     parser.add_argument("--batch-size", type=int, default=64, help="sample generating batch size")
     
     ###### model ######

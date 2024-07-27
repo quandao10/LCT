@@ -1,3 +1,5 @@
 results/
 features/
 __pycache__/
+*jpg
+test_x0/

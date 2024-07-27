@@ -16,7 +16,7 @@ from .random_util import get_generator
 import robust_loss_pytorch
 
 
-def get_weightings(weight_schedule, snrs, sigma_data, t2, t):
+def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0):
     if weight_schedule == "snr":
         weightings = snrs
     elif weight_schedule == "snr+1":
@@ -80,21 +80,27 @@ class KarrasDenoiser:
         c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
         return c_skip, c_out, c_in
 
-    def training_losses(self, model, x_start, sigmas, model_kwargs=None, noise=None):
+    def diffusion_losses(self, model, x_start, num_scales, model_kwargs=None, noise=None):
         if model_kwargs is None:
             model_kwargs = {}
         if noise is None:
             noise = th.randn_like(x_start)
 
         terms = {}
+        ### Fix here. Define a categorical distribution
+        indices = th.randint(int(num_scales*4/5), num_scales, (x_start.shape[0],), device=x_start.device)
+        t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
+            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
+        )
+        t = t**self.rho
 
         dims = x_start.ndim
-        x_t = x_start + noise * append_dims(sigmas, dims)
-        model_output, denoised = self.denoise(model, x_t, sigmas, **model_kwargs)
+        x_t = x_start + noise * append_dims(t, dims)
+        model_output, denoised = self.denoise(model, x_t, t, **model_kwargs)
 
-        snrs = self.get_snr(sigmas)
+        snrs = self.get_snr(t)
         weights = append_dims(
-            get_weightings(self.weight_schedule, snrs, self.sigma_data), dims
+            get_weightings("karras", snrs, self.sigma_data), dims
         )
         terms["xs_mse"] = mean_flat((denoised - x_start) ** 2)
         terms["mse"] = mean_flat(weights * (denoised - x_start) ** 2)
@@ -103,7 +109,6 @@ class KarrasDenoiser:
             terms["loss"] = terms["mse"] + terms["vb"]
         else:
             terms["loss"] = terms["mse"]
-
         return terms
     
     def icm_dist(self, num_scales):

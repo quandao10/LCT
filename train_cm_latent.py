@@ -181,7 +181,11 @@ def main(args):
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
     if args.loss_norm=="adaptive":
-        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, scale_lo=1.0, float_dtype=np.float32, device=device)
+        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, 
+                                                                          alpha_hi=1.0,
+                                                                          alpha_lo=0.0,
+                                                                          float_dtype=np.float32, 
+                                                                          device=device)
         opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
     else:
         adaptive_loss = None
@@ -253,6 +257,8 @@ def main(args):
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
+    running_cm_loss = 0
+    running_diff_loss = 0
     start_time = time()
     nan_count = 0
     use_label = True if "imagenet" in args.dataset else False
@@ -287,6 +293,11 @@ def main(args):
                                                 model_kwargs=model_kwargs,
                                                 noise=n,
                                                 adaptive=adaptive_loss)
+            diff_losses = diffusion.diffusion_losses(model, 
+                                                     x,
+                                                     num_scales,
+                                                     model_kwargs=model_kwargs,
+                                                     noise=n)
             if args.l2_reweight:
                 # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
                 distances = norm_dim(x-n)
@@ -294,7 +305,9 @@ def main(args):
                 weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
                 loss = (losses["loss"]*weight).mean()
             else:
-                loss = losses["loss"].mean()
+                cm_loss = losses["loss"].mean() 
+                diff_loss = diff_losses["loss"].mean()
+                loss = cm_loss + diff_loss
             after_forward = torch.cuda.memory_allocated(device)
             
             if not torch.isnan(loss):
@@ -303,6 +316,8 @@ def main(args):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 opt.step()
                 running_loss += loss.item()
+                running_cm_loss += cm_loss.item()
+                running_diff_loss += diff_loss.item()
             else:
                 nan_count += 1
                 nan_t_list = losses["t"][torch.isnan(losses["loss"])]
@@ -333,10 +348,12 @@ def main(args):
                 steps_per_sec = log_steps / (end_time - start_time)
                 # Reduce loss history over all processes:
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
+                avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
+                avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}) Train Loss: {avg_loss:.4f}, "
+                    f"(step={train_steps:07d}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
@@ -345,6 +362,8 @@ def main(args):
                 )
                 # Reset monitoring variables:
                 running_loss = 0
+                running_cm_loss = 0
+                running_diff_loss = 0
                 log_steps = 0
                 start_time = time()
 
