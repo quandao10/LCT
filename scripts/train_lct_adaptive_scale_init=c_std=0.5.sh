@@ -1,7 +1,7 @@
-export MASTER_PORT=10125
+export MASTER_PORT=10150
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_huber_std=0.5_scale_init=c \
+        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_adaptive_scale_init=c_dmloss_std=0.5 \
         --datadir ./dataset/ \
         --dataset latent_celeb256 \
         --results-dir ./results/ \
@@ -9,7 +9,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --num-in-channels 4 \
         --num-classes 0 \
         --weight-schedule ict \
-        --loss-norm huber \
+        --loss-norm adaptive \
         --target-ema-mode adaptive \
         --start-ema 0.95 \
         --scale-mode progressive \
