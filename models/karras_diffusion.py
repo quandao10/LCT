@@ -47,6 +47,7 @@ class KarrasDenoiser:
         rho=7.0,
         weight_schedule="karras",
         loss_norm="lpips",
+        proximal=0.0,
     ):
         self.args = args
         self.sigma_data = sigma_data
@@ -61,6 +62,7 @@ class KarrasDenoiser:
         self.p_mean = -1.1
         self.p_std = 2.0
         self.c = None
+        self.proximal = proximal
 
     def get_snr(self, sigmas):
         return sigmas**-2
@@ -234,6 +236,12 @@ class KarrasDenoiser:
         elif self.loss_norm == "cauchy":
             diffs = (distiller - distiller_target) ** 2
             loss = (th.log(0.5*mean_flat(diffs)+self.c**2) - 2*th.log(self.c)) * weights
+        elif self.loss_norm == "geman-mcclure":
+            diffs = (distiller - distiller_target) ** 2
+            loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2) * weights
+        elif self.loss_norm == "welsch":
+            diffs = (distiller - distiller_target) ** 2
+            loss = (1.0 - th.exp(-0.5 * mean_flat(diffs) / self.c**2)) * weights
         elif self.loss_norm == "l2":
             diffs = (distiller - distiller_target) ** 2
             loss = mean_flat(diffs) * weights
