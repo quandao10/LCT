@@ -275,6 +275,7 @@ def main(args):
             x = x.to(device)
             if use_normalize:
                 x = x/0.18215
+                x = (x - mean)/std # sigma_data = 1.0
                 x = (x - mean)/std * args.normalize_desired_std
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
@@ -469,7 +470,7 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-max", type=float, default=80.0)
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
-    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive"], default="huber")
+    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "geman-mcclure", "welsch"], default="huber")
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")

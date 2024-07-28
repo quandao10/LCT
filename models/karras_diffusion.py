@@ -229,6 +229,18 @@ class KarrasDenoiser:
         elif self.loss_norm == "l2":
             diffs = (distiller - distiller_target) ** 2
             loss = mean_flat(diffs) * weights
+        elif self.loss_norm == "cauchy":
+            diffs = (distiller - distiller_target) ** 2
+            loss = th.log((0.5 * mean_flat(diffs) / self.c**2) + 1.0) * weights
+            loss = self.c * loss
+        elif self.loss_norm == "geman-mcclure":
+            diffs = (distiller - distiller_target) ** 2
+            loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2)
+            loss = self.c * loss
+        elif self.loss_norm == "welsch":
+            diffs = (distiller - distiller_target) ** 2
+            loss = 1.0 - th.exp(-0.5 * mean_flat(diffs) / self.c**2)
+            loss = self.c * loss
         elif self.loss_norm == "l2-32":
             distiller = F.interpolate(distiller, size=32, mode="bilinear")
             distiller_target = F.interpolate(
