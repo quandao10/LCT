@@ -48,6 +48,7 @@ class KarrasDenoiser:
         weight_schedule="karras",
         loss_norm="lpips",
         proximal=0.0,
+        gcharbonnier_alpha=0.5,
     ):
         self.args = args
         self.sigma_data = sigma_data
@@ -63,6 +64,7 @@ class KarrasDenoiser:
         self.p_std = 2.0
         self.c = None
         self.proximal = proximal
+        self.gcharbonnier_alpha = gcharbonnier_alpha
 
     def get_snr(self, sigmas):
         return sigmas**-2

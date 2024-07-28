@@ -109,6 +109,7 @@ def create_model_and_diffusion(args):
         weight_schedule=args.weight_schedule,
         loss_norm=args.loss_norm,
         proximal=args.proximal,
+        gcharbonnier_alpha=args.gcharbonnier_alpha,
     )
     return model, diffusion
 

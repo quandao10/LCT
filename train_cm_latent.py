@@ -501,7 +501,9 @@ if __name__ == "__main__":
         "cauchy",
         "geman-mcclure",
         "welsch",
+        "gcharbonnier",
     ], default="huber")
+    parser.add_argument("--gcharbonnier_alpha", type=float, default=0.0)
     parser.add_argument("--proximal", type=float, default=0.0)
     
     ###### consistency ######
