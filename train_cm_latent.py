@@ -296,7 +296,8 @@ def main(args):
                 weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
                 loss = (losses["loss"]*weight).mean()
             else:
-                loss = losses["loss"].mean()
+                # loss = losses["loss"].mean()
+                loss = losses["loss"]
             after_forward = torch.cuda.memory_allocated(device)
             
             if not torch.isnan(loss):
@@ -483,12 +484,14 @@ if __name__ == "__main__":
             "geman-mcclure",
             "welsch",
             "generalized-charbonnier-alpha=0.25",
+            "generalized-charbonnier-alpha=0.25_modified",
             "generalized-charbonnier-alpha=0.45",
             "generalized-charbonnier-alpha=0.55",
             "generalized-charbonnier-alpha=0.65",
         ],
         default="huber",
     )
+    parser.add_argument("--proximal", type=float, default=0.0)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")

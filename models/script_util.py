@@ -108,7 +108,8 @@ def create_model_and_diffusion(args):
         sigma_max=args.sigma_max,
         sigma_min=args.sigma_min,
         weight_schedule=args.weight_schedule,
-        loss_norm=args.loss_norm
+        loss_norm=args.loss_norm,
+        proximal=args.proximal,
     )
     return model, diffusion
 
