@@ -1,7 +1,7 @@
 export MASTER_PORT=10131
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_geman-mcclure_dmloss_std=0.2 \
+        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_geman-mcclure_std=0.2 \
         --datadir ./dataset/ \
         --dataset latent_celeb256 \
         --results-dir ./results/ \
