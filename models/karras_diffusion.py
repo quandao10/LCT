@@ -247,6 +247,10 @@ class KarrasDenoiser:
         elif self.loss_norm == "gcharbonnier":
             diffs = (distiller - distiller_target) ** 2
             loss = (mean_flat(diffs) + self.c**2)**self.gcharbonnier_alpha * weights
+        elif self.loss_norm == "tukey":
+            diffs_wo_squared = distiller - distiller_target
+            not_prune_term = 1.0 - (1.0 - diffs_wo_squared**2 / self.c**2)**3
+            loss = (self.c**2 / 6.0) * mean_flat(th.where(th.abs(diffs_wo_squared) <= self.c, not_prune_term, 1.0)) * weights
         elif self.loss_norm == "l2":
             diffs = (distiller - distiller_target) ** 2
             loss = mean_flat(diffs) * weights
