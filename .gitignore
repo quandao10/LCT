@@ -2,3 +2,4 @@ results/
 features/
 __pycache__/
 dataset/
+log/
