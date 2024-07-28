@@ -235,12 +235,24 @@ class KarrasDenoiser:
             # loss = self.c * loss
         elif self.loss_norm == "geman-mcclure":
             diffs = (distiller - distiller_target) ** 2
-            loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2)
+            loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2) * weights
             # loss = self.c * loss
         elif self.loss_norm == "welsch":
             diffs = (distiller - distiller_target) ** 2
-            loss = 1.0 - th.exp(-0.5 * mean_flat(diffs) / self.c**2)
+            loss = 1.0 - th.exp(-0.5 * mean_flat(diffs) / self.c**2) * weights
             # loss = self.c * loss
+        elif self.loss_norm == "generalized-charbonnier-alpha=0.25":
+            diffs = (distiller - distiller_target) ** 2
+            loss = (mean_flat(diffs) + self.c**2)**0.25 * weights
+        elif self.loss_norm == "generalized-charbonnier-alpha=0.45":
+            diffs = (distiller - distiller_target) ** 2
+            loss = (mean_flat(diffs) + self.c**2)**0.45 * weights
+        elif self.loss_norm == "generalized-charbonnier-alpha=0.55":
+            diffs = (distiller - distiller_target) ** 2
+            loss = (mean_flat(diffs) + self.c**2)**0.55 * weights
+        elif self.loss_norm == "generalized-charbonnier-alpha=0.65":
+            diffs = (distiller - distiller_target) ** 2
+            loss = (mean_flat(diffs) + self.c**2)**0.65 * weights
         elif self.loss_norm == "l2-32":
             distiller = F.interpolate(distiller, size=32, mode="bilinear")
             distiller_target = F.interpolate(

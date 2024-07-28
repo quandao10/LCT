@@ -470,7 +470,25 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-max", type=float, default=80.0)
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
-    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "geman-mcclure", "welsch"], default="huber")
+    parser.add_argument(
+        "--loss-norm",
+        type=str,
+        choices=[
+            "l1",
+            "l2",
+            "lpips",
+            "huber",
+            "adaptive",
+            "cauchy",
+            "geman-mcclure",
+            "welsch",
+            "generalized-charbonnier-alpha=0.25",
+            "generalized-charbonnier-alpha=0.45",
+            "generalized-charbonnier-alpha=0.55",
+            "generalized-charbonnier-alpha=0.65",
+        ],
+        default="huber",
+    )
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
