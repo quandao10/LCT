@@ -1,7 +1,7 @@
-export MASTER_PORT=10120
+export MASTER_PORT=10122
 
-CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_diff_0.5 \
+CUDA_VISIBLE_DEVICES=3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
+        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_0.5_cauchy \
         --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_exp/ \
@@ -9,7 +9,7 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --num-in-channels 4 \
         --num-classes 0 \
         --weight-schedule ict \
-        --loss-norm huber \
+        --loss-norm cauchy \
         --target-ema-mode adaptive \
         --start-ema 0.95 \
         --scale-mode progressive \
@@ -30,6 +30,6 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
         --normalize-matrix celeb256_stat.npy \
-        --use-diffloss \
+        # --use-diffloss \
         # --l2-reweight \
         # --model-ckpt /research/cbim/medical/qd66/lct_exp/latent_celeb256/ict/checkpoints/0001000.pt \
