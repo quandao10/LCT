@@ -244,6 +244,9 @@ class KarrasDenoiser:
         elif self.loss_norm == "welsch":
             diffs = (distiller - distiller_target) ** 2
             loss = (1.0 - th.exp(-0.5 * mean_flat(diffs) / self.c**2)) * weights
+        elif self.loss_norm == "gcharbonnier":
+            diffs = (distiller - distiller_target) ** 2
+            loss = (mean_flat(diffs) + self.c**2)**self.gcharbonnier_alpha * weights
         elif self.loss_norm == "l2":
             diffs = (distiller - distiller_target) ** 2
             loss = mean_flat(diffs) * weights
