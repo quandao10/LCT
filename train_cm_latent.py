@@ -185,6 +185,7 @@ def main(args):
                                                                           alpha_hi=1.0,
                                                                           alpha_lo=0.0,
                                                                           float_dtype=np.float32, 
+                                                                          scale_init=diffusion.c,
                                                                           device=device)
         opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
     else:
@@ -280,7 +281,7 @@ def main(args):
             x = x.to(device)
             if use_normalize:
                 x = x/0.18215
-                x = (x - mean)/std
+                x = (x - mean)/std * 0.5
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
             ema_rate, num_scales = ema_scale_fn(train_steps)
@@ -293,11 +294,12 @@ def main(args):
                                                 model_kwargs=model_kwargs,
                                                 noise=n,
                                                 adaptive=adaptive_loss)
-            diff_losses = diffusion.diffusion_losses(model, 
-                                                     x,
-                                                     num_scales,
-                                                     model_kwargs=model_kwargs,
-                                                     noise=n)
+            if args.use_diffloss:
+                diff_losses = diffusion.diffusion_losses(model, 
+                                                        x,
+                                                        num_scales,
+                                                        model_kwargs=model_kwargs,
+                                                        noise=n)
             if args.l2_reweight:
                 # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
                 distances = norm_dim(x-n)
@@ -306,8 +308,12 @@ def main(args):
                 loss = (losses["loss"]*weight).mean()
             else:
                 cm_loss = losses["loss"].mean() 
-                diff_loss = diff_losses["loss"].mean()
-                loss = cm_loss + diff_loss
+                if args.use_diffloss:
+                    diff_loss = diff_losses["loss"].mean()
+                    loss = cm_loss + diff_loss
+                else:
+                    loss = cm_loss
+                    diff_loss = torch.tensor(0)
             after_forward = torch.cuda.memory_allocated(device)
             
             if not torch.isnan(loss):
@@ -430,7 +436,7 @@ def main(args):
                     ts=ts,
                 )
                 if use_normalize:
-                    sample = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in sample]
+                    sample = [vae.decode(x.unsqueeze(0)*std / 0.5 + mean).sample for x in sample]
                 else:
                     sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
@@ -496,6 +502,7 @@ if __name__ == "__main__":
     parser.add_argument("--end-scales", type=float, default=40)
     parser.add_argument("--ict", action="store_true", default=False)
     parser.add_argument("--l2-reweight", action="store_true", default=False)
+    parser.add_argument("--use-diffloss", action="store_true", default=False)
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
