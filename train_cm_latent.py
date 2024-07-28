@@ -502,6 +502,7 @@ if __name__ == "__main__":
         "geman-mcclure",
         "welsch",
     ], default="huber")
+    parser.add_argument("--proximal", type=float, default=0.0)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")

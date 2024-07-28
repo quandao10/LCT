@@ -273,6 +273,14 @@ class KarrasDenoiser:
             loss = adaptive.lossfun(diffs)
         else:
             raise ValueError(f"Unknown loss norm {self.loss_norm}")
+        
+        # Proximal loss
+        if self.proximal > 0.0:
+            loss = th.mean(loss)
+            proximal_loss = 0.0
+            for param, target_param in zip(model.parameters(), target_model.parameters()):
+                proximal_loss += th.sum(th.square(param - target_param))
+            loss = loss + self.proximal * proximal_loss
 
         terms = {}
         terms["loss"] = loss
