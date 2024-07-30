@@ -34,3 +34,5 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         # --use-diffloss \
         # --l2-reweight \
         # --model-ckpt /research/cbim/medical/qd66/lct_exp/latent_celeb256/ict/checkpoints/0001000.pt \
+
+python ~/envs/slack_workflow/running_finished.py
