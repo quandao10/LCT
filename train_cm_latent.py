@@ -166,7 +166,7 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
-    diffusion.c = 0.00054*math.sqrt(args.num_in_channels*args.image_size**2)
+    diffusion.c = 0.00054*math.sqrt(args.num_in_channels*args.image_size**2) * args.scale_c_by
     logger.info("c in huber loss is {}".format(diffusion.c))
     # create ema for training model
     logger.info("creating the ema model")
@@ -506,6 +506,7 @@ if __name__ == "__main__":
     ], default="huber")
     parser.add_argument("--gcharbonnier_alpha", type=float, default=0.0)
     parser.add_argument("--proximal", type=float, default=0.0)
+    parser.add_argument("--scale-c-by", type=float, default=1.0)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
