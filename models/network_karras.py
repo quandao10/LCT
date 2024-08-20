@@ -247,6 +247,7 @@ class SongUNet(torch.nn.Module):
         encoder_type        = 'standard',   # Encoder architecture: 'standard' for DDPM++, 'residual' for NCSN++.
         decoder_type        = 'standard',   # Decoder architecture: 'standard' for both DDPM++ and NCSN++.
         resample_filter     = [1,1],        # Resampling filter: [1,1] for DDPM++, [1,3,3,1] for NCSN++.
+        **kwargs,
     ):
         assert embedding_type in ['fourier', 'positional']
         assert encoder_type in ['standard', 'skip', 'residual']
@@ -384,6 +385,7 @@ class DhariwalUNet(torch.nn.Module):
         attn_resolutions    = [32,16,8],    # List of resolutions with self-attention.
         dropout             = 0.10,         # List of resolutions with self-attention.
         label_dropout       = 0,            # Dropout probability of class labels for classifier-free guidance.
+        **kwargs,
     ):
         super().__init__()
         self.label_dropout = label_dropout
@@ -393,7 +395,12 @@ class DhariwalUNet(torch.nn.Module):
         block_kwargs = dict(emb_channels=emb_channels, channels_per_head=64, dropout=dropout, init=init, init_zero=init_zero)
 
         # Mapping.
-        self.map_noise = PositionalEmbedding(num_channels=model_channels)
+        time_emb = kwargs.get("time_emb", "positional")
+        if time_emb == "positional":
+            self.map_noise = PositionalEmbedding(num_channels=model_channels)
+        elif time_emb == "fourier":
+            fourier_time_emb_scale = kwargs.get("fourier_time_emb_scale", 16.0)
+            self.map_noise = FourierEmbedding(num_channels=model_channels, scale=fourier_time_emb_scale)
         self.map_augment = Linear(in_features=augment_dim, out_features=model_channels, bias=False, **init_zero) if augment_dim else None
         self.map_layer0 = Linear(in_features=model_channels, out_features=emb_channels, **init)
         self.map_layer1 = Linear(in_features=emb_channels, out_features=emb_channels, **init)

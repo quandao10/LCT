@@ -486,6 +486,8 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys()), default="openai_unet")
+    parser.add_argument("--time-emb", type=str, choices=["positional", "fourier"], default="positional")
+    parser.add_argument("--fourier-time-emb-scale", type=float, default=16.0)
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)

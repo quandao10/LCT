@@ -17,12 +17,12 @@ CUDA_VISIBLE_DEVICES=7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --end-scales 1280 \
         --noise-sampler ict \
         --global-batch-size $((192*1)) \
-        --epochs $((4000*1)) \
+        --epochs $((1000*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
         --num-channels 128 \
         --num-head-channels 64 \
-        --num-res-blocks 2 \
+        --num-res-blocks 4 \
         --resblock-updown \
         --ict \
         --max-grad-norm 2.0 \

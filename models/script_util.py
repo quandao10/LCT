@@ -94,7 +94,9 @@ def create_model_and_diffusion(args):
                      num_blocks=args.num_res_blocks,
                      attn_resolutions=attention_ds,
                      dropout=args.dropout,
-                     label_dropout=0)
+                     label_dropout=0,
+                     time_emb=args.time_emb,
+                     fourier_time_emb_scale=args.fourier_time_emb_scale)
     else:
         model = DiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
