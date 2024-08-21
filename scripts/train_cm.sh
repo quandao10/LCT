@@ -19,7 +19,7 @@ export MASTER_PORT=10129
 #         --lr 0.00002 \
 #         --num-channels 192 \
 #         --num-head-channels 64 \
-#         --num-res-blocks 4 \
+#         --num-res-blocks 2 \
 #         --resblock-updown \
 
 ### improved CT setting
@@ -44,7 +44,7 @@ CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --lr 0.00002 \
         --num-channels 128 \
         --num-head-channels 64 \
-        --num-res-blocks 4 \
+        --num-res-blocks 2 \
         --resblock-updown \
         --ict \
 
@@ -71,7 +71,7 @@ CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
 #         --lr 0.00002 \
 #         --num-channels 128 \
 #         --num-head-channels 64 \
-#         --num-res-blocks 4 \
+#         --num-res-blocks 2 \
 #         --resblock-updown \
 #         --resume
 
@@ -97,7 +97,7 @@ CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
 #         --lr 0.00002 \
 #         --num-channels 128 \
 #         --num-head-channels 64 \
-#         --num-res-blocks 4 \
+#         --num-res-blocks 2 \
 #         --resblock-updown \
 #         --resume
 
@@ -123,7 +123,7 @@ CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
 #         --lr 0.00002 \
 #         --num-channels 128 \
 #         --num-head-channels 64 \
-#         --num-res-blocks 4 \
+#         --num-res-blocks 2 \
 #         --resblock-updown \
 #         --ict \
 #         --resume

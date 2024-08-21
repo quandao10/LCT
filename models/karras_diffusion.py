@@ -49,6 +49,7 @@ class KarrasDenoiser:
         loss_norm="lpips",
         proximal=0.0,
         gcharbonnier_alpha=0.5,
+        proposed_preconditioning=False,
     ):
         self.args = args
         self.sigma_data = sigma_data
@@ -65,6 +66,7 @@ class KarrasDenoiser:
         self.c = None
         self.proximal = proximal
         self.gcharbonnier_alpha = gcharbonnier_alpha
+        self.proposed_preconditioning = proposed_preconditioning
 
     def get_snr(self, sigmas):
         return sigmas**-2
@@ -73,15 +75,28 @@ class KarrasDenoiser:
         return sigmas
 
     def get_scalings_for_boundary_condition(self, sigma):
-        c_skip = self.sigma_data**2 / (
-            (sigma - self.sigma_min) ** 2 + self.sigma_data**2
-        )
-        c_out = (
-            (sigma - self.sigma_min)
-            * self.sigma_data
-            / (sigma**2 + self.sigma_data**2) ** 0.5
-        )
-        c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
+        # Yang Song's preconditioning
+        if not self.proposed_preconditioning:
+            c_skip = self.sigma_data**2 / (
+                (sigma - self.sigma_min) ** 2 + self.sigma_data**2
+            )
+            c_out = (
+                (sigma - self.sigma_min)
+                * self.sigma_data
+                / (sigma**2 + self.sigma_data**2) ** 0.5
+            )
+            c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
+        # Proposed preconditioning
+        else:
+            c_skip = self.sigma_data**2 / (
+                (sigma - self.sigma_min) ** 2 + self.sigma_data**2
+            )
+            c_out = (
+                (sigma - self.sigma_min)
+                * self.sigma_data
+                / (sigma**2 + self.sigma_data**2) ** 0.5
+            )
+            c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
         return c_skip, c_out, c_in
 
     def diffusion_losses(self, model, x_start, num_scales, model_kwargs=None, noise=None):
@@ -299,6 +314,7 @@ class KarrasDenoiser:
 
 
     def denoise(self, model, x_t, sigmas, **model_kwargs):
+        breakpoint()
         c_skip, c_out, c_in = [
             append_dims(x, x_t.ndim)
             for x in self.get_scalings_for_boundary_condition(sigmas)

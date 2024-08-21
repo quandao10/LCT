@@ -10,7 +10,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --batch-size $((8*1)) \
         --num-channels 128 \
         --num-head-channels 64 \
-        --num-res-blocks 4 \
+        --num-res-blocks 2 \
         --resblock-updown \
         --model-type dhariwal_unet \
         --channel-mult 1,2,3,4 \

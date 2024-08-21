@@ -22,7 +22,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --num-sampling 8 \
         --num-channels 128 \
         --num-head-channels 64 \
-        --num-res-blocks 4 \
+        --num-res-blocks 2 \
         --resblock-updown \
         --ict \
         --max-grad-norm 2.0 \
