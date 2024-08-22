@@ -112,6 +112,7 @@ def create_model_and_diffusion(args):
         loss_norm=args.loss_norm,
         proximal=args.proximal,
         gcharbonnier_alpha=args.gcharbonnier_alpha,
+        proposed_preconditioning=args.proposed_preconditioning,
     )
     return model, diffusion
 

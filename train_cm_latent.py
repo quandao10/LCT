@@ -258,8 +258,6 @@ def main(args):
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
-    running_cm_loss = 0
-    running_diff_loss = 0
     start_time = time()
     nan_count = 0
     use_label = True if "imagenet" in args.dataset else False
@@ -294,12 +292,6 @@ def main(args):
                                                 model_kwargs=model_kwargs,
                                                 noise=n,
                                                 adaptive=adaptive_loss)
-            if args.use_diffloss:
-                diff_losses = diffusion.diffusion_losses(model, 
-                                                        x,
-                                                        num_scales,
-                                                        model_kwargs=model_kwargs,
-                                                        noise=n)
             if args.l2_reweight:
                 # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
                 distances = norm_dim(x-n)
@@ -307,13 +299,7 @@ def main(args):
                 weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
                 loss = (losses["loss"]*weight).mean()
             else:
-                cm_loss = losses["loss"].mean() 
-                if args.use_diffloss:
-                    diff_loss = diff_losses["loss"].mean()
-                    loss = cm_loss + diff_loss
-                else:
-                    loss = cm_loss
-                    diff_loss = torch.tensor(0)
+                loss = losses["loss"].mean() 
             after_forward = torch.cuda.memory_allocated(device)
             
             if not torch.isnan(loss):
@@ -322,8 +308,6 @@ def main(args):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 opt.step()
                 running_loss += loss.item()
-                running_cm_loss += cm_loss.item()
-                running_diff_loss += diff_loss.item()
             else:
                 nan_count += 1
                 nan_t_list = losses["t"][torch.isnan(losses["loss"])]
@@ -354,12 +338,10 @@ def main(args):
                 steps_per_sec = log_steps / (end_time - start_time)
                 # Reduce loss history over all processes:
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
-                avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, "
+                    f"(step={train_steps:07d}) Train Loss: {avg_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
@@ -368,8 +350,6 @@ def main(args):
                 )
                 # Reset monitoring variables:
                 running_loss = 0
-                running_cm_loss = 0
-                running_diff_loss = 0
                 log_steps = 0
                 start_time = time()
 
@@ -392,7 +372,7 @@ def main(args):
                 torch.save(content, os.path.join(checkpoint_dir, "content.pth"))
 
             # Save DiT checkpoint:
-            if epoch % args.ckpt_every == 0 and epoch > 0:
+            if args.save_ckpt and (epoch % args.ckpt_every == 0) and (epoch > 0):
                 checkpoint = {
                     "epoch": epoch + 1,
                     "model": model.module.state_dict(),
@@ -519,6 +499,7 @@ if __name__ == "__main__":
     parser.add_argument("--ict", action="store_true", default=False)
     parser.add_argument("--l2-reweight", action="store_true", default=False)
     parser.add_argument("--use-diffloss", action="store_true", default=False)
+    parser.add_argument("--proposed-preconditioning", action="store_true", default=False)
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -527,8 +508,8 @@ if __name__ == "__main__":
     parser.add_argument("--global-batch-size", type=int, default=256)
     parser.add_argument("--max-grad-norm", type=float, default=2.0)
     
-    
     ###### ploting & saving ######
+    parser.add_argument("--save-ckpt", action="store_true", default=False)
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--ckpt-every", type=int, default=25)
     parser.add_argument("--save-content-every", type=int, default=5)
@@ -542,7 +523,7 @@ if __name__ == "__main__":
     
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
-    parser.add_argument("--clip-denoised", action="store_true", default=True)
+    parser.add_argument("--clip-denoised", action="store_true", default=False)
     parser.add_argument("--sampler", type=str, default='onestep')
     parser.add_argument("--s-churn", type=float, default=0.0)
     parser.add_argument("--s-tmin", type=float, default=0.0)

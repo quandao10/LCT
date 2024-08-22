@@ -67,6 +67,7 @@ class KarrasDenoiser:
         self.proximal = proximal
         self.gcharbonnier_alpha = gcharbonnier_alpha
         self.proposed_preconditioning = proposed_preconditioning
+        self.num_scales = 0
 
     def get_snr(self, sigmas):
         return sigmas**-2
@@ -74,71 +75,65 @@ class KarrasDenoiser:
     def get_sigmas(self, sigmas):
         return sigmas
 
-    def get_scalings_for_boundary_condition(self, sigma):
+    def update_preconditioning(self):
+        indices = th.Tensor(range(self.num_scales))
+        self.sigmas = self.sigma_min ** (1 / self.rho) + indices / (self.num_scales - 1) * (
+                self.sigma_max ** (1 / self.rho) - self.sigma_min ** (1 / self.rho)
+            )
+        self.sigmas = self.sigmas**self.rho
+        self.c_in = 1 / (self.sigmas**2 + self.sigma_data**2) ** 0.5
         # Yang Song's preconditioning
         if not self.proposed_preconditioning:
-            c_skip = self.sigma_data**2 / (
-                (sigma - self.sigma_min) ** 2 + self.sigma_data**2
+            self.c_skip = self.sigma_data**2 / (
+                (self.sigmas - self.sigma_min) ** 2 + self.sigma_data**2
             )
-            c_out = (
-                (sigma - self.sigma_min)
+            self.c_out = (
+                (self.sigmas - self.sigma_min)
                 * self.sigma_data
-                / (sigma**2 + self.sigma_data**2) ** 0.5
+                / (self.sigmas**2 + self.sigma_data**2) ** 0.5
             )
-            c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
+            snrs = self.get_snr(self.sigmas)
+            if self.weight_schedule == "snr":
+                self.weightings = snrs
+            elif self.weight_schedule == "snr+1":
+                self.weightings = snrs + 1
+            elif self.weight_schedule == "karras":
+                self.weightings = snrs + 1.0 / self.sigma_data**2
+            elif self.weight_schedule == "truncated-snr":
+                self.weightings = th.clamp(snrs, min=1.0)
+            elif self.weight_schedule == "uniform":
+                self.weightings = th.ones_like(snrs)
+            ### ICT weighting
+            elif self.weight_schedule == "ict":
+                self.weightings = 1/(self.sigmas[1:] - self.sigmas[:-1])
         # Proposed preconditioning
         else:
-            c_skip = self.sigma_data**2 / (
-                (sigma - self.sigma_min) ** 2 + self.sigma_data**2
-            )
-            c_out = (
-                (sigma - self.sigma_min)
-                * self.sigma_data
-                / (sigma**2 + self.sigma_data**2) ** 0.5
-            )
-            c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
-        return c_skip, c_out, c_in
+            self.c_skip = [1.0]
+            self.c_out = [0.0]
+            self.weightings = list()
+            for i in range(1, self.num_scales, 1):
+                c_skip_prev = self.c_skip[-1]
+                c_out_prev = self.c_out[-1]
+                c_skip = c_skip_prev * (self.sigma_data**2 + self.sigmas[i] * self.sigmas[i - 1]) / (self.sigma_data**2 + self.sigmas[i]**2)
+                c_out_squared = self.sigma_data**2 * (c_skip - c_skip_prev)**2 + \
+                                (c_skip * self.sigmas[i] - c_skip_prev * self.sigmas[i - 1])**2 + \
+                                c_out_prev**2
+                c_out = c_out_squared**0.5
+                weighting = 1/c_out_squared
+                self.c_skip.append(c_skip.item())
+                self.c_out.append(c_out.item())
+                self.weightings.append(weighting.item())
+            self.c_skip = th.Tensor(self.c_skip)
+            self.c_out = th.Tensor(self.c_out)
+            self.weightings = th.Tensor(self.weightings)
 
-    def diffusion_losses(self, model, x_start, num_scales, model_kwargs=None, noise=None):
-        if model_kwargs is None:
-            model_kwargs = {}
-        if noise is None:
-            noise = th.randn_like(x_start)
-
-        terms = {}
-        ### Fix here. Define a categorical distribution
-        indices = th.randint(int(num_scales*4/5), num_scales, (x_start.shape[0],), device=x_start.device)
-        t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
-            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
-        )
-        t = t**self.rho
-
-        dims = x_start.ndim
-        x_t = x_start + noise * append_dims(t, dims)
-        model_output, denoised = self.denoise(model, x_t, t, **model_kwargs)
-
-        snrs = self.get_snr(t)
-        weights = append_dims(
-            get_weightings("karras", snrs, self.sigma_data), dims
-        )
-        terms["xs_mse"] = mean_flat((denoised - x_start) ** 2)
-        terms["mse"] = mean_flat(weights * (denoised - x_start) ** 2)
-
-        if "vb" in terms:
-            terms["loss"] = terms["mse"] + terms["vb"]
+    def update_sigma_dist(self):
+        if self.args.noise_sampler == "ict":
+            erf_sigmas = th.erf((th.log(self.sigmas) - self.p_mean) / (math.sqrt(2)*self.p_std))
+            unnorm_prob = erf_sigmas[1:] - erf_sigmas[:-1]
         else:
-            terms["loss"] = terms["mse"]
-        return terms
-    
-    def icm_dist(self, num_scales):
-        indices = th.Tensor(range(num_scales))
-        sigmas = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
-                self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
-            )
-        erf_sigmas = th.erf((th.log(sigmas)-self.p_mean)/(math.sqrt(2)*self.p_std))
-        unnorm_prob = erf_sigmas[:-1]-erf_sigmas[1:]
-        dist = th.distributions.categorical.Categorical(probs=unnorm_prob)
-        return dist
+            unnorm_prob = th.ones(self.num_scales - 1)
+        self.dist = th.distributions.categorical.Categorical(probs=unnorm_prob)
 
     def consistency_losses(
         self,
@@ -147,103 +142,56 @@ class KarrasDenoiser:
         num_scales,
         model_kwargs=None,
         target_model=None,
-        teacher_model=None,
-        teacher_diffusion=None,
         noise=None,
         adaptive=None,
     ):
+        if num_scales != self.num_scales:
+            self.num_scales = num_scales
+            self.update_preconditioning()
+            self.update_sigma_dist()
         if model_kwargs is None:
             model_kwargs = {}
         if noise is None:
             noise = th.randn_like(x_start)
 
         dims = x_start.ndim
-
-        def denoise_fn(x, t):
-            return self.denoise(model, x, t, **model_kwargs)[1]
-
-        if target_model:
-
-            @th.no_grad()
-            def target_denoise_fn(x, t):
-                return self.denoise(target_model, x, t, **model_kwargs)[1]
-
-        else:
-            raise NotImplementedError("Must have a target model")
-
-        if teacher_model:
-
-            @th.no_grad()
-            def teacher_denoise_fn(x, t):
-                return teacher_diffusion.denoise(teacher_model, x, t, **model_kwargs)[1]
-
-        @th.no_grad()
-        def heun_solver(samples, t, next_t, x0):
-            x = samples
-            if teacher_model is None:
-                denoiser = x0
-            else:
-                denoiser = teacher_denoise_fn(x, t)
-
-            d = (x - denoiser) / append_dims(t, dims)
-            samples = x + d * append_dims(next_t - t, dims)
-            if teacher_model is None:
-                denoiser = x0
-            else:
-                denoiser = teacher_denoise_fn(samples, next_t)
-
-            next_d = (samples - denoiser) / append_dims(next_t, dims)
-            samples = x + (d + next_d) * append_dims((next_t - t) / 2, dims)
-
-            return samples
-
-        @th.no_grad()
-        def euler_solver(samples, t, next_t, x0):
-            x = samples
-            if teacher_model is None:
-                denoiser = x0
-            else:
-                denoiser = teacher_denoise_fn(x, t)
-            d = (x - denoiser) / append_dims(t, dims)
-            samples = x + d * append_dims(next_t - t, dims)
-
-            return samples
-
-        ### Fix here. Define a categorical distribution
-        if self.args.noise_sampler == "ict":
-            indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0],)).to(x_start.device)
-        else:
-            indices = th.randint(0, num_scales - 1, (x_start.shape[0],), device=x_start.device)
         
-        ### need check here since yang song using the difference scheduler compared to karras: dunno why ? Yang Song code differently from paper check carefully
-        t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
-            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
-        )
-        t = t**self.rho
+        ### Sampling timestep
+        indices = self.dist.sample(sample_shape=(x_start.shape[0],))
+        sigma_t = self.sigmas[indices].to(x_start.device)
+        sigma_tp1 = self.sigmas[indices + 1].to(x_start.device)
 
-        t2 = self.sigma_max ** (1 / self.rho) + (indices + 1) / (num_scales - 1) * (
-            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
-        )
-        t2 = t2**self.rho
-        
-        # t2 < t, indices > indices + 1
-
-        x_t = x_start + noise * append_dims(t, dims)
-
+        ### Online model
+        x_tp1 = x_start + noise * append_dims(sigma_tp1, dims)
         dropout_state = th.get_rng_state()
-        distiller = denoise_fn(x_t, t)
+        distiller = self.denoise(model, x_tp1, indices + 1, **model_kwargs)[1]
 
-        if teacher_model is None:
-            x_t2 = euler_solver(x_t, t, t2, x_start).detach()
-        else:
-            x_t2 = heun_solver(x_t, t, t2, x_start).detach()
-
+        ### Target model
+        x_t = x_start + noise * append_dims(sigma_t, dims)
         th.set_rng_state(dropout_state)
-        distiller_target = target_denoise_fn(x_t2, t2)
+        with th.no_grad():
+            distiller_target = self.denoise(target_model, x_t, indices, **model_kwargs)[1]
         distiller_target = distiller_target.detach()
 
-        snrs = self.get_snr(t)
-        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t) # ICT: weighting 1/(t2-t)
+        ### Get weight lambda and compute loss
+        weights = self.weightings[indices].to(x_start.device)
+        loss = self.loss_function(distiller, distiller_target, weights, adaptive)
+        terms = {}
+        terms["loss"] = loss
+        terms["t"] = sigma_tp1
+        return terms
+
+    def denoise(self, model, x_t, indices, **model_kwargs):
+        sigmas = self.sigmas[indices].to(x_t.device)
+        c_skip = append_dims(self.c_skip[indices], x_t.ndim).to(x_t.device)
+        c_out = append_dims(self.c_out[indices], x_t.ndim).to(x_t.device)
+        c_in = append_dims(self.c_in[indices], x_t.ndim).to(x_t.device)
+        rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
+        model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
+        denoised = c_out * model_output + c_skip * x_t
+        return model_output, denoised
+    
+    def loss_function(self, distiller, distiller_target, weights, adaptive=None):
         if self.loss_norm == "l1":
             diffs = th.abs(distiller - distiller_target)
             loss = mean_flat(diffs) * weights
@@ -284,7 +232,6 @@ class KarrasDenoiser:
                 distiller_target = F.interpolate(
                     distiller_target, size=224, mode="bilinear"
                 )
-
             loss = (
                 self.lpips_loss(
                     (distiller + 1) / 2.0,
@@ -306,24 +253,9 @@ class KarrasDenoiser:
                 proximal_loss += th.sum(th.square(param - target_param))
             loss = loss + self.proximal * proximal_loss
 
-        terms = {}
-        terms["loss"] = loss
-        terms["t"] = t
+        return loss
 
-        return terms
-
-
-    def denoise(self, model, x_t, sigmas, **model_kwargs):
-        breakpoint()
-        c_skip, c_out, c_in = [
-            append_dims(x, x_t.ndim)
-            for x in self.get_scalings_for_boundary_condition(sigmas)
-        ]
-        rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
-        model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
-        denoised = c_out * model_output + c_skip * x_t
-        return model_output, denoised
-
+    
 
 def karras_sample(
     diffusion,
@@ -387,7 +319,9 @@ def karras_sample(
         callback=callback,
         **sampler_args,
     )
-    return x_0.clamp(-1, 1)
+    if clip_denoised:
+        x_0 = x_0.clamp(-1, 1)
+    return x_0
 
 
 def get_sigmas_karras(n, sigma_min, sigma_max, rho=7.0, device="cpu"):
@@ -619,8 +553,8 @@ def sample_onestep(
     callback=None,
 ):
     """Single-step generation from a distilled model."""
-    s_in = x.new_ones([x.shape[0]])
-    return distiller(x, sigmas[0] * s_in)
+    s_in = -th.ones(x.shape[0], dtype=th.int64)
+    return distiller(x, s_in)
 
 
 @th.no_grad()
