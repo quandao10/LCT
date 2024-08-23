@@ -166,8 +166,9 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
-    diffusion.c = 0.00054*math.sqrt(args.num_in_channels*args.image_size**2)
-    logger.info("c in huber loss is {}".format(diffusion.c))
+    diffusion.c = torch.tensor(0.00054*math.sqrt(args.num_in_channels*args.image_size**2))
+    # diffusion.c = torch.tensor(0.00345)
+    logger.info("c in huber loss is {}".format(diffusion.c.item()))
     # create ema for training model
     logger.info("creating the ema model")
     ema = deepcopy(model)  # Create an EMA of the model for use after training
@@ -310,7 +311,7 @@ def main(args):
                 cm_loss = losses["loss"].mean() 
                 if args.use_diffloss:
                     diff_loss = diff_losses["loss"].mean()
-                    loss = cm_loss + diff_loss
+                    loss = cm_loss + diff_loss * 5
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
@@ -319,7 +320,7 @@ def main(args):
             if not torch.isnan(loss):
                 opt.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 opt.step()
                 running_loss += loss.item()
                 running_cm_loss += cm_loss.item()

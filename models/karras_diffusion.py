@@ -88,7 +88,7 @@ class KarrasDenoiser:
 
         terms = {}
         ### Fix here. Define a categorical distribution
-        indices = th.randint(int(num_scales*4/5), num_scales, (x_start.shape[0],), device=x_start.device)
+        indices = th.randint(int(num_scales*0.75), num_scales, (x_start.shape[0],), device=x_start.device)
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
         )
@@ -116,6 +116,7 @@ class KarrasDenoiser:
         sigmas = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
                 self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
             )
+        sigmas = sigmas**self.rho
         erf_sigmas = th.erf((th.log(sigmas)-self.p_mean)/(math.sqrt(2)*self.p_std))
         unnorm_prob = erf_sigmas[:-1]-erf_sigmas[1:]
         dist = th.distributions.categorical.Categorical(probs=unnorm_prob)
@@ -290,7 +291,7 @@ def karras_sample(
     model,
     shape,
     steps,
-    clip_denoised=True,
+    clip_denoised=False,
     progress=False,
     callback=None,
     model_kwargs=None,
@@ -334,8 +335,8 @@ def karras_sample(
 
     def denoiser(x_t, sigma):
         _, denoised = diffusion.denoise(model, x_t, sigma, **model_kwargs)
-        if clip_denoised:
-            denoised = denoised.clamp(-1, 1)
+        # if clip_denoised:
+        #     denoised = denoised.clamp(-1, 1)
         return denoised
 
     x_0 = sample_fn(
@@ -346,7 +347,7 @@ def karras_sample(
         callback=callback,
         **sampler_args,
     )
-    return x_0.clamp(-1, 1)
+    return x_0
 
 
 def get_sigmas_karras(n, sigma_min, sigma_max, rho=7.0, device="cpu"):
@@ -606,7 +607,6 @@ def stochastic_iterative_sampler(
         next_t = (t_max_rho + ts[i + 1] / (steps - 1) * (t_min_rho - t_max_rho)) ** rho
         next_t = np.clip(next_t, t_min, t_max)
         x = x0 + generator.randn_like(x) * np.sqrt(next_t**2 - t_min**2)
-
     return x
 
 
@@ -652,7 +652,7 @@ def iterative_colorization(
     for i in range(len(ts) - 1):
         t = (t_max_rho + ts[i] / (steps - 1) * (t_min_rho - t_max_rho)) ** rho
         x0 = distiller(x, t * s_in)
-        x0 = th.clamp(x0, -1.0, 1.0)
+        # x0 = th.clamp(x0, -1.0, 1.0)
         x0 = replacement(images, x0)
         next_t = (t_max_rho + ts[i + 1] / (steps - 1) * (t_min_rho - t_max_rho)) ** rho
         next_t = np.clip(next_t, t_min, t_max)
@@ -713,7 +713,7 @@ def iterative_inpainting(
     for i in range(len(ts) - 1):
         t = (t_max_rho + ts[i] / (steps - 1) * (t_min_rho - t_max_rho)) ** rho
         x0 = distiller(x, t * s_in)
-        x0 = th.clamp(x0, -1.0, 1.0)
+        # x0 = th.clamp(x0, -1.0, 1.0)
         x0 = replacement(images, x0)
         next_t = (t_max_rho + ts[i + 1] / (steps - 1) * (t_min_rho - t_max_rho)) ** rho
         next_t = np.clip(next_t, t_min, t_max)
@@ -833,7 +833,7 @@ def iterative_superres(
     for i in range(len(ts) - 1):
         t = (t_max_rho + ts[i] / (steps - 1) * (t_min_rho - t_max_rho)) ** rho
         x0 = distiller(x, t * s_in)
-        x0 = th.clamp(x0, -1.0, 1.0)
+        # x0 = th.clamp(x0, -1.0, 1.0)
         x0 = replacement(images, x0)
         next_t = (t_max_rho + ts[i + 1] / (steps - 1) * (t_min_rho - t_max_rho)) ** rho
         next_t = np.clip(next_t, t_min, t_max)
