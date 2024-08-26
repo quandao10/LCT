@@ -1,4 +1,4 @@
-export MASTER_PORT=10122
+export MASTER_PORT=10124
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
         --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_0.5_huber_fourier_0.02 \
