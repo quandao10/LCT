@@ -158,6 +158,7 @@ def main(args):
         for i in pbar:
             with torch.no_grad():
                 fake_image = run_sampling(args.batch_size, generator)
+                fake_image = torch.cat(fake_image)
                 fake_image = (
                     (torch.clamp(to_range_0_1(fake_image), 0, 1) * 255.0)
                     .permute(0, 2, 3, 1)

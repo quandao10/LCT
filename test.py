@@ -5,7 +5,7 @@ import math
 import torch
 
 def test_scale():
-    total_steps = 459000
+    total_steps = 210000
     start_scales = 10
     end_scales = 1280
 
@@ -20,6 +20,8 @@ def test_scale():
         scales.append(scale)
     plt.plot(scales)
     plt.savefig("scales.jpg")
+    
+test_scale()
     
 
 def test_erf_dist():

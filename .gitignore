@@ -3,3 +3,6 @@ features/
 __pycache__/
 *jpg
 test_x0/
+*.png
+*.jpg
+generated_samples/
