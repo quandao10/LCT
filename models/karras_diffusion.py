@@ -145,7 +145,6 @@ class KarrasDenoiser:
             return self.denoise(model, x, t, **model_kwargs)[1]
 
         if target_model:
-
             @th.no_grad()
             def target_denoise_fn(x, t):
                 return self.denoise(target_model, x, t, **model_kwargs)[1]
@@ -154,7 +153,6 @@ class KarrasDenoiser:
             raise NotImplementedError("Must have a target model")
 
         if teacher_model:
-
             @th.no_grad()
             def teacher_denoise_fn(x, t):
                 return teacher_diffusion.denoise(teacher_model, x, t, **model_kwargs)[1]
@@ -196,6 +194,8 @@ class KarrasDenoiser:
             indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0],)).to(x_start.device)
         else:
             indices = th.randint(0, num_scales - 1, (x_start.shape[0],), device=x_start.device)
+            
+        diff_indices = indices >= int(num_scales*0.75)
         
         ### need check here since yang song using the difference scheduler compared to karras: dunno why ? Yang Song code differently from paper check carefully
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
@@ -226,6 +226,11 @@ class KarrasDenoiser:
 
         snrs = self.get_snr(t)
         weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t) # ICT: weighting 1/(t2-t)
+        
+        # compute diff losses
+        diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
+        diff_loss = mean_flat((distiller - x_start)**2)[diff_indices]*diff_weights
+        # compute consistency losses
         if self.loss_norm == "l1":
             diffs = th.abs(distiller - distiller_target)
             loss = mean_flat(diffs) * weights
@@ -235,6 +240,9 @@ class KarrasDenoiser:
         elif self.loss_norm == "cauchy":
             diffs = (distiller - distiller_target) ** 2
             loss = (th.log(0.5*mean_flat(diffs)+self.c**2) - 2*th.log(self.c)) * weights
+        elif self.loss_norm == "gm":
+            diffs = (distiller - distiller_target) ** 2
+            loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2) * weights
         elif self.loss_norm == "l2":
             diffs = (distiller - distiller_target) ** 2
             loss = mean_flat(diffs) * weights
@@ -269,6 +277,7 @@ class KarrasDenoiser:
 
         terms = {}
         terms["loss"] = loss
+        terms["diff_loss"] = diff_loss
         terms["t"] = t
 
         return terms

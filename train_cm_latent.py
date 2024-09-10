@@ -295,12 +295,12 @@ def main(args):
                                                 model_kwargs=model_kwargs,
                                                 noise=n,
                                                 adaptive=adaptive_loss)
-            if args.use_diffloss:
-                diff_losses = diffusion.diffusion_losses(model, 
-                                                        x,
-                                                        num_scales,
-                                                        model_kwargs=model_kwargs,
-                                                        noise=n)
+            # if args.use_diffloss:
+            #     diff_losses = diffusion.diffusion_losses(model, 
+            #                                             x,
+            #                                             num_scales,
+            #                                             model_kwargs=model_kwargs,
+            #                                             noise=n)
             if args.l2_reweight:
                 # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
                 distances = norm_dim(x-n)
@@ -309,9 +309,9 @@ def main(args):
                 loss = (losses["loss"]*weight).mean()
             else:
                 cm_loss = losses["loss"].mean() 
+                diff_loss = losses["diff_loss"].mean()
                 if args.use_diffloss:
-                    diff_loss = diff_losses["loss"].mean()
-                    loss = cm_loss + diff_loss * 5
+                    loss = cm_loss + 5*diff_loss
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
@@ -493,7 +493,7 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-max", type=float, default=80.0)
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
-    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy"], default="huber")
+    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "gm"], default="huber")
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
