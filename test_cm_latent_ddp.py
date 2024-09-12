@@ -134,9 +134,10 @@ def main(args):
         if args.cfg_scale > 1.0:
             fake_sample, _ = fake_sample.chunk(2, dim=0)  # Remove null class samples        
         if use_normalize:
-            fake_image = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in fake_sample]
+            fake_image = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in fake_sample] # careful here
         else:
             fake_image = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in fake_sample]
+        fake_image = torch.cat(fake_image, dim=0)
         return fake_image
     
     if args.compute_fid:
@@ -202,7 +203,7 @@ def main(args):
             drop_last=True
         )
         args.rho = 7
-        num_scales = 1280
+        num_scales = 160
         image, _ = next(iter(loader))
         image = image.to(device)
         if use_normalize:
@@ -225,7 +226,7 @@ def main(args):
         torchvision.utils.save_image(ori_image, f"{test_dir}/x0_t=original.png", normalize=True, value_range=(-1, 1))
         torchvision.utils.save_image(image_last, f"{test_dir}/x0_t=last.png", normalize=True, value_range=(-1, 1))
         # indices = torch.randint(0, num_scales - 1, (image.shape[0],), device=image.device)
-        for ind in tqdm(range(1279, -1, -80)):
+        for ind in tqdm(range(159, -1, -10)):
             indices = ind*torch.ones(size=(4, ), device=device)
             t = args.sigma_max ** (1 / args.rho) + indices / (num_scales - 1) * (
                 args.sigma_min ** (1 / args.rho) - args.sigma_max ** (1 / args.rho)
@@ -234,9 +235,9 @@ def main(args):
             x_t = image + noise * append_dims(t, dims)
             model_kwargs = dict(y=None)
             _, x0 = diffusion.denoise(model, x_t, t, **model_kwargs)
-            x0 = x0.clamp(-1, 1)
+            # x0 = x0.clamp(-1, 1)
             if use_normalize:
-                x0 = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in x0]
+                x0 = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in x0]
             else:
                 x0 = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in x0]
             x0 = torch.cat(x0)
@@ -269,6 +270,8 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys()), default="openai_unet")
+    parser.add_argument("--time-emb", type=str, choices=["positional", "fourier"], default="positional")
+    parser.add_argument("--fourier-time-emb-scale", type=float, default=16.0)
 
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
@@ -287,8 +290,22 @@ if __name__ == "__main__":
     parser.add_argument("--sigma-max", type=float, default=80.0)
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
-    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive"], default="huber")
-    
+    parser.add_argument("--loss-norm", type=str, choices=[
+        "l1",
+        "l2",
+        "lpips",
+        "huber",
+        "adaptive",
+        "cauchy",
+        "geman-mcclure",
+        "welsch",
+        "gcharbonnier",
+        "tukey",
+    ], default="huber")
+    parser.add_argument("--gcharbonnier_alpha", type=float, default=0.0)
+    parser.add_argument("--proximal", type=float, default=0.0)
+    parser.add_argument("--scale-c-by", type=float, default=1.0)
+    parser.add_argument("--proposed-preconditioning", action="store_true", default=False)
     
     ###### dataset ######
     parser.add_argument("--image-size", type=int, default=32)

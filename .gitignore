@@ -6,5 +6,6 @@ test_x0/
 dataset/
 log/
 notebook/
+pytorch_fid/
 
 *.log

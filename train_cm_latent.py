@@ -37,6 +37,7 @@ from diffusers.models import AutoencoderKL
 from models.network_dit import DiT_models
 import robust_loss_pytorch
 from sampler.random_util import get_generator
+from models.optimal_transport import OTPlanSampler
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -255,6 +256,13 @@ def main(args):
         total_steps=args.total_training_steps,
         ict=args.ict,
     )
+
+    # OT sampler
+    if args.ot_hard:
+        ot_sampler = OTPlanSampler(method="exact", normalize_cost=True)
+    else:
+        ot_sampler = None
+
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
@@ -282,6 +290,8 @@ def main(args):
                 x = (x - mean)/std * 0.5
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
+            if args.ot_hard:
+                x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
             ema_rate, num_scales = ema_scale_fn(train_steps)
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
@@ -305,7 +315,8 @@ def main(args):
             if not torch.isnan(loss):
                 opt.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                if args.max_grad_norm > 0.0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 opt.step()
                 running_loss += loss.item()
             else:
@@ -420,8 +431,36 @@ def main(args):
                 else:
                     sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
-            save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
+            with torch.no_grad():
+                ema_sample = karras_sample(
+                    diffusion,
+                    generator,
+                    ema,
+                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                    steps=args.steps,
+                    model_kwargs=model_kwargs,
+                    device=device,
+                    clip_denoised=args.clip_denoised,
+                    sampler=args.sampler,
+                    sigma_min=args.sigma_min,
+                    sigma_max=args.sigma_max,
+                    s_churn=args.s_churn,
+                    s_tmin=args.s_tmin,
+                    s_tmax=args.s_tmax,
+                    s_noise=args.s_noise,
+                    noise=noise,
+                    ts=ts,
+                )
+                if use_normalize:
+                    ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
+                else:
+                    ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
+            ema_sample = torch.concat(ema_sample, dim=0)
+            sample_to_save = torch.concat([sample, ema_sample], dim=0)
+            save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
             del sample
+            del ema_sample
+            del sample_to_save
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
@@ -479,9 +518,12 @@ if __name__ == "__main__":
         "l2",
         "lpips",
         "huber",
+        "huber2",
         "adaptive",
         "cauchy",
+        "cauchy2",
         "geman-mcclure",
+        "geman-mcclure2",
         "welsch",
         "gcharbonnier",
         "tukey",
@@ -489,6 +531,7 @@ if __name__ == "__main__":
     parser.add_argument("--gcharbonnier_alpha", type=float, default=0.0)
     parser.add_argument("--proximal", type=float, default=0.0)
     parser.add_argument("--scale-c-by", type=float, default=1.0)
+    parser.add_argument("--ot-hard", action="store_true", default=False)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")

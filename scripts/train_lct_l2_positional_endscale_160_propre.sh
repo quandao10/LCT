@@ -1,7 +1,7 @@
 export MASTER_PORT=10121
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_0.5_l2_positional_endscale_160_propre \
+        --exp dhariwal_unet_ict_large_batchsize_lr_decay_4k_epoch_normalize_0.5_l2_positional_endscale_160_nogradnorm_propre \
         --datadir ./dataset/ \
         --dataset latent_celeb256 \
         --results-dir ./results/ \
@@ -25,7 +25,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --num-res-blocks 2 \
         --resblock-updown \
         --ict \
-        --max-grad-norm 2.0 \
+        --max-grad-norm 0.0 \
         --model-type dhariwal_unet \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \

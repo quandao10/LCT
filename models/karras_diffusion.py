@@ -67,7 +67,10 @@ class KarrasDenoiser:
         self.proximal = proximal
         self.gcharbonnier_alpha = gcharbonnier_alpha
         self.proposed_preconditioning = proposed_preconditioning
-        self.num_scales = 0
+        self.num_scales = 2
+        self.update_preconditioning()
+        self.update_sigma_dist()
+
 
     def get_snr(self, sigmas):
         return sigmas**-2
@@ -197,13 +200,22 @@ class KarrasDenoiser:
             loss = mean_flat(diffs) * weights
         elif self.loss_norm == "huber":
             diffs = (distiller - distiller_target) ** 2
-            loss = (th.sqrt(mean_flat(diffs)+self.c**2)-self.c) * weights
+            loss = (th.sqrt(mean_flat(diffs) + self.c**2) - self.c) * weights
+        elif self.loss_norm == "huber2":
+            diffs = (distiller - distiller_target) ** 2
+            loss = th.sqrt(mean_flat(diffs) * weights + self.c**2) - self.c
         elif self.loss_norm == "cauchy":
             diffs = (distiller - distiller_target) ** 2
-            loss = (th.log(0.5*mean_flat(diffs)+self.c**2) - 2*th.log(self.c)) * weights
+            loss = (th.log(0.5 * mean_flat(diffs) + self.c**2) - 2 * math.log(self.c)) * weights
+        elif self.loss_norm == "cauchy2":
+            diffs = (distiller - distiller_target) ** 2
+            loss = th.log(0.5 * mean_flat(diffs) * weights + self.c**2) - 2 * math.log(self.c)
         elif self.loss_norm == "geman-mcclure":
             diffs = (distiller - distiller_target) ** 2
             loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2) * weights
+        elif self.loss_norm == "geman-mcclure2":
+            diffs = (distiller - distiller_target) ** 2
+            loss = 2 * mean_flat(diffs) * weights / (mean_flat(diffs) * weights + 4 * self.c**2)
         elif self.loss_norm == "welsch":
             diffs = (distiller - distiller_target) ** 2
             loss = (1.0 - th.exp(-0.5 * mean_flat(diffs) / self.c**2)) * weights
