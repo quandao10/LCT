@@ -31,6 +31,7 @@ from tqdm import tqdm
 from models.script_util import (
     create_model_and_diffusion,
     create_ema_and_scales_fn,
+    create_model_umt,
 )
 from models.karras_diffusion import karras_sample
 from diffusers.models import AutoencoderKL
@@ -183,6 +184,14 @@ def main(args):
     target_model.train()
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
+
+    # Uncertainty-based multi-task learning
+    if args.umt:
+        model_umt = create_model_umt(args)
+        model_umt = DDP(model_umt.to(device), device_ids=[rank], find_unused_parameters=False)
+    else:
+        model_umt = None
+    
     if args.loss_norm=="adaptive":
         adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, 
                                                                           alpha_hi=1.0,
@@ -190,10 +199,16 @@ def main(args):
                                                                           float_dtype=np.float32, 
                                                                           scale_init=diffusion.c,
                                                                           device=device)
-        opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
+        if args.umt:
+            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
+        else:
+            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
     else:
         adaptive_loss = None
-        opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+        if args.umt:
+            opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
+        else:
+            opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4)
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -203,6 +218,8 @@ def main(args):
         opt.load_state_dict(checkpoint["opt"])
         target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
+        if args.umt:
+            model_umt.module.load_state_dict(checkpoint["model_umt"])
         logger.info("=> loaded checkpoint (epoch {})".format(epoch))
         del checkpoint
     elif args.resume:
@@ -215,6 +232,8 @@ def main(args):
         ema.load_state_dict(checkpoint["ema"])
         target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
+        if args.umt:
+            model_umt.module.load_state_dict(checkpoint["model_umt"])
         logger.info("=> resume checkpoint (epoch {})".format(checkpoint["epoch"]))
         del checkpoint
     else:
@@ -286,6 +305,9 @@ def main(args):
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
+        if args.ema_half_nfe and (epoch == 1100):
+            new_ema = deepcopy(ema)
+            update_ema(new_ema, ema, decay=0)
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
@@ -305,7 +327,8 @@ def main(args):
                                                 target_model=target_model,
                                                 model_kwargs=model_kwargs,
                                                 noise=n,
-                                                adaptive=adaptive_loss)
+                                                adaptive=adaptive_loss,
+                                                model_umt=model_umt)
             # if args.use_diffloss:
             #     diff_losses = diffusion.diffusion_losses(model, 
             #                                             x,
@@ -350,10 +373,12 @@ def main(args):
                     nan_count = 0
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
+            if args.ema_half_nfe and (epoch >= 1100):
+                update_ema(new_ema, model.module, decay=args.start_ema)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
             if args.ict:
                 if args.ema_half_nfe and (epoch % 200 >= 100) and (epoch >= 1000):
-                    update_ema(target_model, ema, 0)
+                    update_ema(target_model, new_ema, 0)
                 else:
                     update_ema(target_model, model.module, 0)
             else:
@@ -403,6 +428,7 @@ def main(args):
                     "opt": opt.state_dict(),
                     "ema": ema.state_dict(),
                     "target": target_model.state_dict(),
+                    "model_umt": model_umt.module.state_dict() if args.umt else None,
                 }
                 torch.save(content, os.path.join(checkpoint_dir, "content.pth"))
 
@@ -416,6 +442,7 @@ def main(args):
                     "opt": opt.state_dict(),
                     "args": args,
                     "target": target_model.state_dict(),
+                    "model_umt": model_umt.module.state_dict() if args.umt else None,
                 }
                 checkpoint_path = f"{checkpoint_dir}/{epoch:07d}.pt"
                 torch.save(checkpoint, checkpoint_path)
@@ -546,6 +573,7 @@ if __name__ == "__main__":
     parser.add_argument("--l2-reweight", action="store_true", default=False)
     parser.add_argument("--use-diffloss", action="store_true", default=False)
     parser.add_argument("--ema-half-nfe", action="store_true", default=False)
+    parser.add_argument("--umt", help="Uncertainty-based multi-task learning", action="store_true", default=False)
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)

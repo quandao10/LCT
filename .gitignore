@@ -7,3 +7,4 @@ test_x0/
 *.jpg
 generated_samples/
 dataset/
+*.jsonl

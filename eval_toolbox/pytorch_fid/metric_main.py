@@ -53,6 +53,13 @@ def calc_metric(metric, **kwargs): # See metric_utils.MetricOptions for the full
             value = float(value.cpu())
         results[key] = value
 
+    # Dataset informations.
+    dataset_info = {
+        'resolution': kwargs['dataset_kwargs']['resolution'],
+        'real_data_path': kwargs['dataset_kwargs']['path'],
+        'gen_data_path': kwargs['gen_dataset_kwargs']['path'],
+    }
+
     # Decorate with metadata.
     return dnnlib.EasyDict(
         results         = dnnlib.EasyDict(results),
@@ -60,6 +67,7 @@ def calc_metric(metric, **kwargs): # See metric_utils.MetricOptions for the full
         total_time      = total_time,
         total_time_str  = dnnlib.util.format_time(total_time),
         num_gpus        = opts.num_gpus,
+        dataset_info    = dnnlib.EasyDict(dataset_info),
     )
 
 #----------------------------------------------------------------------------

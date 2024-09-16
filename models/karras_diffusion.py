@@ -134,6 +134,7 @@ class KarrasDenoiser:
         teacher_diffusion=None,
         noise=None,
         adaptive=None,
+        model_umt=None,
     ):
         if model_kwargs is None:
             model_kwargs = {}
@@ -231,6 +232,7 @@ class KarrasDenoiser:
         # compute diff losses
         diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
         diff_loss = mean_flat((distiller - x_start)**2)[diff_indices]*diff_weights
+
         # compute consistency losses
         if self.loss_norm == "l1":
             diffs = th.abs(distiller - distiller_target)
@@ -275,6 +277,10 @@ class KarrasDenoiser:
             loss = adaptive.lossfun(diffs)
         else:
             raise ValueError(f"Unknown loss norm {self.loss_norm}")
+        if model_umt is not None:
+            rescaled_t = 1000 * 0.25 * th.log(t + 1e-44)
+            logvar = model_umt(rescaled_t)
+            loss = loss / logvar.exp() + logvar
 
         terms = {}
         terms["loss"] = loss

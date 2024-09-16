@@ -78,6 +78,8 @@ def main(args):
     
     if args.cfg_scale > 1.0:
         save_dir += "_cfg{}".format(args.cfg_scale)
+    if not args.ema:
+        save_dir += "_noEMA"
     if rank == 0 and not os.path.exists(save_dir):
         os.makedirs(save_dir)
 

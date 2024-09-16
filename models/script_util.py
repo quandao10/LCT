@@ -3,7 +3,7 @@ import argparse
 from .karras_diffusion import KarrasDenoiser
 from .unet import UNetModel
 import numpy as np
-from .network_karras import SongUNet, DhariwalUNet
+from .network_karras import SongUNet, DhariwalUNet, DhariwalUMTNet
 from .network_dit import DiT_models
 from .network_edm2 import EDM2_models
 
@@ -116,6 +116,11 @@ def create_model_and_diffusion(args):
         loss_norm=args.loss_norm
     )
     return model, diffusion
+
+
+def create_model_umt(args):
+    model_umt = DhariwalUMTNet(logvar_channels=args.num_channels)
+    return model_umt
 
 
 def create_model(

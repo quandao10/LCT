@@ -671,3 +671,22 @@ class EDMPrecond(torch.nn.Module):
         return torch.as_tensor(sigma)
 
 #----------------------------------------------------------------------------
+# Reimplementation of the Uncertainty-based multi-task learning module from
+# the paper EDM2 w.r.t DhariwalUNet
+@persistence.persistent_class
+class DhariwalUMTNet(torch.nn.Module):
+    def __init__(self,
+        logvar_channels     = 192,
+    ):
+        super().__init__()
+        self.logvar_channels = logvar_channels
+        init = dict(init_mode='kaiming_uniform', init_weight=np.sqrt(1/3), init_bias=np.sqrt(1/3))
+
+        # Layers
+        self.map_noise = PositionalEmbedding(num_channels=logvar_channels)
+        self.linear = Linear(in_features=logvar_channels, out_features=1, **init)
+    
+    def forward(self, c_noise):
+        emb = self.map_noise(c_noise)
+        logvar = self.linear(emb)
+        return logvar.squeeze()
