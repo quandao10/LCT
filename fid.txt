@@ -30,3 +30,9 @@ Epoch = 0001325, FID = 9.685331816516708, cfg_scale = 1.0
 Epoch = 0001350, FID = 9.759410848957117, cfg_scale = 1.0
 Epoch = 0001375, FID = 9.804704367848075, cfg_scale = 1.0
 Epoch = 0001400, FID = 9.413243340117134, cfg_scale = 1.0
+Epoch = 0001400, FID = 9.5348217580148, cfg_scale = 1.0
+Epoch = 0001375, FID = 9.48821092187265, cfg_scale = 1.0
+Epoch = 0001350, FID = 9.640861565420295, cfg_scale = 1.0
+Epoch = 0001325, FID = 9.628560848401577, cfg_scale = 1.0
+Epoch = 0001300, FID = 9.646635526869659, cfg_scale = 1.0
+Epoch = 0001225, FID = 9.873959904012167, cfg_scale = 1.0

@@ -5,6 +5,7 @@ from .unet import UNetModel
 import numpy as np
 from .network_karras import SongUNet, DhariwalUNet
 from .network_dit import DiT_models
+from .network_edm2 import EDM2_models
 
 NUM_CLASSES = 1000
 
@@ -95,6 +96,11 @@ def create_model_and_diffusion(args):
                      attn_resolutions=attention_ds,
                      dropout=args.dropout,
                      label_dropout=0)
+    elif "EDM2" in args.model_type:
+        model = EDM2_models[args.model_type](img_resolution=args.image_size,
+                                             img_channels=args.num_in_channels,
+                                             label_dim=args.num_classes,
+                                             dropout=args.dropout)
     else:
         model = DiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,

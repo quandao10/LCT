@@ -35,8 +35,10 @@ from models.script_util import (
 from models.karras_diffusion import karras_sample
 from diffusers.models import AutoencoderKL
 from models.network_dit import DiT_models
+from models.network_edm2 import EDM2_models
 import robust_loss_pytorch
 from sampler.random_util import get_generator
+from models.optimal_transport import OTPlanSampler
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -256,6 +258,13 @@ def main(args):
         total_steps=args.total_training_steps,
         ict=args.ict,
     )
+
+    # OT sampler
+    if args.ot_hard:
+        ot_sampler = OTPlanSampler(method="exact", normalize_cost=True)
+    else:
+        ot_sampler = None
+    
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
@@ -285,6 +294,8 @@ def main(args):
                 x = (x - mean)/std * 0.5
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
+            if args.ot_hard:
+                x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
             ema_rate, num_scales = ema_scale_fn(train_steps)
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
@@ -341,7 +352,10 @@ def main(args):
             update_ema(ema, model.module)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
             if args.ict:
-                update_ema(target_model, model.module, 0)
+                if args.ema_half_nfe and (epoch % 200 >= 100) and (epoch >= 1000):
+                    update_ema(target_model, ema, 0)
+                else:
+                    update_ema(target_model, model.module, 0)
             else:
                 update_ema(target_model, model.module, ema_rate)
 
@@ -441,7 +455,33 @@ def main(args):
                 else:
                     sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
-            save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
+            with torch.no_grad():
+                ema_sample = karras_sample(
+                    diffusion,
+                    generator,
+                    ema,
+                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                    steps=args.steps,
+                    model_kwargs=model_kwargs,
+                    device=device,
+                    clip_denoised=args.clip_denoised,
+                    sampler=args.sampler,
+                    sigma_min=args.sigma_min,
+                    sigma_max=args.sigma_max,
+                    s_churn=args.s_churn,
+                    s_tmin=args.s_tmin,
+                    s_tmax=args.s_tmax,
+                    s_noise=args.s_noise,
+                    noise=noise,
+                    ts=ts,
+                )
+                if use_normalize:
+                    ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
+                else:
+                    ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
+            ema_sample = torch.concat(ema_sample, dim=0)
+            sample_to_save = torch.concat([sample, ema_sample], dim=0)
+            save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
             del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
@@ -486,7 +526,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-fp16", action="store_true", default=False)
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
-    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys()), default="openai_unet")
+    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys()), default="openai_unet")
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
@@ -494,6 +534,7 @@ if __name__ == "__main__":
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "gm"], default="huber")
+    parser.add_argument("--ot-hard", action="store_true", default=False)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
@@ -504,6 +545,7 @@ if __name__ == "__main__":
     parser.add_argument("--ict", action="store_true", default=False)
     parser.add_argument("--l2-reweight", action="store_true", default=False)
     parser.add_argument("--use-diffloss", action="store_true", default=False)
+    parser.add_argument("--ema-half-nfe", action="store_true", default=False)
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)

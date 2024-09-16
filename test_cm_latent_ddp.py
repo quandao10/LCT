@@ -168,8 +168,8 @@ def main(args):
                 for j, x in enumerate(fake_image):
                     index = j * dist.get_world_size() + rank + total
                     Image.fromarray(x).save(f"{save_dir}/{index}.jpg")
-                if rank == 0:
-                    print("generating batch ", i)
+                # if rank == 0:
+                #     print("generating batch ", i)
                 total += global_batch_size
         # make sure all processes have finished
         dist.barrier()
