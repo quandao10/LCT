@@ -8,3 +8,4 @@ test_x0/
 generated_samples/
 dataset/
 *.jsonl
+logs/

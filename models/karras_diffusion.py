@@ -240,9 +240,15 @@ class KarrasDenoiser:
         elif self.loss_norm == "huber":
             diffs = (distiller - distiller_target) ** 2
             loss = (th.sqrt(mean_flat(diffs)+self.c**2)-self.c) * weights
+        elif self.loss_norm == "huber_new":
+            diffs = (distiller - distiller_target) ** 2
+            loss = mean_flat(th.sqrt(diffs+self.c**2)-self.c) * weights
         elif self.loss_norm == "cauchy":
             diffs = (distiller - distiller_target) ** 2
             loss = (th.log(0.5*mean_flat(diffs)+self.c**2) - 2*th.log(self.c)) * weights
+        elif self.loss_norm == "cauchy_new":
+            diffs = (distiller - distiller_target) ** 2
+            loss = mean_flat(th.log(0.5*diffs+self.c**2) - 2*th.log(self.c)) * weights
         elif self.loss_norm == "gm":
             diffs = (distiller - distiller_target) ** 2
             loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2) * weights
