@@ -162,11 +162,11 @@ loader = DataLoader(
 )
 
 ckpt_dict = {
-    # 21  : '0000375.pt',
+    21  : '0000375.pt',
     # 41  : '0000575.pt',
-    81  : '0000775.pt',
-    161 : '0000975.pt',
-    321 : '0001175.pt',
+    # 81  : '0000775.pt',
+    # 161 : '0000975.pt',
+    # 321 : '0001175.pt',
 }
 
 for num_scales, ckpt_file in ckpt_dict.items():
@@ -186,15 +186,41 @@ for num_scales, ckpt_file in ckpt_dict.items():
     results = dict()
     for scale_value in tqdm(range(num_scales - 2, -1, -1), desc=f'{num_scales}nfe, ckpt {ckpt_file}'):
         count = 0
-        var = 1.0
-        mean = 0.0
+        scale_result = {
+            "diffs": {
+                "var": 1.0,
+                "mean": 0.0,
+            },
+            "model_output": {
+                "var": 1.0,
+                "mean": 0.0,
+            },
+            "model_output_target": {
+                "var": 1.0,
+                "mean": 0.0,
+            },
+            "x": {
+                "var": 1.0,
+                "mean": 0.0,
+            },
+            "noise": {
+                "var": 1.0,
+                "mean": 0.0,
+            },
+            "covar": {
+                "x & model_output": 1.0,
+                "x & model_output_target": 1.0,
+                "noise & model_output": 1.0,
+                "noise & model_output_target": 1.0,
+            },
+        }
         for i, (x, y) in enumerate(loader):
             x = x.to(device)
             x = x/0.18215
             x = (x - mean)/std * 0.5
             y = None if not use_label else y.to(device)
-            n = torch.randn_like(x)
-            x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
+            noise = torch.randn_like(x)
+            x, noise, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=noise, y0=y, y1=None, replace=False)
             dims = x.ndim
             model_kwargs = dict(y=y)
             indices = torch.zeros(size=(x.shape[0],), device=x.device) * scale_value
@@ -202,36 +228,90 @@ for num_scales, ckpt_file in ckpt_dict.items():
                 diffusion.sigma_min ** (1 / diffusion.rho) - diffusion.sigma_max ** (1 / diffusion.rho)
             )
             t = t**diffusion.rho
-            x_t = x + n * append_dims(t, dims)
+            x_t = x + noise * append_dims(t, dims)
             t2 = diffusion.sigma_max ** (1 / diffusion.rho) + (indices + 1) / (num_scales - 1) * (
                 diffusion.sigma_min ** (1 / diffusion.rho) - diffusion.sigma_max ** (1 / diffusion.rho)
             )
             t2 = t2**diffusion.rho
-            x_t2 = x + n * append_dims(t2, dims)
+            x_t2 = x + noise * append_dims(t2, dims)
             
             with torch.no_grad():
                 dropout_state = torch.get_rng_state()
-                distiller = diffusion.denoise(model, x_t, t, **model_kwargs)[1]
+                model_output, distiller = diffusion.denoise(model, x_t, t, **model_kwargs)
                 torch.set_rng_state(dropout_state)
-                distiller_target = diffusion.denoise(model, x_t2, t2, **model_kwargs)[1]
+                model_output_target, distiller_target = diffusion.denoise(model, x_t2, t2, **model_kwargs)
             diffs = distiller - distiller_target
-            
-            batch_mean = diffs.mean().item()
-            batch_var = diffs.var().item()
-            
+            # for mean: model_output, model_output_target
+            # for variance: model_output, model_output_target
+            # for covariance: x & model_output, x & model_output_target, noise & model_output, noise & model_output_target
+            breakpoint()
             # update count
-            new_coming = x.numel()
-            count += new_coming
+            N = x.numel()
+            count += N
             
+            ## diffs
+            diffs_batch_mean = diffs.mean().item()
+            diffs_batch_var = diffs.var().item()
             # update mean
-            delta = batch_mean - mean
-            mean += delta * new_coming / count
-            
+            diffs_delta = diffs_batch_mean - scale_result["diffs"]["mean"]
+            scale_result["diffs"]["mean"] += diffs_delta * N / count
             # update var
-            m_a = var * (count - new_coming)
-            m_b = batch_var * new_coming
-            M2 = m_a + m_b + delta**2 * new_coming
-            var = M2 / count
+            diffs_m_a = scale_result["diffs"]["var"] * (count - N)
+            diffs_m_b = diffs_batch_var * N
+            diffs_M2 = diffs_m_a + diffs_m_b + diffs_delta**2 * N
+            scale_result["diffs"]["var"] = diffs_M2 / count
+            
+            ## model_output
+            model_output_batch_mean = model_output.mean().item()
+            model_output_batch_var = model_output.var().item()
+            # update mean
+            model_output_delta = model_output_batch_mean - scale_result["model_output"]["mean"]
+            scale_result["model_output"]["mean"] += model_output_delta * N / count
+            # update var
+            model_output_m_a = scale_result["model_output"]["var"] * (count - N)
+            model_output_m_b = model_output_batch_var * N
+            model_output_M2 = model_output_m_a + model_output_m_b + model_output_delta**2 * N
+            scale_result["model_output"]["var"] = model_output_M2 / count
+            
+            ## model_output_target
+            model_output_target_batch_mean = model_output_target.mean().item()
+            model_output_target_batch_var = model_output_target.var().item()
+            # update mean
+            model_output_target_delta = model_output_target_batch_mean - scale_result["model_output_target"]["mean"]
+            scale_result["model_output_target"]["mean"] += model_output_target_delta * N / count
+            # update var
+            model_output_target_m_a = scale_result["model_output_target"]["var"] * (count - N)
+            model_output_target_m_b = model_output_target_batch_var * N
+            model_output_target_M2 = model_output_target_m_a + model_output_target_m_b + model_output_target_delta**2 * N
+            scale_result["model_output_target"]["var"] = model_output_target_M2 / count
+            
+            ## x
+            x_batch_mean = x.mean().item()
+            x_batch_var = x.var().item()
+            # update mean
+            x_delta = x_batch_mean - scale_result["x"]["mean"]
+            scale_result["x"]["mean"] += x_delta * N / count
+            # update var
+            x_m_a = scale_result["x"]["var"] * (count - N)
+            x_m_b = x_batch_var * N
+            x_M2 = x_m_a + x_m_b + x_delta**2 * N
+            scale_result["x"]["var"] = x_M2 / count
+            
+            ## noise
+            noise_batch_mean = noise.mean().item()
+            noise_batch_var = noise.var().item()
+            # update mean
+            noise_delta = noise_batch_mean - scale_result["noise"]["mean"]
+            scale_result["noise"]["mean"] += noise_delta * N / count
+            # update var
+            noise_m_a = scale_result["noise"]["var"] * (count - N)
+            noise_m_b = noise_batch_var * N
+            noise_M2 = noise_m_a + noise_m_b + noise_delta**2 * N
+            scale_result["noise"]["var"] = noise_M2 / count
+
+            ## covar
+            # x & model_output
+
         std = var**0.5
         results[scale_value] = {
             'mean': mean,

@@ -169,7 +169,10 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
-    diffusion.c = torch.tensor(0.00054*math.sqrt(args.num_in_channels*args.image_size**2))
+    if args.custom_constant_c > 0.0:
+        diffusion.c = torch.tensor(args.custom_constant_c)
+    else:
+        diffusion.c = torch.tensor(0.00054*math.sqrt(args.num_in_channels*args.image_size**2))
     # diffusion.c = torch.tensor(0.00345)
     logger.info("c in huber loss is {}".format(diffusion.c.item()))
     # create ema for training model
@@ -319,6 +322,11 @@ def main(args):
             if args.ot_hard:
                 x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
             ema_rate, num_scales = ema_scale_fn(train_steps)
+
+            # Change diffusion.c w.r.t predicted function by NFE (loss std)
+            if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
+                diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85))
+
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
             losses = diffusion.consistency_losses(model,
@@ -399,7 +407,7 @@ def main(args):
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}, nfe={num_scales}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, "
+                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
@@ -562,6 +570,8 @@ if __name__ == "__main__":
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "gm", "huber_new", "cauchy_new", "gm_new"], default="huber")
     parser.add_argument("--ot-hard", action="store_true", default=False)
+    parser.add_argument("--c-by-loss-std", action="store_true", default=False)
+    parser.add_argument("--custom-constant-c", type=float, default=0.0)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")

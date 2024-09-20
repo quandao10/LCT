@@ -32,6 +32,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --normalize-matrix celeb256_stat.npy \
         --use-diffloss \
         --ot-hard \
+        --model-ckpt results/latent_celeb256/large_dhariwal_unet_gm_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_gmnew/checkpoints/0000425.pt \
         # --resume \
 
 python ~/envs/slack_workflow/running_finished.py        

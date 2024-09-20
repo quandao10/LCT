@@ -1,9 +1,9 @@
-export MASTER_PORT=10128
+export MASTER_PORT=10129
 
 for epoch in 0775 0975 1175
 do
         CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 test_cm_latent_ddp.py \
-                --ckpt ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc/checkpoints/000${epoch}.pt \
+                --ckpt ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard/checkpoints/000${epoch}.pt \
                 --seed 42 \
                 --dataset latent_celeb256 \
                 --image-size 32 \

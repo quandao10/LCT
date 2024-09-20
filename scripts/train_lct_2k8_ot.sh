@@ -14,10 +14,10 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --start-ema 0.95 \
         --scale-mode progressive \
         --start-scales 10 \
-        --end-scales 640 \
+        --end-scales 1280 \
         --noise-sampler ict \
         --global-batch-size $((128*1)) \
-        --epochs $((2800*1)) \
+        --epochs $((3200*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
         --num-channels 128 \
@@ -32,10 +32,6 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --normalize-matrix celeb256_stat.npy \
         --use-diffloss \
         --ot-hard \
-        # --resume
-        # --model-ckpt /research/cbim/medical/qd66/lct_exp/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75/checkpoints/0000975.pt \
-        # --resume \
-
-        # --l2-reweight \
+        --model-ckpt results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_2k8_othard/checkpoints/0002800.pt \
 
 python ~/envs/slack_workflow/running_finished.py        

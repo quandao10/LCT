@@ -1,7 +1,7 @@
 export MASTER_PORT=10121
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp large_dhariwal_unet_huber_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_hubernew \
+        --exp large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew \
         --datadir ./dataset/ \
         --dataset latent_celeb256 \
         --results-dir ./results/ \
@@ -9,15 +9,15 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --num-in-channels 4 \
         --num-classes 0 \
         --weight-schedule ict \
-        --loss-norm huber_new \
+        --loss-norm cauchy_new \
         --target-ema-mode adaptive \
         --start-ema 0.95 \
         --scale-mode progressive \
         --start-scales 10 \
-        --end-scales 640 \
+        --end-scales 1280 \
         --noise-sampler ict \
         --global-batch-size $((128*1)) \
-        --epochs $((1400*1)) \
+        --epochs $((1600*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
         --num-channels 128 \
@@ -32,7 +32,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --normalize-matrix celeb256_stat.npy \
         --use-diffloss \
         --ot-hard \
-        --model-ckpt results/latent_celeb256/large_dhariwal_unet_huber_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_hubernew/checkpoints/0000425.pt \
+        --model-ckpt results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew/checkpoints/0001400.pt \
         # --resume \
 
 python ~/envs/slack_workflow/running_finished.py        
