@@ -69,6 +69,7 @@ parser.add_argument("--use-fp16", action="store_true", default=False)
 parser.add_argument("--use-new-attention-order", action="store_true", default=False)
 parser.add_argument("--learn-sigma", action="store_true", default=False)
 parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys()), default="dhariwal_unet")
+parser.add_argument("--use-layer-norm", action="store_true", default=False)
 
 ###### diffusion ######
 parser.add_argument("--sigma-min", type=float, default=0.002)
@@ -162,11 +163,13 @@ loader = DataLoader(
 )
 
 ckpt_dict = {
+    # 11  : '0000175.pt',
     21  : '0000375.pt',
-    # 41  : '0000575.pt',
-    # 81  : '0000775.pt',
-    # 161 : '0000975.pt',
-    # 321 : '0001175.pt',
+    41  : '0000575.pt',
+    81  : '0000775.pt',
+    161 : '0000975.pt',
+    321 : '0001175.pt',
+    # 641 : '0001375.pt',
 }
 
 for num_scales, ckpt_file in ckpt_dict.items():
@@ -184,34 +187,34 @@ for num_scales, ckpt_file in ckpt_dict.items():
 
     use_label = True if "imagenet" in args.dataset else False
     results = dict()
-    for scale_value in tqdm(range(num_scales - 2, -1, -1), desc=f'{num_scales}nfe, ckpt {ckpt_file}'):
+    for scale_value in tqdm(range(num_scales - 2, -1, -1), desc=f'{num_scales} nfe, ckpt {ckpt_file}'):
         count = 0
         scale_result = {
             "diffs": {
-                "var": 1.0,
+                "var": 0.0,
                 "mean": 0.0,
             },
             "model_output": {
-                "var": 1.0,
+                "var": 0.0,
                 "mean": 0.0,
             },
             "model_output_target": {
-                "var": 1.0,
+                "var": 0.0,
                 "mean": 0.0,
             },
             "x": {
-                "var": 1.0,
+                "var": 0.0,
                 "mean": 0.0,
             },
             "noise": {
-                "var": 1.0,
+                "var": 0.0,
                 "mean": 0.0,
             },
             "covar": {
-                "x & model_output": 1.0,
-                "x & model_output_target": 1.0,
-                "noise & model_output": 1.0,
-                "noise & model_output_target": 1.0,
+                "x & model_output": 0.0,
+                "x & model_output_target": 0.0,
+                "noise & model_output": 0.0,
+                "noise & model_output_target": 0.0,
             },
         }
         for i, (x, y) in enumerate(loader):
@@ -244,80 +247,98 @@ for num_scales, ckpt_file in ckpt_dict.items():
             # for mean: model_output, model_output_target
             # for variance: model_output, model_output_target
             # for covariance: x & model_output, x & model_output_target, noise & model_output, noise & model_output_target
-            breakpoint()
-            # update count
+
+            ## cal new count
             N = x.numel()
-            count += N
-            
+            count_new = count + N
+
             ## diffs
-            diffs_batch_mean = diffs.mean().item()
-            diffs_batch_var = diffs.var().item()
-            # update mean
-            diffs_delta = diffs_batch_mean - scale_result["diffs"]["mean"]
-            scale_result["diffs"]["mean"] += diffs_delta * N / count
-            # update var
-            diffs_m_a = scale_result["diffs"]["var"] * (count - N)
-            diffs_m_b = diffs_batch_var * N
-            diffs_M2 = diffs_m_a + diffs_m_b + diffs_delta**2 * N
-            scale_result["diffs"]["var"] = diffs_M2 / count
+            diffs_delta = torch.sum(diffs - scale_result["diffs"]["mean"]).item()
+            diffs_new_mean = scale_result["diffs"]["mean"] + diffs_delta / count_new
+            if count > 0:
+                diffs_new_var = 1.0 * (count - 1) / (count_new - 1) * scale_result["diffs"]["var"] \
+                              + 1.0 / (count_new - 1) * torch.sum((diffs - scale_result["diffs"]["mean"]) * (diffs - diffs_new_mean)).item()
+            else:
+                diffs_new_var = 1.0 / (count_new - 1) * torch.sum((diffs - scale_result["diffs"]["mean"]) * (diffs - diffs_new_mean)).item()
             
             ## model_output
-            model_output_batch_mean = model_output.mean().item()
-            model_output_batch_var = model_output.var().item()
-            # update mean
-            model_output_delta = model_output_batch_mean - scale_result["model_output"]["mean"]
-            scale_result["model_output"]["mean"] += model_output_delta * N / count
-            # update var
-            model_output_m_a = scale_result["model_output"]["var"] * (count - N)
-            model_output_m_b = model_output_batch_var * N
-            model_output_M2 = model_output_m_a + model_output_m_b + model_output_delta**2 * N
-            scale_result["model_output"]["var"] = model_output_M2 / count
-            
+            model_output_delta = torch.sum(model_output - scale_result["model_output"]["mean"]).item()
+            model_output_new_mean = scale_result["model_output"]["mean"] + model_output_delta / count_new
+            if count > 0:
+                model_output_new_var = 1.0 * (count - 1) / (count_new - 1) * scale_result["model_output"]["var"] \
+                              + 1.0 / (count_new - 1) * torch.sum((model_output - scale_result["model_output"]["mean"]) * (model_output - model_output_new_mean)).item()
+            else:
+                model_output_new_var = 1.0 / (count_new - 1) * torch.sum((model_output - scale_result["model_output"]["mean"]) * (model_output - model_output_new_mean)).item()
+
             ## model_output_target
-            model_output_target_batch_mean = model_output_target.mean().item()
-            model_output_target_batch_var = model_output_target.var().item()
-            # update mean
-            model_output_target_delta = model_output_target_batch_mean - scale_result["model_output_target"]["mean"]
-            scale_result["model_output_target"]["mean"] += model_output_target_delta * N / count
-            # update var
-            model_output_target_m_a = scale_result["model_output_target"]["var"] * (count - N)
-            model_output_target_m_b = model_output_target_batch_var * N
-            model_output_target_M2 = model_output_target_m_a + model_output_target_m_b + model_output_target_delta**2 * N
-            scale_result["model_output_target"]["var"] = model_output_target_M2 / count
+            model_output_target_delta = torch.sum(model_output_target - scale_result["model_output_target"]["mean"]).item()
+            model_output_target_new_mean = scale_result["model_output_target"]["mean"] + model_output_target_delta / count_new
+            if count > 0:
+                model_output_target_new_var = 1.0 * (count - 1) / (count_new - 1) * scale_result["model_output_target"]["var"] \
+                              + 1.0 / (count_new - 1) * torch.sum((model_output_target - scale_result["model_output_target"]["mean"]) * (model_output_target - model_output_target_new_mean)).item()
+            else:
+                model_output_target_new_var = 1.0 / (count_new - 1) * torch.sum((model_output_target - scale_result["model_output_target"]["mean"]) * (model_output_target - model_output_target_new_mean)).item()
             
             ## x
-            x_batch_mean = x.mean().item()
-            x_batch_var = x.var().item()
-            # update mean
-            x_delta = x_batch_mean - scale_result["x"]["mean"]
-            scale_result["x"]["mean"] += x_delta * N / count
-            # update var
-            x_m_a = scale_result["x"]["var"] * (count - N)
-            x_m_b = x_batch_var * N
-            x_M2 = x_m_a + x_m_b + x_delta**2 * N
-            scale_result["x"]["var"] = x_M2 / count
+            x_delta = torch.sum(x - scale_result["x"]["mean"]).item()
+            x_new_mean = scale_result["x"]["mean"] + x_delta / count_new
+            if count > 0:
+                x_new_var = 1.0 * (count - 1) / (count_new - 1) * scale_result["x"]["var"] \
+                              + 1.0 / (count_new - 1) * torch.sum((x - scale_result["x"]["mean"]) * (x - x_new_mean)).item()
+            else:
+                x_new_var = 1.0 / (count_new - 1) * torch.sum((x - scale_result["x"]["mean"]) * (x - x_new_mean)).item()
             
             ## noise
-            noise_batch_mean = noise.mean().item()
-            noise_batch_var = noise.var().item()
-            # update mean
-            noise_delta = noise_batch_mean - scale_result["noise"]["mean"]
-            scale_result["noise"]["mean"] += noise_delta * N / count
-            # update var
-            noise_m_a = scale_result["noise"]["var"] * (count - N)
-            noise_m_b = noise_batch_var * N
-            noise_M2 = noise_m_a + noise_m_b + noise_delta**2 * N
-            scale_result["noise"]["var"] = noise_M2 / count
-
+            noise_delta = torch.sum(noise - scale_result["noise"]["mean"]).item()
+            noise_new_mean = scale_result["noise"]["mean"] + noise_delta / count_new
+            if count > 0:
+                noise_new_var = 1.0 * (count - 1) / (count_new - 1) * scale_result["noise"]["var"] \
+                              + 1.0 / (count_new - 1) * torch.sum((noise - scale_result["noise"]["mean"]) * (noise - noise_new_mean)).item()
+            else:
+                noise_new_var = 1.0 / (count_new - 1) * torch.sum((noise - scale_result["noise"]["mean"]) * (noise - noise_new_mean)).item()
+            
             ## covar
-            # x & model_output
+            if count > 0:
+                # x & model_output
+                x__model_output_new_covar = 1.0 * (count - 1) / (count_new - 1) * scale_result["covar"]["x & model_output"] \
+                                          + 1.0 / (count_new - 1) * torch.sum((x - scale_result["x"]["mean"]) * (model_output - scale_result["model_output"]["mean"])).item()
+                # x & model_output_target
+                x__model_output_target_new_covar = 1.0 * (count - 1) / (count_new - 1) * scale_result["covar"]["x & model_output_target"] \
+                                          + 1.0 / (count_new - 1) * torch.sum((x - scale_result["x"]["mean"]) * (model_output_target - scale_result["model_output_target"]["mean"])).item()
+                # noise & model_output
+                noise__model_output_new_covar = 1.0 * (count - 1) / (count_new - 1) * scale_result["covar"]["noise & model_output"] \
+                                          + 1.0 / (count_new - 1) * torch.sum((noise - scale_result["noise"]["mean"]) * (model_output - scale_result["model_output"]["mean"])).item()
+                # noise & model_output_target
+                noise__model_output_target_new_covar = 1.0 * (count - 1) / (count_new - 1) * scale_result["covar"]["noise & model_output_target"] \
+                                          + 1.0 / (count_new - 1) * torch.sum((noise - scale_result["noise"]["mean"]) * (model_output_target - scale_result["model_output_target"]["mean"])).item()
+            else:
+                # x & model_output
+                x__model_output_new_covar = 1.0 / (count_new - 1) * torch.sum((x - scale_result["x"]["mean"]) * (model_output - scale_result["model_output"]["mean"])).item()
+                # x & model_output_target
+                x__model_output_target_new_covar = 1.0 / (count_new - 1) * torch.sum((x - scale_result["x"]["mean"]) * (model_output_target - scale_result["model_output_target"]["mean"])).item()
+                # noise & model_output
+                noise__model_output_new_covar = 1.0 / (count_new - 1) * torch.sum((noise - scale_result["noise"]["mean"]) * (model_output - scale_result["model_output"]["mean"])).item()
+                # noise & model_output_target
+                noise__model_output_target_new_covar = 1.0 / (count_new - 1) * torch.sum((noise - scale_result["noise"]["mean"]) * (model_output_target - scale_result["model_output_target"]["mean"])).item()
 
-        std = var**0.5
-        results[scale_value] = {
-            'mean': mean,
-            'var': var,
-            'std': std,
-        }
+            ## update
+            count = count_new
+            scale_result["diffs"]["mean"] = diffs_new_mean
+            scale_result["diffs"]["var"] = diffs_new_var
+            scale_result["model_output"]["mean"] = model_output_new_mean
+            scale_result["model_output"]["var"] = model_output_new_var
+            scale_result["model_output_target"]["mean"] = model_output_target_new_mean
+            scale_result["model_output_target"]["var"] = model_output_target_new_var
+            scale_result["x"]["mean"] = x_new_mean
+            scale_result["x"]["var"] = x_new_var
+            scale_result["noise"]["mean"] = noise_new_mean
+            scale_result["noise"]["var"] = noise_new_var
+            scale_result["covar"]["x & model_output"] = x__model_output_new_covar
+            scale_result["covar"]["x & model_output_target"] = x__model_output_target_new_covar
+            scale_result["covar"]["noise & model_output"] = noise__model_output_new_covar
+            scale_result["covar"]["noise & model_output_target"] = noise__model_output_target_new_covar
+
+        results[scale_value] = scale_result
 
     f = open(f'./loss_visualize_{num_scales}nfe_ckpt_{ckpt_file}.jsonl', 'w')
     json.dump(results, f, indent=4)

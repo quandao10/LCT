@@ -40,6 +40,17 @@ from models.network_edm2 import EDM2_models
 import robust_loss_pytorch
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
+
+EMA_RATES = {
+    "ema_0.999": 0.999,
+    "ema": 0.9999,
+    "ema_0.99993": 0.99993,
+    "ema_0.99994": 0.99994,
+    "ema_0.99995": 0.99995,
+    "ema_0.99997": 0.99997,
+    "ema_0.9999432189950708": 0.9999432189950708,
+}
+
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -169,6 +180,9 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
+    # with open('./model.txt', 'w') as f:
+    #     f.write(str(model))
+    # exit(0)
     if args.custom_constant_c > 0.0:
         diffusion.c = torch.tensor(args.custom_constant_c)
     else:
@@ -177,9 +191,14 @@ def main(args):
     logger.info("c in huber loss is {}".format(diffusion.c.item()))
     # create ema for training model
     logger.info("creating the ema model")
-    ema = deepcopy(model)  # Create an EMA of the model for use after training
-    update_ema(ema, model, decay=0)  # Ensure EMA is initialized with synced weights
-    ema.to(device)
+    # ema = deepcopy(model)  # Create an EMA of the model for use after training
+    # update_ema(ema, model, decay=0)  # Ensure EMA is initialized with synced weights
+    # ema.to(device)
+    emas = dict()
+    for name in EMA_RATES.keys():
+        emas[name] = deepcopy(model)  # Create an EMA of the model for use after training
+        update_ema(emas[name], model, decay=0)  # Ensure EMA is initialized with synced weights
+        emas[name].to(device)
     # create target model
     logger.info("creating the target model")
     target_model = deepcopy(model).to(device)
@@ -217,7 +236,9 @@ def main(args):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
         epoch = init_epoch = checkpoint["epoch"]
         model.module.load_state_dict(checkpoint["model"])
-        ema.load_state_dict(checkpoint["ema"])
+        # ema.load_state_dict(checkpoint["ema"])
+        for name in EMA_RATES.keys():
+            emas[name].load_state_dict(checkpoint[name])
         opt.load_state_dict(checkpoint["opt"])
         target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
@@ -232,7 +253,9 @@ def main(args):
         epoch = init_epoch
         model.module.load_state_dict(checkpoint["model"])
         opt.load_state_dict(checkpoint["opt"])
-        ema.load_state_dict(checkpoint["ema"])
+        # ema.load_state_dict(checkpoint["ema"])
+        for name in EMA_RATES.keys():
+            emas[name].load_state_dict(checkpoint[name])
         target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
         if args.umt:
@@ -242,8 +265,11 @@ def main(args):
     else:
         init_epoch = 0
         train_steps = 0
-    requires_grad(ema, False)
-    ema.eval()
+    # requires_grad(ema, False)
+    # ema.eval()
+    for name in EMA_RATES.keys():
+        requires_grad(emas[name], False)
+        emas[name].eval()
 
     dataset = get_dataset(args)
     sampler = DistributedSampler(
@@ -326,6 +352,10 @@ def main(args):
             # Change diffusion.c w.r.t predicted function by NFE (loss std)
             if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
                 diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85))
+            elif args.c_by_nfe_sigma:
+                diffusion.c = torch.tensor(
+                    (diffusion.sigma_max**(1/diffusion.rho) - diffusion.sigma_min**(1/diffusion.rho)) / (num_scales - 1)
+                )
 
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
@@ -380,7 +410,9 @@ def main(args):
                         g['lr'] = args.lr
                     nan_count = 0
             after_backward = torch.cuda.memory_allocated(device)
-            update_ema(ema, model.module)
+            # update_ema(ema, model.module)
+            for name, ema_rate in EMA_RATES.items():
+                update_ema(emas[name], model.module, ema_rate)
             if args.ema_half_nfe and (epoch >= 1100):
                 update_ema(new_ema, model.module, decay=args.start_ema)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
@@ -434,10 +466,12 @@ def main(args):
                     "args": args,
                     "model": model.module.state_dict(),
                     "opt": opt.state_dict(),
-                    "ema": ema.state_dict(),
+                    # "ema": ema.state_dict(),
                     "target": target_model.state_dict(),
                     "model_umt": model_umt.module.state_dict() if args.umt else None,
                 }
+                for name in EMA_RATES.keys():
+                    content[name] = emas[name].state_dict()
                 torch.save(content, os.path.join(checkpoint_dir, "content.pth"))
 
             # Save DiT checkpoint:
@@ -446,12 +480,14 @@ def main(args):
                     "epoch": epoch + 1,
                     "model": model.module.state_dict(),
                     "train_steps": train_steps,
-                    "ema": ema.state_dict(),
+                    # "ema": ema.state_dict(),
                     "opt": opt.state_dict(),
                     "args": args,
                     "target": target_model.state_dict(),
                     "model_umt": model_umt.module.state_dict() if args.umt else None,
                 }
+                for name in EMA_RATES.keys():
+                    checkpoint[name] = emas[name].state_dict()
                 checkpoint_path = f"{checkpoint_dir}/{epoch:07d}.pt"
                 torch.save(checkpoint, checkpoint_path)
                 logger.info(f"Saved checkpoint to {checkpoint_path}")
@@ -494,7 +530,7 @@ def main(args):
                 ema_sample = karras_sample(
                     diffusion,
                     generator,
-                    ema,
+                    emas["ema"],
                     (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
                     steps=args.steps,
                     model_kwargs=model_kwargs,
@@ -562,6 +598,8 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys()), default="openai_unet")
+    parser.add_argument("--last-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm"], default="group-norm")
+    parser.add_argument("--block-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm"], default="group-norm")
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
@@ -572,6 +610,7 @@ if __name__ == "__main__":
     parser.add_argument("--ot-hard", action="store_true", default=False)
     parser.add_argument("--c-by-loss-std", action="store_true", default=False)
     parser.add_argument("--custom-constant-c", type=float, default=0.0)
+    parser.add_argument("--c-by-nfe-sigma", action="store_true", default=False)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
@@ -591,7 +630,6 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=2000)
     parser.add_argument("--global-batch-size", type=int, default=256)
     parser.add_argument("--max-grad-norm", type=float, default=2.0)
-    
     
     ###### ploting & saving ######
     parser.add_argument("--log-every", type=int, default=100)

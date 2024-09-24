@@ -109,3 +109,73 @@ Epoch = 0001350, FID = 10.975880180759276, cfg_scale = 1.0
 Epoch = 0001325, FID = 10.940244550455361, cfg_scale = 1.0
 Epoch = 0001300, FID = 11.20179513761451, cfg_scale = 1.0
 Epoch = 0001225, FID = 11.630805354191182, cfg_scale = 1.0
+Epoch = 0000775, FID = 17.45206952097135, cfg_scale = 1.0
+Epoch = 0000775, FID = 14.69910032038149, cfg_scale = 1.0
+Epoch = 0000775, FID = 16.54118839366322, cfg_scale = 1.0
+Epoch = 0000975, FID = 12.197452666139327, cfg_scale = 1.0
+Epoch = 0000975, FID = 11.260606420024743, cfg_scale = 1.0
+Epoch = 0000975, FID = 14.19152308665511, cfg_scale = 1.0
+Epoch = 0001175, FID = 10.328570497011242, cfg_scale = 1.0
+Epoch = 0001175, FID = 9.87824017497826, cfg_scale = 1.0
+Epoch = 0001175, FID = 12.074240693784986, cfg_scale = 1.0
+Epoch = 0001600, FID = 9.564048856423625, cfg_scale = 1.0
+Epoch = 0003200, FID = 8.976022651898745, cfg_scale = 1.0
+Epoch = 0001550, FID = 9.793552351767659, cfg_scale = 1.0
+Epoch = 0003100, FID = 8.959079837801937, cfg_scale = 1.0
+Epoch = 0001500, FID = 9.962490708761436, cfg_scale = 1.0
+Epoch = 0003000, FID = 8.618059249308686, cfg_scale = 1.0
+Epoch = 0001450, FID = 9.581668713775144, cfg_scale = 1.0
+Epoch = 0002900, FID = 8.404773626762562, cfg_scale = 1.0
+Epoch = 0000975, FID = 13.454407120307138, cfg_scale = 1.0
+Epoch = 0000175, FID = 65.66067716679908, cfg_scale = 1.0
+Epoch = 0000375, FID = 38.557215247758194, cfg_scale = 1.0
+Epoch = 0001400, FID = 8.195016146156945, cfg_scale = 1.0
+Epoch = 0001375, FID = 8.118380885598867, cfg_scale = 1.0
+Epoch = 0001350, FID = 8.172159976487137, cfg_scale = 1.0
+Epoch = 0001325, FID = 8.254623694722795, cfg_scale = 1.0
+Epoch = 0001300, FID = 8.234780399547247, cfg_scale = 1.0
+Epoch = 0001225, FID = 8.80950681357126, cfg_scale = 1.0
+Epoch = 0001175, FID = 11.29109082627167, cfg_scale = 1.0
+Epoch = 0000575, FID = 23.626630143358625, cfg_scale = 1.0
+Epoch = 0000775, FID = 16.671174833978625, cfg_scale = 1.0
+Epoch = 0001400, FID = 9.748294943546654, cfg_scale = 1.0
+Epoch = 0001375, FID = 9.830386898652222, cfg_scale = 1.0
+Epoch = 0001350, FID = 9.897157721754127, cfg_scale = 1.0
+Epoch = 0001325, FID = 9.89756348840271, cfg_scale = 1.0
+Epoch = 0001300, FID = 10.18838414100216, cfg_scale = 1.0
+Epoch = 0001225, FID = 10.952679406484663, cfg_scale = 1.0
+Epoch = 0000975, FID = 10.507954885734478, cfg_scale = 1.0
+Epoch = 0000975, FID = 13.191187187328552, cfg_scale = 1.0
+Epoch = 0001400, FID = 8.564048176188805, cfg_scale = 1.0
+Epoch = 0001175, FID = 11.467953152980442, cfg_scale = 1.0
+Epoch = 0001375, FID = 8.742756380582676, cfg_scale = 1.0
+Epoch = 0001350, FID = 8.811089230420833, cfg_scale = 1.0
+Epoch = 0001325, FID = 8.95848473243862, cfg_scale = 1.0
+Epoch = 0001300, FID = 8.886600202150987, cfg_scale = 1.0
+Epoch = 0001225, FID = 9.075892465987323, cfg_scale = 1.0
+Epoch = 0001400, FID = 7.969840077704134, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_layernorm/checkpoints/0001400.pt
+Epoch = 0001400, FID = 8.691938746993344, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom41nfe/checkpoints/0001400.pt
+Epoch = 0001400, FID = 8.591869162081622, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom81nfe/checkpoints/0001400.pt
+Epoch = 0001400, FID = 9.112626287161646, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc_resumefrom41nfe/checkpoints/0001400.pt
+Epoch = 0001400, FID = 10.084117585482716, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_layernorm/checkpoints/0001400.pt
+Epoch = 0001375, FID = 10.431748334742338, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc2/checkpoints/0001375.pt
+Epoch = 0001375, FID = 8.029626066960333, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_layernorm/checkpoints/0001375.pt
+Epoch = 0001375, FID = 8.79488672396667, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom41nfe/checkpoints/0001375.pt
+Epoch = 0001375, FID = 8.668932859128972, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom81nfe/checkpoints/0001375.pt
+Epoch = 0001375, FID = 9.270461382742695, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc_resumefrom41nfe/checkpoints/0001375.pt
+Epoch = 0001375, FID = 9.973328733661049, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_layernorm/checkpoints/0001375.pt
+Epoch = 0001350, FID = 7.941210938703193, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_layernorm/checkpoints/0001350.pt
+Epoch = 0001350, FID = 8.685247414910037, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom41nfe/checkpoints/0001350.pt
+Epoch = 0001350, FID = 8.5979778503347, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom81nfe/checkpoints/0001350.pt
+Epoch = 0001350, FID = 9.486815353622006, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc_resumefrom41nfe/checkpoints/0001350.pt
+Epoch = 0001350, FID = 10.082969869822108, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_layernorm/checkpoints/0001350.pt
+Epoch = 0001325, FID = 7.867000225373687, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_layernorm/checkpoints/0001325.pt
+Epoch = 0001325, FID = 8.71351727096561, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom41nfe/checkpoints/0001325.pt
+Epoch = 0001325, FID = 8.474796440432982, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom81nfe/checkpoints/0001325.pt
+Epoch = 0001325, FID = 9.52197985314504, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc_resumefrom41nfe/checkpoints/0001325.pt
+Epoch = 0001300, FID = 8.038003043457508, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_layernorm/checkpoints/0001300.pt
+Epoch = 0001325, FID = 10.067467850701746, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_layernorm/checkpoints/0001325.pt
+Epoch = 0001300, FID = 8.768568658578545, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom41nfe/checkpoints/0001300.pt
+Epoch = 0001300, FID = 8.552808706247163, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom81nfe/checkpoints/0001300.pt
+Epoch = 0001300, FID = 9.453415189594978, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc_resumefrom41nfe/checkpoints/0001300.pt
+Epoch = 0001300, FID = 10.145644489148651, cfg_scale = 1.0, exp = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_layernorm/checkpoints/0001300.pt

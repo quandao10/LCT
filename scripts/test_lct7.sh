@@ -1,10 +1,9 @@
-export MASTER_PORT=30002
+export MASTER_PORT=10129
 
-# for epoch in 0175 0375 0575 0775 0975 1175
-for epoch in 1375
+for epoch in 1400 1375 1350 1325 1300
 do
         CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 test_cm_latent_ddp.py \
-                --ckpt ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc2/checkpoints/000${epoch}.pt \
+                --ckpt ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom41nfe/checkpoints/000${epoch}.pt \
                 --seed 42 \
                 --dataset latent_celeb256 \
                 --image-size 32 \
@@ -31,7 +30,7 @@ do
                 --metrics pr50k3_full \
                 --data ~/datasets/celeba_256_jpg \
                 --mirror 1 \
-                --gen_data generated_samples/latent_celeb256/explarge_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc2_ep000${epoch} \
+                --gen_data generated_samples/latent_celeb256/explarge_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_resumefrom41nfe_ep000${epoch} \
                 --img_resolution 256
 done
 

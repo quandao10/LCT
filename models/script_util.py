@@ -95,7 +95,9 @@ def create_model_and_diffusion(args):
                      num_blocks=args.num_res_blocks,
                      attn_resolutions=attention_ds,
                      dropout=args.dropout,
-                     label_dropout=0)
+                     label_dropout=0,
+                     last_norm_type=args.last_norm_type,
+                     block_norm_type=args.block_norm_type,)
     elif "EDM2" in args.model_type:
         model = EDM2_models[args.model_type](img_resolution=args.image_size,
                                              img_channels=args.num_in_channels,
