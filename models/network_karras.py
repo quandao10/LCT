@@ -13,7 +13,15 @@ import torch
 from torch_utils import persistence
 from torch.nn.functional import silu
 from torch.nn import LayerNorm, BatchNorm2d
-# from torch.nn import RMSNorm
+
+main_torchver, sub_torchver = torch.__version__.split('.')[:2]
+main_torchver = int(main_torchver)
+sub_torchver = int(sub_torchver)
+torchver = main_torchver + sub_torchver / 10
+if torchver >= 2.4:
+    from torch.nn import RMSNorm
+else:
+    RMSNorm = None
 
 
 #----------------------------------------------------------------------------
