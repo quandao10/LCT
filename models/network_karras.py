@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from torch_utils import persistence
 from torch.nn.functional import silu
-from torch.nn import LayerNorm, BatchNorm2d
+from torch.nn import LayerNorm, BatchNorm2d, InstanceNorm2d
 
 main_torchver, sub_torchver = torch.__version__.split('.')[:2]
 main_torchver = int(main_torchver)
@@ -196,6 +196,8 @@ class UNetBlock(torch.nn.Module):
                 self.norm0 = RMSNorm(normalized_shape=[in_channels, block_norm_res << 1, block_norm_res << 1])
             else:
                 self.norm0 = RMSNorm(normalized_shape=[in_channels, block_norm_res, block_norm_res])
+        elif block_norm_type == "instance-norm":
+            self.norm0 = InstanceNorm2d(num_features=in_channels)
         self.conv0 = Conv2d(in_channels=in_channels, out_channels=out_channels, kernel=3, up=up, down=down, resample_filter=resample_filter, **init)
         self.affine = Linear(in_features=emb_channels, out_features=out_channels*(2 if adaptive_scale else 1), **init)
         if block_norm_type == "group-norm":
@@ -208,6 +210,8 @@ class UNetBlock(torch.nn.Module):
             self.norm1 = NonScalingLayerNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
         elif block_norm_type == "rms-norm":
             self.norm1 = RMSNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
+        elif block_norm_type == "instance-norm":
+            self.norm1 = InstanceNorm2d(num_features=out_channels)
         self.conv1 = Conv2d(in_channels=out_channels, out_channels=out_channels, kernel=3, **init_zero)
 
         self.skip = None
@@ -226,6 +230,8 @@ class UNetBlock(torch.nn.Module):
                 self.norm2 = NonScalingLayerNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
             elif block_norm_type == "rms-norm":
                 self.norm2 = RMSNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
+            elif block_norm_type == "instance-norm":
+                self.norm2 = InstanceNorm2d(num_features=out_channels)
             self.qkv = Conv2d(in_channels=out_channels, out_channels=out_channels*3, kernel=1, **(init_attn if init_attn is not None else init))
             self.proj = Conv2d(in_channels=out_channels, out_channels=out_channels, kernel=1, **init_zero)
 
@@ -509,6 +515,8 @@ class DhariwalUNet(torch.nn.Module):
             self.out_norm = NonScalingLayerNorm(normalized_shape=[cout, res, res])
         elif last_norm_type == "rms-norm":
             self.out_norm = RMSNorm(normalized_shape=[cout, res, res])
+        elif last_norm_type == "instance-norm":
+            self.out_norm = InstanceNorm2d(num_features=cout)
         self.out_conv = Conv2d(in_channels=cout, out_channels=out_channels, kernel=3, **init_zero)
 
     def forward(self, x, noise_labels, y=None, augment_labels=None):

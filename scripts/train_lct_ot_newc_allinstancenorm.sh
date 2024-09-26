@@ -1,7 +1,7 @@
-export MASTER_PORT=10128
+export MASTER_PORT=10121
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_lastrmsnorm \
+        --exp large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_allinstancenorm \
         --datadir ./dataset/ \
         --dataset latent_celeb256 \
         --results-dir ./results/ \
@@ -33,8 +33,8 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --last-norm-type rms-norm \
-        --block-norm-type group-norm \
+        --last-norm-type instance-norm \
+        --block-norm-type instance-norm \
         # --resume \
 
 python ~/envs/slack_workflow/running_finished.py        

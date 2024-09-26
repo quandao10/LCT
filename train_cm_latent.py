@@ -598,8 +598,8 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys()), default="openai_unet")
-    parser.add_argument("--last-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm"], default="group-norm")
-    parser.add_argument("--block-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm"], default="group-norm")
+    parser.add_argument("--last-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm", "instance-norm"], default="group-norm")
+    parser.add_argument("--block-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm", "instance-norm"], default="group-norm")
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)

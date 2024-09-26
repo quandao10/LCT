@@ -27,6 +27,16 @@ from models.nn import mean_flat, append_dims, append_zero
 from tqdm import tqdm
 from models.karras_diffusion import get_sigmas_karras
 
+EMA_RATES = {
+    "ema_0.999": 0.999,
+    "ema": 0.9999,
+    "ema_0.99993": 0.99993,
+    "ema_0.99994": 0.99994,
+    "ema_0.99995": 0.99995,
+    "ema_0.99997": 0.99997,
+    "ema_0.9999432189950708": 0.9999432189950708,
+}
+
 def main(args):
     torch.backends.cuda.matmul.allow_tf32 = True  # True: fast but may lead to some small numerical differences
     torch.set_grad_enabled(False)
@@ -65,16 +75,17 @@ def main(args):
     ckpt = torch.load(args.ckpt)
     print("Finish loading model")
     # loading weights from ddp in single gpu
-    if not args.ema:
-        model.load_state_dict(ckpt["model"], strict=True)
-    else:
-        model.load_state_dict(ckpt["ema"], strict=True)
+    # if not args.ema:
+    #     model.load_state_dict(ckpt["model"], strict=True)
+    # else:
+    #     model.load_state_dict(ckpt["ema"], strict=True)
+    model.load_state_dict(ckpt[args.ema], strict=True)
     model.eval()
     
     del ckpt
     args.exp = args.ckpt.split("/")[-3]
     args.epoch_id = args.ckpt.split("/")[-1][:-3]
-    save_dir = "./generated_samples/{}/exp{}_ep{}".format(args.dataset, args.exp, args.epoch_id)
+    save_dir = "./generated_samples/{}/exp{}_ep{}_{}".format(args.dataset, args.exp, args.epoch_id, args.ema)
     
     if args.cfg_scale > 1.0:
         save_dir += "_cfg{}".format(args.cfg_scale)
@@ -181,7 +192,11 @@ def main(args):
             fid = calculate_fid_given_paths(paths=paths, **kwargs)
             print("FID = {}".format(fid))
             with open(args.output_log, "a") as f:
-                f.write("Epoch = {}, FID = {}, cfg_scale = {}, exp = {}\n".format(args.epoch_id, fid, args.cfg_scale, args.ckpt))
+                if args.ema in EMA_RATES.keys():
+                    ckpt_detail = f'(EMA = {EMA_RATES[args.ema]})'
+                else:
+                    ckpt_detail = ''
+                f.write("Epoch = {}, FID = {}, cfg_scale = {}, ckpt = {} {}\n".format(args.epoch_id, fid, args.cfg_scale, args.ckpt, ckpt_detail))
         dist.barrier()
         dist.destroy_process_group()
     else:
@@ -251,7 +266,7 @@ if __name__ == "__main__":
     parser.add_argument("--generator",type=str,default="determ",help="type of seed generator",choices=["dummy", "determ", "determ-indiv"])
     parser.add_argument("--seed", type=int, default=42, help="seed used for initialization")
     parser.add_argument("--ckpt", default="experiment_cifar_default", help="name of experiment")
-    parser.add_argument("--ema", action="store_true", default=False)
+    parser.add_argument("--ema", type=str, choices=["model"] + list(EMA_RATES.keys()), default="ema")
     parser.add_argument("--test-interval", action="store_true", default=False)
     parser.add_argument("--batch-size", type=int, default=64, help="sample generating batch size")
     
@@ -272,7 +287,8 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys()), default="openai_unet")
-    parser.add_argument("--use-layer-norm", action="store_true", default=False)
+    parser.add_argument("--last-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm"], default="group-norm")
+    parser.add_argument("--block-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm"], default="group-norm")
 
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
