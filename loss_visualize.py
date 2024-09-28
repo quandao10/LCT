@@ -163,10 +163,11 @@ loader = DataLoader(
 
 ckpt_dict = {
     21  : '0000375.pt',
-    # 41  : '0000575.pt',
-    # 81  : '0000775.pt',
-    # 161 : '0000975.pt',
-    # 321 : '0001175.pt',
+    41  : '0000575.pt',
+    81  : '0000775.pt',
+    161 : '0000975.pt',
+    321 : '0001175.pt',
+    621 : '0001375.pt',
 }
 
 for num_scales, ckpt_file in ckpt_dict.items():
@@ -240,7 +241,7 @@ for num_scales, ckpt_file in ckpt_dict.items():
                 model_output, distiller = diffusion.denoise(model, x_t, t, **model_kwargs)
                 torch.set_rng_state(dropout_state)
                 model_output_target, distiller_target = diffusion.denoise(model, x_t2, t2, **model_kwargs)
-            diffs = distiller - distiller_target
+            diffs = (distiller - distiller_target)**2
             # for mean: model_output, model_output_target
             # for variance: model_output, model_output_target
             # for covariance: x & model_output, x & model_output_target, noise & model_output, noise & model_output_target

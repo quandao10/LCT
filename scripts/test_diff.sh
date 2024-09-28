@@ -1,11 +1,11 @@
 export MASTER_PORT=10128
 
-for epoch in 700
+for epoch in 500 600 700 800
 do
-        CUDA_VISIBLE_DEVICES=7,5,6 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=3 test_cm_latent_ddp.py \
-                --ckpt ./results/latent_church256_flip/lsun_best_setting/checkpoints/0000${epoch}.pt \
+        CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=4 test_diff_latent.py \
+                --ckpt ./results_diff/latent_celeb256/celeb_diff/checkpoints/0000${epoch}.pt \
                 --seed 42 \
-                --dataset latent_church256_flip \
+                --dataset latent_celeb256 \
                 --image-size 32 \
                 --num-in-channels 4 \
                 --num-classes 0 \
@@ -18,10 +18,8 @@ do
                 --model-type dhariwal_unet \
                 --channel-mult 1,2,3,4 \
                 --attention-resolutions 16,8 \
-                --sampler onestep \
-                --ts 0,9,19,39,79,159 \
-                --normalize-matrix latent_church256_flip_stat.npy \
-                --real-img-dir ../real_samples/lsun/ \
+                --normalize-matrix celeb256_stat.npy \
+                --real-img-dir ../real_samples/celeba_256/ \
                 --compute-fid \
                 --ema \
                 # --test-interval \

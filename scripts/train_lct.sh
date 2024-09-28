@@ -1,7 +1,7 @@
 export MASTER_PORT=10120
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_emahalfnfe_new \
+        --exp large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_new_layernorm \
         --datadir ./dataset/ \
         --dataset latent_celeb256 \
         --results-dir ./results/ \

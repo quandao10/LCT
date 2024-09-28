@@ -1,8 +1,8 @@
 export MASTER_PORT=10120
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_lr=5e-4 \
-        --datadir ./dataset/ \
+        --exp celeb_lion  \
+        --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset latent_celeb256 \
         --results-dir ./results/ \
         --image-size 32 \
@@ -16,9 +16,9 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((128*1)) \
+        --global-batch-size $((128)) \
         --epochs $((1400*1)) \
-        --lr 5e-4 \
+        --lr 3e-5 \
         --num-sampling 8 \
         --num-channels 128 \
         --num-head-channels 64 \
@@ -31,6 +31,5 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --attention-resolutions 16,8 \
         --normalize-matrix celeb256_stat.npy \
         --use-diffloss \
-        # --resume \
-
-python ~/envs/slack_workflow/running_finished.py        
+        --ot-hard \
+        --c-by-loss-std \

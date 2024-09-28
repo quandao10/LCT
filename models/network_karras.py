@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from torch_utils import persistence
 from torch.nn.functional import silu
-
+import torch.nn as nn
 #----------------------------------------------------------------------------
 # Unified routine for initializing weights and biases.
 
@@ -430,6 +430,8 @@ class DhariwalUNet(torch.nn.Module):
                 cout = model_channels * mult
                 self.dec[f'{res}x{res}_block{idx}'] = UNetBlock(in_channels=cin, out_channels=cout, attention=(res in attn_resolutions), **block_kwargs)
         self.out_norm = GroupNorm(num_channels=cout)
+        # print("use layer norm")
+        # self.out_norm = nn.LayerNorm(normalized_shape=[cout, res, res])
         self.out_conv = Conv2d(in_channels=cout, out_channels=out_channels, kernel=3, **init_zero)
 
     def forward(self, x, noise_labels, y=None, augment_labels=None):

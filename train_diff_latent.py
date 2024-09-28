@@ -180,50 +180,20 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
-    if args.custom_constant_c > 0.0:
-        diffusion.c = torch.tensor(args.custom_constant_c)
-    else:
-        diffusion.c = torch.tensor(0.00054*math.sqrt(args.num_in_channels*args.image_size**2))
-    # diffusion.c = torch.tensor(0.00345)
-    logger.info("c in huber loss is {}".format(diffusion.c.item()))
-    # create ema for training model
+    # if args.custom_constant_c > 0.0:
+    #     diffusion.c = torch.tensor(args.custom_constant_c)
+    # else:
+    #     diffusion.c = torch.tensor(0.00054*math.sqrt(args.num_in_channels*args.image_size**2))
+    # # diffusion.c = torch.tensor(0.00345)
+    # logger.info("c in huber loss is {}".format(diffusion.c.item()))
+    # # create ema for training model
     logger.info("creating the ema model")
     ema = deepcopy(model)  # Create an EMA of the model for use after training
     update_ema(ema, model, decay=0)  # Ensure EMA is initialized with synced weights
     ema.to(device)
-    # create target model
-    logger.info("creating the target model")
-    target_model = deepcopy(model).to(device)
-    target_model.requires_grad_(False)
-    target_model.train()
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
-
-    # Uncertainty-based multi-task learning
-    if args.umt:
-        model_umt = create_model_umt(args)
-        model_umt = DDP(model_umt.to(device), device_ids=[rank], find_unused_parameters=False)
-    else:
-        model_umt = None
-    
-    if args.loss_norm=="adaptive":
-        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, 
-                                                                          alpha_hi=1.0,
-                                                                          alpha_lo=0.0,
-                                                                          float_dtype=np.float32, 
-                                                                          scale_init=diffusion.c,
-                                                                          device=device)
-        if args.umt:
-            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
-        else:
-            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
-    else:
-        adaptive_loss = None
-        if args.umt:
-            opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
-        else:
-            opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4)
-            # opt = Lion(model.parameters(), lr=args.lr)
+    opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4)
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -231,10 +201,7 @@ def main(args):
         model.module.load_state_dict(checkpoint["model"])
         ema.load_state_dict(checkpoint["ema"])
         opt.load_state_dict(checkpoint["opt"])
-        target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
-        if args.umt:
-            model_umt.module.load_state_dict(checkpoint["model_umt"])
         logger.info("=> loaded checkpoint (epoch {})".format(epoch))
         del checkpoint
     elif args.resume:
@@ -245,10 +212,7 @@ def main(args):
         model.module.load_state_dict(checkpoint["model"])
         opt.load_state_dict(checkpoint["opt"])
         ema.load_state_dict(checkpoint["ema"])
-        target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
-        if args.umt:
-            model_umt.module.load_state_dict(checkpoint["model_umt"])
         logger.info("=> resume checkpoint (epoch {})".format(checkpoint["epoch"]))
         del checkpoint
     else:
@@ -283,21 +247,6 @@ def main(args):
 
     # create ema schedule
     logger.info("creating model and diffusion and ema scale function")
-    ema_scale_fn = create_ema_and_scales_fn(
-        target_ema_mode=args.target_ema_mode,
-        start_ema=args.start_ema,
-        scale_mode=args.scale_mode,
-        start_scales=args.start_scales,
-        end_scales=args.end_scales,
-        total_steps=args.total_training_steps,
-        ict=args.ict,
-    )
-
-    # OT sampler
-    if args.ot_hard:
-        ot_sampler = OTPlanSampler(method="exact", normalize_cost=True)
-    else:
-        ot_sampler = None
     
     # Variables for monitoring/logging purposes:
     log_steps = 0
@@ -321,78 +270,28 @@ def main(args):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
         for i, (x, y) in enumerate(tqdm(loader)):
-            # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
             if use_normalize:
                 x = x/0.18215
                 x = (x - mean)/std * 0.5
             y = None if not use_label else y.to(device)
-            n = torch.randn_like(x)
-            if args.ot_hard:
-                x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
-            ema_rate, num_scales = ema_scale_fn(train_steps)
-
-            # Change diffusion.c w.r.t predicted function by NFE (loss std)
-            if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
-                diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85))
 
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
-            losses = diffusion.consistency_losses(model,
+            losses = diffusion.diffusion_losses(model,
                                                 x,
-                                                num_scales,
-                                                target_model=target_model,
-                                                model_kwargs=model_kwargs,
-                                                noise=n,
-                                                adaptive=adaptive_loss,
-                                                model_umt=model_umt)
+                                                1000,
+                                                model_kwargs=model_kwargs)
            
-            if args.l2_reweight:
-                # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
-                distances = norm_dim(x-n)
-                # weight = (distances-distances.min())/(distances.max()-distances.min()) + distances.min()
-                weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
-                loss = (losses["loss"]*weight).mean()
-            else:
-                cm_loss = losses["loss"].mean() 
-                diff_loss = losses["diff_loss"].mean()
-                if args.use_diffloss:
-                    loss = cm_loss + 5*diff_loss
-                else:
-                    loss = cm_loss
-                    diff_loss = torch.tensor(0)
-            after_forward = torch.cuda.memory_allocated(device)
             
-            if not torch.isnan(loss):
-                opt.zero_grad()
-                loss.backward()
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                opt.step()
-                running_loss += loss.item()
-                running_cm_loss += cm_loss.item()
-                running_diff_loss += diff_loss.item()
-            else:
-                nan_count += 1
-                nan_t_list = losses["t"][torch.isnan(losses["loss"])]
-                logger.info(f"NaN time list: {nan_t_list}")
-                logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
-                if nan_count  > 100:
-                    args.lr = args.lr/2
-                    args.max_grad_norm = args.max_grad_norm * 0.8
-                    logger.info(f"Reduce lr a half to new lr {args.lr}")
-                    for g in opt.param_groups:
-                        g['lr'] = args.lr
-                    nan_count = 0
+            loss = losses["cauchy"].mean() 
+            after_forward = torch.cuda.memory_allocated(device)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            running_loss += loss.item()
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
-            ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
-            if args.ict:
-                if args.ema_half_nfe and (epoch >= 1350):
-                    update_ema(target_model, ema, 0)
-                else:
-                    update_ema(target_model, model.module, 0)
-            else:
-                update_ema(target_model, model.module, ema_rate)
 
             # Log loss values:
             log_steps += 1
@@ -404,27 +303,19 @@ def main(args):
                 steps_per_sec = log_steps / (end_time - start_time)
                 # Reduce loss history over all processes:
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
-                avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, "
+                    f"(step={train_steps:07d}, nfe={1000}, Train Loss: {avg_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
                     f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
-                    # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
                 # Reset monitoring variables:
                 running_loss = 0
-                running_cm_loss = 0
-                running_diff_loss = 0
                 log_steps = 0
                 start_time = time()
-
-        # if not args.no_lr_decay:
-        #     scheduler.step()
 
         if rank == 0:
             # latest checkpoint
@@ -437,8 +328,6 @@ def main(args):
                     "model": model.module.state_dict(),
                     "opt": opt.state_dict(),
                     "ema": ema.state_dict(),
-                    "target": target_model.state_dict(),
-                    "model_umt": model_umt.module.state_dict() if args.umt else None,
                 }
                 torch.save(content, os.path.join(checkpoint_dir, "content.pth"))
 
@@ -451,29 +340,21 @@ def main(args):
                     "ema": ema.state_dict(),
                     "opt": opt.state_dict(),
                     "args": args,
-                    "target": target_model.state_dict(),
-                    "model_umt": model_umt.module.state_dict() if args.umt else None,
                 }
                 checkpoint_path = f"{checkpoint_dir}/{epoch:07d}.pt"
                 torch.save(checkpoint, checkpoint_path)
                 logger.info(f"Saved checkpoint to {checkpoint_path}")
-            # dist.barrier()
 
         if rank == 0 and epoch % args.plot_every == 0:
             logger.info("Generating EMA samples...")
             generator = get_generator("dummy", 4, seed)
-            if args.sampler == "multistep":
-                assert len(args.ts) > 0
-                ts = tuple(int(x) for x in args.ts.split(","))
-            else:
-                ts = None
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
                     generator,
                     model,
                     (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                    steps=args.steps,
+                    steps=250,
                     model_kwargs=model_kwargs,
                     device=device,
                     clip_denoised=args.clip_denoised,
@@ -485,7 +366,7 @@ def main(args):
                     s_tmax=args.s_tmax,
                     s_noise=args.s_noise,
                     noise=noise,
-                    ts=ts,
+                    ts=None,
                 )
                 if use_normalize:
                     sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
@@ -498,7 +379,7 @@ def main(args):
                     generator,
                     ema,
                     (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                    steps=args.steps,
+                    steps=250,
                     model_kwargs=model_kwargs,
                     device=device,
                     clip_denoised=args.clip_denoised,
@@ -510,7 +391,7 @@ def main(args):
                     s_tmax=args.s_tmax,
                     s_noise=args.s_noise,
                     noise=noise,
-                    ts=ts,
+                    ts=None,
                 )
                 if use_normalize:
                     ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
@@ -610,7 +491,7 @@ if __name__ == "__main__":
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
     parser.add_argument("--clip-denoised", action="store_true", default=True)
-    parser.add_argument("--sampler", type=str, default='onestep')
+    parser.add_argument("--sampler", type=str, default='euler')
     parser.add_argument("--s-churn", type=float, default=0.0)
     parser.add_argument("--s-tmin", type=float, default=0.0)
     parser.add_argument("--s-tmax", type=float, default=float("inf"))

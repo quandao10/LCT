@@ -60,7 +60,7 @@ class KarrasDenoiser:
         self.num_timesteps = 40
         self.p_mean = -1.1
         self.p_std = 2.0
-        self.c = None
+        self.c = th.tensor(3.45)
 
     def get_snr(self, sigmas):
         return sigmas**-2
@@ -87,8 +87,7 @@ class KarrasDenoiser:
             noise = th.randn_like(x_start)
 
         terms = {}
-        ### Fix here. Define a categorical distribution
-        indices = th.randint(int(num_scales*0.75), num_scales, (x_start.shape[0],), device=x_start.device)
+        indices = th.randint(0, num_scales, (x_start.shape[0],), device=x_start.device)
         # indices = th.randint(int(num_scales*0.00), num_scales, (x_start.shape[0],), device=x_start.device)
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
@@ -105,6 +104,7 @@ class KarrasDenoiser:
         )
         terms["xs_mse"] = mean_flat((denoised - x_start) ** 2)
         terms["mse"] = mean_flat(weights * (denoised - x_start) ** 2)
+        terms["cauchy"] = (th.log(0.5*mean_flat((denoised - x_start) ** 2)+self.c**2) - 2*th.log(self.c)) * weights
 
         if "vb" in terms:
             terms["loss"] = terms["mse"] + terms["vb"]
@@ -360,18 +360,28 @@ def karras_sample(
 
     def denoiser(x_t, sigma):
         _, denoised = diffusion.denoise(model, x_t, sigma, **model_kwargs)
-        # if clip_denoised:
-        #     denoised = denoised.clamp(-1, 1)
+        if clip_denoised:
+            denoised = denoised.clamp(-1, 1)
         return denoised
 
     x_0 = sample_fn(
         denoiser,
         x_T,
         sigmas,
+        None,
         progress=progress,
         callback=callback,
         **sampler_args,
     )
+    
+    # def sample_euler(
+    # denoiser,
+    # generator,
+    # x,
+    # sigmas,
+    # progress=True,
+    # callback=None,)
+
     return x_0
 
 
@@ -509,10 +519,10 @@ def sample_heun(
 @th.no_grad()
 def sample_euler(
     denoiser,
-    generator,
     x,
     sigmas,
-    progress=False,
+    generator,
+    progress=True,
     callback=None,
 ):
     """Implements Algorithm 2 (Heun steps) from Karras et al. (2022)."""
@@ -520,7 +530,6 @@ def sample_euler(
     indices = range(len(sigmas) - 1)
     if progress:
         from tqdm.auto import tqdm
-
         indices = tqdm(indices)
 
     for i in indices:
@@ -600,6 +609,7 @@ def sample_onestep(
     distiller,
     x,
     sigmas,
+    generator,
     progress=False,
     callback=None,
 ):
