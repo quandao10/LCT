@@ -23,11 +23,11 @@ export MASTER_PORT=10129
 #         --resblock-updown \
 
 ### improved CT setting
-CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm.py \
+CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_.py \
         --exp ict_no_dp \
-        --datadir /research/cbim/vast/qd66/workspace/dataset/ \
+        --datadir ./dataset/ \
         --dataset cifar10 \
-        --results-dir /research/cbim/medical/qd66/lct_exp/ \
+        --results-dir ./results/ \
         --image-size 32 \
         --num-in-channels 3 \
         --num-classes -1 \
@@ -47,6 +47,7 @@ CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --num-res-blocks 2 \
         --resblock-updown \
         --ict \
+        --model-ckpt results/cifar10/ict_no_dp/checkpoints/0000025.pt \
 
 
 ### rerun consistency setting

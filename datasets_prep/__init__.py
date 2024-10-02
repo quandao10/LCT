@@ -151,6 +151,8 @@ def get_dataset(args):
     elif args.dataset == "latent_celeb256":
         # dataset = CustomDataset("celebhq256", "/research/cbim/vast/qd66/workspace/dataset/vim/dataset/latent_celeba_256")
         dataset = CustomDataset("celebhq256", "./dataset/latent_celeba_256")
+    elif args.dataset == "latent_ffhq256":
+        dataset = CustomDataset("ffhq", "./dataset/latent_ffhq_256")
     # elif args.dataset == "latent_ffhq256":
     #     dataset = CustomDataset("ffhq", "features/ffhq256_features")
     # elif args.dataset == "latent_ffhq256_flip":

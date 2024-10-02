@@ -86,6 +86,8 @@ def main(args):
     args.exp = args.ckpt.split("/")[-3]
     args.epoch_id = args.ckpt.split("/")[-1][:-3]
     save_dir = "./generated_samples/{}/exp{}_ep{}_{}".format(args.dataset, args.exp, args.epoch_id, args.ema)
+    if args.note != "":
+        save_dir += f"_{args.note}"
     
     if args.cfg_scale > 1.0:
         save_dir += "_cfg{}".format(args.cfg_scale)
@@ -196,6 +198,8 @@ def main(args):
                     ckpt_detail = f'(EMA = {EMA_RATES[args.ema]})'
                 else:
                     ckpt_detail = ''
+                if args.note != "":
+                    ckpt_detail += f' {args.note}'
                 f.write("Epoch = {}, FID = {}, cfg_scale = {}, ckpt = {} {}\n".format(args.epoch_id, fid, args.cfg_scale, args.ckpt, ckpt_detail))
         dist.barrier()
         dist.destroy_process_group()
@@ -287,8 +291,8 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys()), default="openai_unet")
-    parser.add_argument("--last-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm"], default="group-norm")
-    parser.add_argument("--block-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm"], default="group-norm")
+    parser.add_argument("--last-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm", "instance-norm"], default="group-norm")
+    parser.add_argument("--block-norm-type", type=str, choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm", "instance-norm"], default="group-norm")
 
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
@@ -321,6 +325,9 @@ if __name__ == "__main__":
     parser.add_argument("--compute-fid", action="store_true", default=False, help="whether or not compute FID")
     parser.add_argument("--real-img-dir", default="./pytorch_fid/cifar10_train_stat.npy", help="directory to real images for FID computation")
     parser.add_argument("--output-log", type=str, default="fid.txt")
+    
+    ###### note ######
+    parser.add_argument("--note", type=str, default="")
     
     args = parser.parse_args()
     main(args)

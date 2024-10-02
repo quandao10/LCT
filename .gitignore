@@ -8,5 +8,6 @@ test_x0/
 generated_samples/
 dataset/
 *.jsonl
+loss_diffs/
 logs/
 notebook/

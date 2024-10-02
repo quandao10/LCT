@@ -35,6 +35,8 @@ from models.script_util import (
 from models.karras_diffusion import karras_sample
 from models.network_dit import DiT_models
 import json
+from models.nn import mean_flat, append_dims, append_zero
+from models.optimal_transport import OTPlanSampler
 
 #################################################################################
 #                             Training Helper Functions                         #
@@ -169,23 +171,24 @@ def main(args):
     # create target model
     logger.info("creating the target model")
     target_model = deepcopy(model).to(device)
-    target_model.requires_grad_(False)
-    target_model.train()
+    # target_model.requires_grad_(False)
+    # target_model.train()
     
-    model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
-    opt = torch.optim.RAdam(
-        model.parameters(), lr=args.lr, #weight_decay=args.weight_decay
-    )
+    # model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
+    # opt = torch.optim.RAdam(
+    #     model.parameters(), lr=args.lr, #weight_decay=args.weight_decay
+    # )
 
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
         epoch = init_epoch = checkpoint["epoch"]
-        model.module.load_state_dict(checkpoint["model"])
+        # model.module.load_state_dict(checkpoint["model"])
+        model.load_state_dict(checkpoint["model"])
         ema.load_state_dict(checkpoint["ema"])
-        opt.load_state_dict(checkpoint["opt"])
+        # opt.load_state_dict(checkpoint["opt"])
         target_model.load_state_dict(checkpoint["target"])
-        for g in opt.param_groups:
-            g['lr'] = args.lr
+        # for g in opt.param_groups:
+        #     g['lr'] = args.lr
         train_steps = checkpoint["train_steps"]
         logger.info("=> loaded checkpoint (epoch {})".format(epoch))
         del checkpoint
@@ -194,8 +197,9 @@ def main(args):
         checkpoint = torch.load(checkpoint_file, map_location=torch.device(f'cuda:{device}'))
         init_epoch = checkpoint["epoch"]
         epoch = init_epoch
-        model.module.load_state_dict(checkpoint["model"])
-        opt.load_state_dict(checkpoint["opt"])
+        # model.module.load_state_dict(checkpoint["model"])
+        model.load_state_dict(checkpoint["model"])
+        # opt.load_state_dict(checkpoint["opt"])
         ema.load_state_dict(checkpoint["ema"])
         target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
@@ -204,8 +208,12 @@ def main(args):
     else:
         init_epoch = 0
         train_steps = 0
-    requires_grad(ema, False)
-    ema.eval()
+    # requires_grad(ema, False)
+    # ema.eval()
+    model.eval(); model.requires_grad_(False)
+    ema.eval(); ema.requires_grad_(False)
+    target_model.eval(); target_model.requires_grad_(False)
+    model.to(device)
 
     dataset = get_dataset(args)
     sampler = DistributedSampler(
@@ -250,130 +258,43 @@ def main(args):
     
     if rank == 0:
         noise = torch.randn((64, 3, args.image_size, args.image_size), device=device)*args.sigma_max
+    ema_rate, num_scales = ema_scale_fn(train_steps)
 
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
-    for epoch in range(init_epoch, args.epochs+1):
-        sampler.set_epoch(epoch)
-        logger.info(f"Beginning epoch {epoch}...")
+    ckpt_file = '0000025.pt'
+    ot_sampler = OTPlanSampler(method="exact", normalize_cost=True)
+    os.makedirs('./loss_diffs', exist_ok=True)
+    os.makedirs(os.path.join('./loss_diffs', f'cifar10_{num_scales}nfe_ckpt_{ckpt_file}'), exist_ok=True)
+    for scale_value in tqdm(range(num_scales - 2, -1, -1), desc=f'{num_scales} nfe, ckpt {ckpt_file}'):
+        os.makedirs(os.path.join('./loss_diffs', f'cifar10_{num_scales}nfe_ckpt_{ckpt_file}', f'{scale_value}'), exist_ok=True)
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
             y = None if not use_label else y.to(device)
-            ema_rate, num_scales = ema_scale_fn(train_steps)
+            noise = torch.randn_like(x)
+            x, noise, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=noise, y0=y, y1=None, replace=False)
+            dims = x.ndim
             model_kwargs = dict(y=y)
-            before_forward = torch.cuda.memory_allocated(device)
-            losses = diffusion.consistency_losses(model,
-                                                x,
-                                                num_scales,
-                                                target_model=target_model,
-                                                model_kwargs=model_kwargs)
-            loss = (losses["loss"]).mean()
-            after_forward = torch.cuda.memory_allocated(device)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            after_backward = torch.cuda.memory_allocated(device)
-            update_ema(ema, model.module)
-            ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
-            if args.ict:
-                update_ema(target_model, model.module, 0)
-            else:
-                update_ema(target_model, model.module, ema_rate)
-            # Log loss values:
-            running_loss += loss.item()
-            log_steps += 1
-            train_steps += 1
-            if train_steps % args.log_every == 0:
-                # Measure training speed:
-                torch.cuda.synchronize()
-                end_time = time()
-                steps_per_sec = log_steps / (end_time - start_time)
-                # Reduce loss history over all processes:
-                avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
-                avg_loss = avg_loss.item() / world_size
-                logger.info(
-                    f"(step={train_steps:07d}) Train Loss: {avg_loss:.4f}, "
-                    f"Train Steps/Sec: {steps_per_sec:.2f}, "
-                    f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
-                    f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
-                    f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
-                )
-                # Reset monitoring variables:
-                running_loss = 0
-                log_steps = 0
-                start_time = time()
-
-        # if not args.no_lr_decay:
-        #     scheduler.step()
-
-        if rank == 0:
-            # latest checkpoint
-            if epoch % args.save_content_every == 0:
-                logger.info("Saving content.")
-                content = {
-                    "epoch": epoch + 1,
-                    "train_steps": train_steps,
-                    "args": args,
-                    "model": model.module.state_dict(),
-                    "opt": opt.state_dict(),
-                    "ema": ema.state_dict(),
-                    "target": target_model.state_dict(),
-                }
-                torch.save(content, os.path.join(checkpoint_dir, "content.pth"))
-
-            # Save DiT checkpoint:
-            if epoch % args.ckpt_every == 0 and epoch > 0:
-                checkpoint = {
-                    "epoch": epoch + 1,
-                    "model": model.module.state_dict(),
-                    "train_steps": train_steps,
-                    "ema": ema.state_dict(),
-                    "opt": opt.state_dict(),
-                    "args": args,
-                    "target": target_model.state_dict(),
-                }
-                checkpoint_path = f"{checkpoint_dir}/{epoch:07d}.pt"
-                torch.save(checkpoint, checkpoint_path)
-                logger.info(f"Saved checkpoint to {checkpoint_path}")
-            # dist.barrier()
-
-        if rank == 0 and epoch % args.plot_every == 0:
-            logger.info("Generating EMA samples...")
-            generator = get_generator("dummy", 4, seed)
-            if args.sampler == "multistep":
-                assert len(args.ts) > 0
-                ts = tuple(int(x) for x in args.ts.split(","))
-            else:
-                ts = None
+            indices = torch.ones(size=(x.shape[0],), device=x.device) * scale_value
+            t = diffusion.sigma_max ** (1 / diffusion.rho) + indices / (num_scales - 1) * (
+                diffusion.sigma_min ** (1 / diffusion.rho) - diffusion.sigma_max ** (1 / diffusion.rho)
+            )
+            t = t**diffusion.rho
+            x_t = x + noise * append_dims(t, dims)
+            t2 = diffusion.sigma_max ** (1 / diffusion.rho) + (indices + 1) / (num_scales - 1) * (
+                diffusion.sigma_min ** (1 / diffusion.rho) - diffusion.sigma_max ** (1 / diffusion.rho)
+            )
+            t2 = t2**diffusion.rho
+            x_t2 = x + noise * append_dims(t2, dims)
+            
             with torch.no_grad():
-                sample = karras_sample(
-                    diffusion,
-                    generator,
-                    model.module,
-                    (64, 3, args.image_size, args.image_size),
-                    steps=args.steps,
-                    model_kwargs=model_kwargs,
-                    device=device,
-                    clip_denoised=args.clip_denoised,
-                    sampler=args.sampler,
-                    sigma_min=args.sigma_min,
-                    sigma_max=args.sigma_max,
-                    s_churn=args.s_churn,
-                    s_tmin=args.s_tmin,
-                    s_tmax=args.s_tmax,
-                    s_noise=args.s_noise,
-                    noise=noise,
-                    ts=ts,
-                )
-            # Save and display images:
-            save_image(sample, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
-            del sample
-        # dist.barrier()
-    model.eval()  # important! This disables randomized embedding dropout
-    # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
-    logger.info("Done!")
-    cleanup()
+                dropout_state = torch.get_rng_state()
+                model_output, distiller = diffusion.denoise(model, x_t, t, **model_kwargs)
+                torch.set_rng_state(dropout_state)
+                model_output_target, distiller_target = diffusion.denoise(model, x_t2, t2, **model_kwargs)
+            diffs = distiller - distiller_target
+            with open(os.path.join('./loss_diffs', f'cifar10_{num_scales}nfe_ckpt_{ckpt_file}', f'{scale_value}', f'{i}.npy'), 'wb') as f:
+                np.save(f, diffs.cpu().numpy())
 
 
 def none_or_str(value):
