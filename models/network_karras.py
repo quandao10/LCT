@@ -129,6 +129,57 @@ class NonScalingLayerNorm(LayerNorm):
                 torch.nn.init.zeros_(self.bias)
 
 #----------------------------------------------------------------------------
+# NonScalingGroup normalization.
+
+@persistence.persistent_class
+class NonScalingGroupNorm(torch.nn.Module):
+    def __init__(self, num_channels, num_groups=32, min_channels_per_group=4, eps=1e-5):
+        super().__init__()
+        self.num_groups = min(num_groups, num_channels // min_channels_per_group)
+        self.eps = eps
+        self.weight = torch.nn.Parameter(torch.ones(num_channels), requires_grad=False)
+        self.bias = torch.nn.Parameter(torch.zeros(num_channels))
+
+    def forward(self, x):
+        x = torch.nn.functional.group_norm(x, num_groups=self.num_groups, weight=self.weight.to(x.dtype), bias=self.bias.to(x.dtype), eps=self.eps)
+        return x
+
+#----------------------------------------------------------------------------
+# NonScalingInstance normalization.
+
+@persistence.persistent_class
+class NonScalingInstanceNorm2d(InstanceNorm2d):
+    def __init__(self, num_features, affine, eps=1e-5):
+        super().__init__(num_features=num_features, affine=affine, eps=eps)
+
+    def reset_parameters(self) -> None:
+        if self.affine:
+            torch.nn.init.ones_(self.weight)
+            self.weight.requires_grad = False
+            torch.nn.init.zeros_(self.bias)
+
+
+def get_norm_layer(norm_type, c, h, w, eps=1e-5):
+    if norm_type == 'group-norm':
+        return GroupNorm(num_channels=c, eps=eps)
+    elif norm_type == 'layer-norm':
+        return LayerNorm(normalized_shape=[c, h, w])
+    elif norm_type == 'batch-norm':
+        return BatchNorm2d(num_features=c)
+    elif norm_type == 'non-scaling-layer-norm':
+        return NonScalingLayerNorm(normalized_shape=[c, h, w])
+    elif norm_type == 'rms-norm':
+        return RMSNorm(normalized_shape=[c, h, w])
+    elif norm_type == 'instance-norm':
+        return InstanceNorm2d(num_features=c, affine=True)
+    elif norm_type == 'non-scaling-group-norm':
+        return NonScalingGroupNorm(num_channels=c, eps=eps)
+    elif norm_type == 'non-scaling-instance-norm':
+        return NonScalingInstanceNorm2d(num_features=c, affine=True)
+    else:
+        raise ValueError("`norm_type` is not implemented!")
+
+#----------------------------------------------------------------------------
 # Attention weight computation, i.e., softmax(Q^T * K).
 # Performs all computation using FP32, but uses the original datatype for
 # inputs/outputs/gradients to conserve memory.
@@ -171,47 +222,15 @@ class UNetBlock(torch.nn.Module):
         self.skip_scale = skip_scale
         self.adaptive_scale = adaptive_scale
 
-        if block_norm_type == "group-norm":
-            self.norm0 = GroupNorm(num_channels=in_channels, eps=eps)
-        elif block_norm_type == "layer-norm":
-            if up:
-                self.norm0 = LayerNorm(normalized_shape=[in_channels, block_norm_res >> 1, block_norm_res >> 1])
-            elif down:
-                self.norm0 = LayerNorm(normalized_shape=[in_channels, block_norm_res << 1, block_norm_res << 1])
-            else:
-                self.norm0 = LayerNorm(normalized_shape=[in_channels, block_norm_res, block_norm_res])
-        elif block_norm_type == "batch-norm":
-            self.norm0 = BatchNorm2d(num_features=in_channels)
-        elif block_norm_type == "non-scaling-layer-norm":
-            if up:
-                self.norm0 = NonScalingLayerNorm(normalized_shape=[in_channels, block_norm_res >> 1, block_norm_res >> 1])
-            elif down:
-                self.norm0 = NonScalingLayerNorm(normalized_shape=[in_channels, block_norm_res << 1, block_norm_res << 1])
-            else:
-                self.norm0 = NonScalingLayerNorm(normalized_shape=[in_channels, block_norm_res, block_norm_res])
-        elif block_norm_type == "rms-norm":
-            if up:
-                self.norm0 = RMSNorm(normalized_shape=[in_channels, block_norm_res >> 1, block_norm_res >> 1])
-            elif down:
-                self.norm0 = RMSNorm(normalized_shape=[in_channels, block_norm_res << 1, block_norm_res << 1])
-            else:
-                self.norm0 = RMSNorm(normalized_shape=[in_channels, block_norm_res, block_norm_res])
-        elif block_norm_type == "instance-norm":
-            self.norm0 = InstanceNorm2d(num_features=in_channels)
+        if up:
+            self.norm0 = get_norm_layer(norm_type=block_norm_type, c=in_channels, h=(block_norm_res >> 1), w=(block_norm_res >> 1), eps=eps)
+        elif down:
+            self.norm0 = get_norm_layer(norm_type=block_norm_type, c=in_channels, h=(block_norm_res << 1), w=(block_norm_res << 1), eps=eps)
+        else:
+            self.norm0 = get_norm_layer(norm_type=block_norm_type, c=in_channels, h=block_norm_res, w=block_norm_res, eps=eps)
         self.conv0 = Conv2d(in_channels=in_channels, out_channels=out_channels, kernel=3, up=up, down=down, resample_filter=resample_filter, **init)
         self.affine = Linear(in_features=emb_channels, out_features=out_channels*(2 if adaptive_scale else 1), **init)
-        if block_norm_type == "group-norm":
-            self.norm1 = GroupNorm(num_channels=out_channels, eps=eps)
-        elif block_norm_type == "layer-norm":
-            self.norm1 = LayerNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
-        elif block_norm_type == "batch-norm":
-            self.norm1 = BatchNorm2d(num_features=out_channels)
-        elif block_norm_type == "non-scaling-layer-norm":
-            self.norm1 = NonScalingLayerNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
-        elif block_norm_type == "rms-norm":
-            self.norm1 = RMSNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
-        elif block_norm_type == "instance-norm":
-            self.norm1 = InstanceNorm2d(num_features=out_channels)
+        self.norm1 = get_norm_layer(norm_type=block_norm_type, c=out_channels, h=block_norm_res, w=block_norm_res, eps=eps)
         self.conv1 = Conv2d(in_channels=out_channels, out_channels=out_channels, kernel=3, **init_zero)
 
         self.skip = None
@@ -220,18 +239,7 @@ class UNetBlock(torch.nn.Module):
             self.skip = Conv2d(in_channels=in_channels, out_channels=out_channels, kernel=kernel, up=up, down=down, resample_filter=resample_filter, **init)
 
         if self.num_heads:
-            if block_norm_type == "group-norm":
-                self.norm2 = GroupNorm(num_channels=out_channels, eps=eps)
-            elif block_norm_type == "layer-norm":
-                self.norm2 = LayerNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
-            elif block_norm_type == "batch-norm":
-                self.norm2 = BatchNorm2d(num_features=out_channels)
-            elif block_norm_type == "non-scaling-layer-norm":
-                self.norm2 = NonScalingLayerNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
-            elif block_norm_type == "rms-norm":
-                self.norm2 = RMSNorm(normalized_shape=[out_channels, block_norm_res, block_norm_res])
-            elif block_norm_type == "instance-norm":
-                self.norm2 = InstanceNorm2d(num_features=out_channels)
+            self.norm2 = get_norm_layer(norm_type=block_norm_type, c=out_channels, h=block_norm_res, w=block_norm_res, eps=eps)
             self.qkv = Conv2d(in_channels=out_channels, out_channels=out_channels*3, kernel=1, **(init_attn if init_attn is not None else init))
             self.proj = Conv2d(in_channels=out_channels, out_channels=out_channels, kernel=1, **init_zero)
 
@@ -505,19 +513,9 @@ class DhariwalUNet(torch.nn.Module):
                 cin = cout + skips.pop()
                 cout = model_channels * mult
                 self.dec[f'{res}x{res}_block{idx}'] = UNetBlock(in_channels=cin, out_channels=cout, attention=(res in attn_resolutions), **block_kwargs, **block_norm_kwargs)
-        if last_norm_type == "group-norm":
-            self.out_norm = GroupNorm(num_channels=cout)
-        elif last_norm_type == "layer-norm":
-            self.out_norm = LayerNorm(normalized_shape=[cout, res, res])
-        elif last_norm_type == "batch-norm":
-            self.out_norm = BatchNorm2d(num_features=cout)
-        elif last_norm_type == "non-scaling-layer-norm":
-            self.out_norm = NonScalingLayerNorm(normalized_shape=[cout, res, res])
-        elif last_norm_type == "rms-norm":
-            self.out_norm = RMSNorm(normalized_shape=[cout, res, res])
-        elif last_norm_type == "instance-norm":
-            self.out_norm = InstanceNorm2d(num_features=cout)
+        self.out_norm = get_norm_layer(norm_type=last_norm_type, c=cout, h=res, w=res)
         self.out_conv = Conv2d(in_channels=cout, out_channels=out_channels, kernel=3, **init_zero)
+        # breakpoint()
 
     def forward(self, x, noise_labels, y=None, augment_labels=None):
         # Mapping.

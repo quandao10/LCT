@@ -494,3 +494,4 @@ Epoch = 0001400, FID = 6.953355807222948, cfg_scale = 1.0, ckpt = ./results/late
 Epoch = 0001050, FID = 125.18939484761378, cfg_scale = 1.0, ckpt = ./results/latent_ffhq256/large_dhariwal_unet_huber_no_grad_norm_bs128_groupnorm/checkpoints/0001050.pt (EMA = 0.99993)
 Epoch = 0001050, FID = 58.818521760589704, cfg_scale = 1.0, ckpt = ./results/latent_ffhq256/large_dhariwal_unet_huber_no_grad_norm_bs128_groupnorm/checkpoints/0001050.pt (EMA = 0.99993)
 Epoch = 0001050, FID = 59.122647871923505, cfg_scale = 1.0, ckpt = ./results/latent_ffhq256/large_dhariwal_unet_huber_no_grad_norm_bs128_groupnorm/checkpoints/0001050.pt (EMA = 0.99993) stochastic_twostep_440
+Epoch = 0001400, FID = 7.417853468854133, cfg_scale = 1.0, ckpt = ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.40_newdiff_fix_5_bs128_othard_newc_allnonscalinglayernorm/checkpoints/0001400.pt (EMA = 0.99993)
