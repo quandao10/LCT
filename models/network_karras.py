@@ -160,6 +160,7 @@ class NonScalingInstanceNorm2d(InstanceNorm2d):
 
 
 def get_norm_layer(norm_type, c, h, w, eps=1e-5):
+    print(norm_type)
     if norm_type == 'group-norm':
         return GroupNorm(num_channels=c, eps=eps)
     elif norm_type == 'layer-norm':
