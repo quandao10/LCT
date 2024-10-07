@@ -89,8 +89,6 @@ class KarrasDenoiser:
         terms = {}
         ### Fix here. Define a categorical distribution
         indices = th.randint(int(num_scales*0.75), num_scales, (x_start.shape[0],), device=x_start.device)
-        # indices = th.randint(int(num_scales*0.40), num_scales, (x_start.shape[0],), device=x_start.device)
-        # indices = th.randint(int(num_scales*0.00), num_scales, (x_start.shape[0],), device=x_start.device)
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
         )

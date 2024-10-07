@@ -57,6 +57,6 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --c-by-loss-std \
         --last-norm-type non-scaling-group-norm \
         --block-norm-type non-scaling-group-norm \
-        --resume \
+        # --resume \
 
 python ~/envs/slack_workflow/running_finished.py
