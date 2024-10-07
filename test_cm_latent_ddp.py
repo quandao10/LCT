@@ -122,7 +122,7 @@ def main(args):
                         steps=args.steps,
                         model_kwargs=model_kwargs,
                         device=device,
-                        clip_denoised=args.clip_denoised,
+                        clip_denoised=False,
                         sampler=args.sampler,
                         sigma_min=args.sigma_min,
                         sigma_max=args.sigma_max,
@@ -139,6 +139,7 @@ def main(args):
             fake_image = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in fake_sample] # careful here
         else:
             fake_image = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in fake_sample]
+        fake_image = [torch.clamp(x, -1, 1) for x in fake_image]
         return fake_image
     
     if args.compute_fid:
@@ -272,7 +273,8 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys()), default="openai_unet")
-
+    parser.add_argument("--no-scale", action="store_true", default=False)
+    
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
     parser.add_argument("--clip-denoised", action="store_true", default=True)

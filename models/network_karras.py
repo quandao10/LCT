@@ -13,6 +13,7 @@ import torch
 from torch_utils import persistence
 from torch.nn.functional import silu
 import torch.nn as nn
+from torch.nn import LayerNorm, BatchNorm2d, InstanceNorm2d
 #----------------------------------------------------------------------------
 # Unified routine for initializing weights and biases.
 
@@ -104,6 +105,18 @@ class GroupNorm(torch.nn.Module):
     def forward(self, x):
         x = torch.nn.functional.group_norm(x, num_groups=self.num_groups, weight=self.weight.to(x.dtype), bias=self.bias.to(x.dtype), eps=self.eps)
         return x
+    
+#----------------------------------------------------------------------------
+# NonScalingLayer normalization.
+
+@persistence.persistent_class
+class NonScalingLayerNorm(LayerNorm):
+    def reset_parameters(self) -> None:
+        if self.elementwise_affine:
+            torch.nn.init.ones_(self.weight)
+            self.weight.requires_grad = False
+            if self.bias is not None:
+                torch.nn.init.zeros_(self.bias)
 
 #----------------------------------------------------------------------------
 # Attention weight computation, i.e., softmax(Q^T * K).
@@ -429,9 +442,9 @@ class DhariwalUNet(torch.nn.Module):
                 cin = cout + skips.pop()
                 cout = model_channels * mult
                 self.dec[f'{res}x{res}_block{idx}'] = UNetBlock(in_channels=cin, out_channels=cout, attention=(res in attn_resolutions), **block_kwargs)
-        self.out_norm = GroupNorm(num_channels=cout)
+        # self.out_norm = GroupNorm(num_channels=cout)
         # print("use layer norm")
-        # self.out_norm = nn.LayerNorm(normalized_shape=[cout, res, res])
+        self.out_norm = nn.LayerNorm(normalized_shape=[cout, res, res])
         self.out_conv = Conv2d(in_channels=cout, out_channels=out_channels, kernel=3, **init_zero)
 
     def forward(self, x, noise_labels, y=None, augment_labels=None):

@@ -564,7 +564,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys()), default="openai_unet")
-    
+    parser.add_argument("--non-scale", action="store_true", default=False)
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
@@ -609,7 +609,7 @@ if __name__ == "__main__":
     
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
-    parser.add_argument("--clip-denoised", action="store_true", default=True)
+    parser.add_argument("--clip-denoised", action="store_true", default=False)
     parser.add_argument("--sampler", type=str, default='onestep')
     parser.add_argument("--s-churn", type=float, default=0.0)
     parser.add_argument("--s-tmin", type=float, default=0.0)

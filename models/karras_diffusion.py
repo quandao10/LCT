@@ -339,7 +339,7 @@ def karras_sample(
     sigmas = get_sigmas_karras(steps, sigma_min, sigma_max, rho, device=device)
 
     sample_fn = {
-        # "heun": sample_heun,
+        "heun": sample_heun,
         # "dpm": sample_dpm,
         # "ancestral": sample_euler_ancestral,
         "onestep": sample_onestep,
@@ -360,19 +360,27 @@ def karras_sample(
 
     def denoiser(x_t, sigma):
         _, denoised = diffusion.denoise(model, x_t, sigma, **model_kwargs)
-        if clip_denoised:
-            denoised = denoised.clamp(-1, 1)
         return denoised
 
-    x_0 = sample_fn(
-        denoiser,
-        x_T,
-        sigmas,
-        None,
-        progress=progress,
-        callback=callback,
-        **sampler_args,
-    )
+    if sampler not in ["heun", "dpm", "multistep"] :
+        x_0 = sample_fn(
+            denoiser,
+            x_T,
+            sigmas,
+            None,
+            progress=progress,
+            callback=callback,
+            **sampler_args,
+        )
+    else:
+        x_0 = sample_fn(
+            denoiser,
+            x_T,
+            sigmas,
+            progress=progress,
+            callback=callback,
+            **sampler_args,
+        )
     
     # def sample_euler(
     # denoiser,
