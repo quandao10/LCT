@@ -81,6 +81,8 @@ def main(args):
     #     model.load_state_dict(ckpt["ema"], strict=True)
     model.load_state_dict(ckpt[args.ema], strict=True)
     model.eval()
+    if args.statistic_preconditioning:
+        diffusion.update_cur_precond(num_scales=args.steps)
     
     del ckpt
     args.exp = args.ckpt.split("/")[-3]
@@ -316,6 +318,7 @@ if __name__ == "__main__":
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive"], default="huber")
+    parser.add_argument("--statistic-preconditioning", action="store_true", default=False)
     
     
     ###### dataset ######

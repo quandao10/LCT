@@ -334,9 +334,6 @@ def main(args):
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
-        if args.ema_half_nfe and (epoch == 1100):
-            new_ema = deepcopy(ema)
-            update_ema(new_ema, ema, decay=0)
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
@@ -348,6 +345,7 @@ def main(args):
             if args.ot_hard:
                 x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
             ema_rate, num_scales = ema_scale_fn(train_steps)
+            diffusion.update_cur_precond(num_scales=num_scales)
 
             # Change diffusion.c w.r.t predicted function by NFE (loss std)
             if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
@@ -413,14 +411,9 @@ def main(args):
             # update_ema(ema, model.module)
             for name, ema_rate in EMA_RATES.items():
                 update_ema(emas[name], model.module, ema_rate)
-            if args.ema_half_nfe and (epoch >= 1100):
-                update_ema(new_ema, model.module, decay=args.start_ema)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
             if args.ict:
-                if args.ema_half_nfe and (epoch % 200 >= 100) and (epoch >= 1000):
-                    update_ema(target_model, new_ema, 0)
-                else:
-                    update_ema(target_model, model.module, 0)
+                update_ema(target_model, model.module, 0)
             else:
                 update_ema(target_model, model.module, ema_rate)
 
@@ -615,6 +608,7 @@ if __name__ == "__main__":
     parser.add_argument("--c-by-loss-std", action="store_true", default=False)
     parser.add_argument("--custom-constant-c", type=float, default=0.0)
     parser.add_argument("--c-by-nfe-sigma", action="store_true", default=False)
+    parser.add_argument("--statistic-preconditioning", action="store_true", default=False)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")

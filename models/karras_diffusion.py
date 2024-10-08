@@ -61,6 +61,19 @@ class KarrasDenoiser:
         self.p_mean = -1.1
         self.p_std = 2.0
         self.c = None
+        if args.statistic_preconditioning:
+            import json
+            with open('./saved_precond.json', 'r') as f:
+                tmp = json.load(f)
+            self.stat_precond = dict()
+            for key, value in tmp.items():
+                self.stat_precond[int(key)] = dict()
+                for key_, value_ in value.items():
+                    self.stat_precond[int(key)][key_] = th.from_numpy(np.array(value_))
+        else:
+            self.stat_precond = None
+        self.cur_precond = None
+                
 
     def get_snr(self, sigmas):
         return sigmas**-2
@@ -121,6 +134,10 @@ class KarrasDenoiser:
         unnorm_prob = erf_sigmas[:-1]-erf_sigmas[1:]
         dist = th.distributions.categorical.Categorical(probs=unnorm_prob)
         return dist
+    
+    def update_cur_precond(self, num_scales):
+        if (self.stat_precond is not None):
+            self.cur_precond = self.stat_precond[num_scales]
 
     def consistency_losses(
         self,
@@ -135,6 +152,7 @@ class KarrasDenoiser:
         adaptive=None,
         model_umt=None,
     ):
+        assert teacher_model is None, "Just implement for CT only!"
         if model_kwargs is None:
             model_kwargs = {}
         if noise is None:
@@ -142,13 +160,13 @@ class KarrasDenoiser:
 
         dims = x_start.ndim
 
-        def denoise_fn(x, t):
-            return self.denoise(model, x, t, **model_kwargs)[1]
+        def denoise_fn(x, t, indices):
+            return self.denoise(model, x, t, indices, **model_kwargs)[1]
 
         if target_model:
             @th.no_grad()
-            def target_denoise_fn(x, t):
-                return self.denoise(target_model, x, t, **model_kwargs)[1]
+            def target_denoise_fn(x, t, indices):
+                return self.denoise(target_model, x, t, indices, **model_kwargs)[1]
 
         else:
             raise NotImplementedError("Must have a target model")
@@ -214,7 +232,7 @@ class KarrasDenoiser:
         x_t = x_start + noise * append_dims(t, dims)
 
         dropout_state = th.get_rng_state()
-        distiller = denoise_fn(x_t, t)
+        distiller = denoise_fn(x_t, t, indices=indices)
 
         if teacher_model is None:
             x_t2 = euler_solver(x_t, t, t2, x_start).detach()
@@ -222,11 +240,14 @@ class KarrasDenoiser:
             x_t2 = heun_solver(x_t, t, t2, x_start).detach()
 
         th.set_rng_state(dropout_state)
-        distiller_target = target_denoise_fn(x_t2, t2)
+        distiller_target = target_denoise_fn(x_t2, t2, indices=(indices + 1))
         distiller_target = distiller_target.detach()
 
         snrs = self.get_snr(t)
-        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t) # ICT: weighting 1/(t2-t)
+        if (self.stat_precond is not None):
+            weights = self.cur_precond['c_out'].type(x_t.dtype).to(x_t.device)[indices]**(-2)
+        else:
+            weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t) # ICT: weighting 1/(t2-t)
         
         # compute diff losses
         diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
@@ -298,11 +319,16 @@ class KarrasDenoiser:
         return terms
 
 
-    def denoise(self, model, x_t, sigmas, **model_kwargs):
+    def denoise(self, model, x_t, sigmas, indices=None, **model_kwargs):
         c_skip, c_out, c_in = [
             append_dims(x, x_t.ndim)
             for x in self.get_scalings_for_boundary_condition(sigmas)
         ]
+        if (self.cur_precond is not None):
+            if (indices is None):
+                indices = th.zeros(size=(x_t.shape[0],), dtype=th.int64, device=x_t.device)
+            c_skip = append_dims(self.cur_precond['c_skip'].type(x_t.dtype).to(x_t.device)[indices], x_t.ndim)
+            c_out = append_dims(self.cur_precond['c_out'].type(x_t.dtype).to(x_t.device)[indices], x_t.ndim)
         rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
         model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
         denoised = c_out * model_output + c_skip * x_t
