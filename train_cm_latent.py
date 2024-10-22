@@ -36,6 +36,7 @@ from models.script_util import (
 from models.karras_diffusion import karras_sample
 from diffusers.models import AutoencoderKL
 from models.network_dit import DiT_models
+from models.network_udit import UDiT_models
 from models.network_edm2 import EDM2_models
 import robust_loss_pytorch
 from sampler.random_util import get_generator
@@ -357,7 +358,10 @@ def main(args):
                 cm_loss = losses["loss"].mean() 
                 diff_loss = losses["diff_loss"].mean()
                 if args.use_diffloss:
-                    loss = cm_loss + 5*diff_loss
+                    if epoch <600:
+                        loss = cm_loss + 5*diff_loss
+                    else:
+                        loss = cm_loss + 5*diff_loss
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
@@ -563,8 +567,11 @@ if __name__ == "__main__":
     parser.add_argument("--use-fp16", action="store_true", default=False)
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
-    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys()), default="openai_unet")
-    parser.add_argument("--non-scale", action="store_true", default=False)
+    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys())+list(UDiT_models.keys()), default="openai_unet")
+    parser.add_argument("--no-scale", action="store_true", default=False)
+    parser.add_argument("--linear-act", type=str, default=None)
+    
+    
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)

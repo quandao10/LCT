@@ -241,3 +241,67 @@ Epoch = 0001375, FID = 7.552474961344558, cfg_scale = 1.0
 Epoch = 0001400, FID = 7.538168785958703, cfg_scale = 1.0
 Epoch = 0001225, FID = 7.670180305721118, cfg_scale = 1.0
 Epoch = 0001200, FID = 8.075644169267207, cfg_scale = 1.0
+DiT-B/2 -- baseline
+Epoch = 0000600, FID = 8.303746956293764, cfg_scale = 1.0
+Epoch = 0000625, FID = 7.723910387480203, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.5877803878269106, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.855039370149143, cfg_scale = 1.0
+Epoch = 0000700, FID = 7.8084123635600236, cfg_scale = 1.0
+DiT-B/2 without scale in normalization 
+Epoch = 0000600, FID = 8.683796401592076, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.2114666348036, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.962465910908378, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.9432154002577136, cfg_scale = 1.0
+Epoch = 0000700, FID = 8.017384217049795, cfg_scale = 1.0
+DiT-B/2 without scale in normalization (but also in the attention norm)
+Epoch = 0000600, FID = 8.266438606052446, cfg_scale = 1.0
+Epoch = 0000625, FID = 7.646158725584286, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.729365177295108, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.713784492164024, cfg_scale = 1.0
+Epoch = 0000700, FID = 7.865591101178325, cfg_scale = 1.0
+DiT-B/2 glu_gelu
+Epoch = 0000600, FID = 8.419130382813222, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.397191922635244, cfg_scale = 1.0
+Epoch = 0000650, FID = 8.16596750138882, cfg_scale = 1.0
+Epoch = 0000675, FID = 8.408426473867507, cfg_scale = 1.0
+Epoch = 0000700, FID = 8.446149915440003, cfg_scale = 1.0
+DiT-B/2 glu_mish
+Epoch = 0000600, FID = 9.342491084683559, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.827612372772023, cfg_scale = 1.0
+Epoch = 0000650, FID = 8.712286492097547, cfg_scale = 1.0
+Epoch = 0000675, FID = 8.652755785262855, cfg_scale = 1.0
+Epoch = 0000700, FID = 8.357700371993161, cfg_scale = 1.0
+DiT-B/2 mish
+Epoch = 0000600, FID = 8.809900486723024, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.277627394235196, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.86319932073576, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.771836258474195, cfg_scale = 1.0
+Epoch = 0000700, FID = 8.041583468858533, cfg_scale = 1.0
+Epoch = 0000500, FID = 10.025613861125976, cfg_scale = 1.0
+Epoch = 0000525, FID = 9.15393290078714, cfg_scale = 1.0
+Epoch = 0000550, FID = 9.110315519317822, cfg_scale = 1.0
+Epoch = 0000575, FID = 8.884248503779162, cfg_scale = 1.0
+DiT-B/2 mish retrain from 600 with x2 diff loss
+Epoch = 0000600, FID = 8.781330545686473, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.14709178134899, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.890048375072894, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.565624087354593, cfg_scale = 1.0
+Epoch = 0000700, FID = 7.809269070575283, cfg_scale = 1.0
+DiT-B/2 mish retrain from 600 with x4 diff loss
+Epoch = 0000600, FID = 8.88424961297278, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.564025225789095, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.9295332434547845, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.769451072636883, cfg_scale = 1.0
+Epoch = 0000700, FID = 7.832745262436674, cfg_scale = 1.0
+DiT-B/2 glu_gelu x2
+Epoch = 0000600, FID = 8.726287854557825, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.731693976624541, cfg_scale = 1.0
+Epoch = 0000650, FID = 8.381055972484404, cfg_scale = 1.0
+Epoch = 0000675, FID = 8.506726877052216, cfg_scale = 1.0
+Epoch = 0000700, FID = 8.363629291441669, cfg_scale = 1.0
+DiT-B/2 glu_mish x2
+Epoch = 0000600, FID = 9.094772067804456, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.579579695678206, cfg_scale = 1.0
+Epoch = 0000650, FID = 8.158218584228564, cfg_scale = 1.0
+Epoch = 0000675, FID = 8.078273968832121, cfg_scale = 1.0
+Epoch = 0000700, FID = 8.169493351057866, cfg_scale = 1.0

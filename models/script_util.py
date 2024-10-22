@@ -6,6 +6,7 @@ import numpy as np
 from .network_karras import SongUNet, DhariwalUNet, DhariwalUMTNet
 from .network_dit import DiT_models
 from .network_edm2 import EDM2_models
+from .network_udit import UDiT_models
 
 NUM_CLASSES = 1000
 
@@ -101,12 +102,22 @@ def create_model_and_diffusion(args):
                                              img_channels=args.num_in_channels,
                                              label_dim=args.num_classes,
                                              dropout=args.dropout)
-    else:
+    elif "DiT" in args.model_type and not "U-DiT" in args.model_type:
         model = DiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
                                             num_classes=args.num_classes,
                                             learn_sigma=args.learn_sigma,
+                                            linear_act=args.linear_act,
                                             no_scale = args.no_scale)
+    elif "U-DiT" in args.model_type:
+        model = UDiT_models[args.model_type](input_size=args.image_size,
+                                            in_channels=args.num_in_channels,
+                                            num_classes=args.num_classes,
+                                            learn_sigma=args.learn_sigma,
+                                            no_scale = args.no_scale)
+    else:
+        print("No network as define")
+        exit(0)
             
     diffusion = KarrasDenoiser(
         args=args,

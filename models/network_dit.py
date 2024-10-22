@@ -14,11 +14,11 @@ import torch.nn as nn
 import numpy as np
 import math
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
-
+from timm.layers import GluMlp
+from functools import partial
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
-
 
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
@@ -97,7 +97,7 @@ class LabelEmbedder(nn.Module):
     def get_in_channels(self):
         return self.in_channels
 
-
+   
 #################################################################################
 #                                 Core DiT Model                                #
 #################################################################################
@@ -106,14 +106,26 @@ class DiTBlock(nn.Module):
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
-    def __init__(self, hidden_size, num_heads, norm, mlp_ratio=4.0, **block_kwargs):
+    def __init__(self, hidden_size, num_heads, norm, linear_act, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
         self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
+        self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, **block_kwargs)
         self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6)
-        mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
-        self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
+        mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
+        if linear_act == "mish":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
+        elif linear_act == "silu":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
+        elif linear_act == "glu_sigmoid":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
+        elif linear_act == "glu_mish":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
+        elif linear_act == "glu_silu":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
+        elif linear_act == "glu_gelu":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
+        elif linear_act == "gelu":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
             nn.Linear(hidden_size, 6 * hidden_size, bias=True)
@@ -174,6 +186,7 @@ class DiT(nn.Module):
         num_classes=1000,
         learn_sigma=True,
         no_scale = False,
+        linear_act=None,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -191,7 +204,7 @@ class DiT(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
 
         self.blocks = nn.ModuleList([
-            DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio, norm=self.norm) for _ in range(depth)
+            DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio, norm=self.norm, linear_act=linear_act) for _ in range(depth)
         ])
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels, norm=self.norm)
         self.initialize_weights()
