@@ -275,6 +275,8 @@ if __name__ == "__main__":
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(UDiT_models.keys()), default="openai_unet")
     parser.add_argument("--no-scale", action="store_true", default=False)
+    parser.add_argument("--wo-norm", action="store_true", default=False)
+    parser.add_argument("--use-scale-residual", action="store_true", default=False)
     parser.add_argument("--linear-act", type=str, default=None)
     
     ###### sampling ######

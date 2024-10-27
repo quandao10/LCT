@@ -16,6 +16,7 @@ import math
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
 from timm.layers import GluMlp
 from functools import partial
+import copy
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
@@ -106,14 +107,20 @@ class DiTBlock(nn.Module):
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
-    def __init__(self, hidden_size, num_heads, norm, linear_act, mlp_ratio=4.0, **block_kwargs):
+    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, mlp_ratio=4.0, residual_scale=1.0, use_scale_residual=False, **block_kwargs):
         super().__init__()
-        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, **block_kwargs)
-        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.residual_scale = residual_scale
+        self.use_scale_residual = use_scale_residual
+        self.wo_norm = wo_norm
+        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity() 
+        self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, qk_norm=True, **block_kwargs) \
+            if not wo_norm else Attention(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, **block_kwargs)
+        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity()
         mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
         if linear_act == "mish":
             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
+        elif linear_act == "relu":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
         elif linear_act == "silu":
             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
         elif linear_act == "glu_sigmoid":
@@ -129,12 +136,30 @@ class DiTBlock(nn.Module):
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
             nn.Linear(hidden_size, 6 * hidden_size, bias=True)
+        ) if not use_scale_residual else nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(hidden_size, 4 * hidden_size, bias=True)
         )
 
     def forward(self, x, c):
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
+        if not self.use_scale_residual:
+            x_ori = copy.copy(x)
+            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+            attn = self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
+            x = x + gate_msa.unsqueeze(1) * attn
+            mlp = self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
+            x = x + gate_mlp.unsqueeze(1) * mlp
+            if torch.any(torch.isnan(x)):
+                print(x_ori)
+                print(c)
+                print(mlp)
+                print(attn)
+                print(gate_mlp)
+                print(gate_msa)
+        else:
+            shift_msa, scale_msa, shift_mlp, scale_mlp = self.adaLN_modulation(c).chunk(4, dim=1)
+            x = x + self.residual_scale * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
+            x = x + self.residual_scale * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
         return x
 
 
@@ -142,9 +167,10 @@ class FinalLayer(nn.Module):
     """
     The final layer of DiT.
     """
-    def __init__(self, hidden_size, patch_size, out_channels, norm):
+    def __init__(self, hidden_size, patch_size, out_channels, norm, wo_norm):
         super().__init__()
-        self.norm_final = norm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.wo_norm = wo_norm
+        self.norm_final = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity() 
         self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
@@ -187,6 +213,8 @@ class DiT(nn.Module):
         learn_sigma=True,
         no_scale = False,
         linear_act=None,
+        wo_norm=False,
+        use_scale_residual=False,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -194,6 +222,7 @@ class DiT(nn.Module):
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
         self.patch_size = patch_size
         self.num_heads = num_heads
+        self.residual_scale = 1/torch.sqrt(torch.tensor(depth))
 
         self.norm = NonScalingLayerNorm if no_scale else nn.LayerNorm
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
@@ -204,9 +233,17 @@ class DiT(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
 
         self.blocks = nn.ModuleList([
-            DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio, norm=self.norm, linear_act=linear_act) for _ in range(depth)
+            DiTBlock(hidden_size, 
+                     num_heads, 
+                     mlp_ratio=mlp_ratio, 
+                     norm=self.norm, 
+                     linear_act=linear_act, 
+                     wo_norm=wo_norm, 
+                     use_scale_residual=use_scale_residual, 
+                     residual_scale=self.residual_scale) \
+                for _ in range(depth)
         ])
-        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels, norm=self.norm)
+        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels, norm=self.norm, wo_norm=wo_norm)
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -273,8 +310,11 @@ class DiT(nn.Module):
         t = self.t_embedder(t)                   # (N, D)
         y = self.y_embedder(y, self.training)    # (N, D)
         c = t + y                                # (N, D)
-        for block in self.blocks:
-            x = block(x, c)                      # (N, T, D)
+        for idx, block in enumerate(self.blocks):
+            x = block(x, c)
+            if torch.any(torch.isnan(x)):
+                print(idx)
+                exit()
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
         return x

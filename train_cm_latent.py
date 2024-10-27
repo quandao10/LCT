@@ -223,8 +223,9 @@ def main(args):
         if args.umt:
             opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
-            opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+            opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
             # opt = Lion(model.parameters(), lr=args.lr)
+            # opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=1e-4)
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -387,6 +388,7 @@ def main(args):
                     for g in opt.param_groups:
                         g['lr'] = args.lr
                     nan_count = 0
+                exit()
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
@@ -569,6 +571,8 @@ if __name__ == "__main__":
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys())+list(UDiT_models.keys()), default="openai_unet")
     parser.add_argument("--no-scale", action="store_true", default=False)
+    parser.add_argument("--wo-norm", action="store_true", default=False)
+    parser.add_argument("--use-scale-residual", action="store_true", default=False)
     parser.add_argument("--linear-act", type=str, default=None)
     
     
