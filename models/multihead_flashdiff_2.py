@@ -5,11 +5,11 @@ from torch import nn
 
 from .rotary import apply_rotary_emb
 from flash_attn import flash_attn_func
-try:
-    from apex.normalization import FusedRMSNorm as RMSNorm 
-except ModuleNotFoundError:
-    print("No fused RMSNorm")
-    from .rms_norm import RMSNorm
+# try:
+#     from apex.normalization import FusedRMSNorm as RMSNorm 
+# except ModuleNotFoundError:
+#     print("No fused RMSNorm")
+#     from .rms_norm import RMSNorm
 
 
 def init_method(tensor, **kwargs):
@@ -30,11 +30,10 @@ def lambda_init_fn(depth):
     return 0.8 - 0.6 * math.exp(-0.3 * depth)
 
 
-class MultiheadFlashDiff1(nn.Module):
+class MultiheadFlashDiff2(nn.Module):
     """
-    (Recommended)
-    DiffAttn implemented with FlashAttention, for packages that support different qk/v dimensions
-    e.g., our customized-flash-attention (https://aka.ms/flash-diff) and xformers (https://github.com/facebookresearch/xformers)
+    DiffAttn implemented with FlashAttention, for packages that does not support different qk/v dimensions
+    e.g., flash-attention (https://github.com/Dao-AILab/flash-attention)
     """
     def __init__(
         self,
@@ -83,7 +82,7 @@ class MultiheadFlashDiff1(nn.Module):
 
         q = q.view(bsz, tgt_len, 2 * self.num_heads, self.head_dim)
         k = k.view(bsz, src_len, 2 * self.num_kv_heads, self.head_dim)
-        v = v.view(bsz, src_len, self.num_kv_heads, 2 * self.head_dim)
+        v = v.view(bsz, src_len, self.num_kv_heads, 2, self.head_dim)
 
         q = apply_rotary_emb(q, *rel_pos, interleaved=True)
         k = apply_rotary_emb(k, *rel_pos, interleaved=True)
@@ -93,8 +92,15 @@ class MultiheadFlashDiff1(nn.Module):
         k = k.reshape(bsz, src_len, self.num_kv_heads, 2, self.head_dim)
         q1, q2 = q[:, :, :, 0], q[:, :, :, 1]
         k1, k2 = k[:, :, :, 0], k[:, :, :, 1]
-        attn1 = flash_attn_func(q1, k1, v, causal=True)
-        attn2 = flash_attn_func(q2, k2, v, causal=True)
+        v1, v2 = v[:, :, :, 0], v[:, :, :, 1]
+
+        attn11 = flash_attn_func(q1, k1, v1, causal=True)
+        attn12 = flash_attn_func(q1, k1, v2, causal=True)
+        attn1 = torch.cat([attn11, attn12], dim=-1)
+        
+        attn21 = flash_attn_func(q2, k2, v1, causal=True)
+        attn22 = flash_attn_func(q2, k2, v2, causal=True)
+        attn2 = torch.cat([attn21, attn22], dim=-1)
         
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(q)
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(q)

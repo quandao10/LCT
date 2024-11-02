@@ -574,6 +574,7 @@ if __name__ == "__main__":
     parser.add_argument("--wo-norm", action="store_true", default=False)
     parser.add_argument("--use-scale-residual", action="store_true", default=False)
     parser.add_argument("--linear-act", type=str, default=None)
+    parser.add_argument("--block-type", type=str, default="DiTBlock")
     
     
     ###### diffusion ######

@@ -1,9 +1,30 @@
-# # # export MASTER_PORT=10120
+#!/bin/bash
+#SBATCH --mail-user=htp26@cornell.edu  # Email
+#SBATCH --mail-type=END               # Request status by email
+#SBATCH -J lct             # Job name
+#SBATCH -o watch_folder/%x_%j.out  # output file (%j expands to jobID)
+#SBATCH -N 1                          # Total number of nodes requested
+#SBATCH --get-user-env                # retrieve the users login environment
+#SBATCH --mem=32000                   # server memory requested (per node)
+#SBATCH -t 960:00:00                  # Time limit (hh:mm:ss)
+#SBATCH --partition=gpu          # Request partition
+#SBATCH --constraint="[a5000|a6000|a100|3090]"
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:a5000:1                  # Type/number of GPUs needed
+#SBATCH --open-mode=append            # Do not overwrite logs
+#SBATCH --requeue                     # Requeue upon preemption
 
+export MASTER_PORT=10120
 
-CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=1 train_cm_latent.py \
+eval "$(conda shell.bash hook)"
+conda activate lct
+
+BATCH_SIZE=128
+NUM_GPUS=1
+
+CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --exp celeb_dit_diffattn_700ep_B_relu_eps1e-5  \
-        --datadir /share/kuleshov/datasets/celeba.lmdb/ \
+        --datadir /share/kuleshov/datasets/latent_celeba_256/ \
         --dataset latent_celeb256 \
         --results-dir ./results/ \
         --image-size 32 \
@@ -17,7 +38,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((48)) \
+        --global-batch-size $((BATCH_SIZE * NUM_GPUS)) \
         --epochs $((700*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
@@ -35,6 +56,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc
         --ot-hard \
         --c-by-loss-std \
         --linear-act relu \
+        --block-type DiTBlockDiffAttn \
         # --resume \
         # --wo-norm \
         # --use-scale-residual \

@@ -110,7 +110,8 @@ def create_model_and_diffusion(args):
                                             linear_act=args.linear_act,
                                             no_scale = args.no_scale,
                                             wo_norm = args.wo_norm,
-                                            use_scale_residual = args.use_scale_residual)
+                                            use_scale_residual = args.use_scale_residual,
+                                            block_type=args.block_type)
     elif "U-DiT" in args.model_type:
         model = UDiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,

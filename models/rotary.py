@@ -8,6 +8,41 @@ import triton
 import triton.language as tl
 
 
+class Rotary(torch.nn.Module):
+    def __init__(self, dim, base=10000, precision=torch.bfloat16):
+        """Rotary positional embedding
+        Reference : https://blog.eleuther.ai/rotary-embeddings/
+        Paper: https://arxiv.org/pdf/2104.09864.pdf
+        Args:
+            dim: Dimension of embedding
+            base: Base value for exponential
+            precision: precision to use for numerical values
+        """
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+        self.seq_len_cached = None
+        self.cos_cached = None
+        self.sin_cached = None
+        self.precision = precision
+
+    def forward(self, x, seq_len):
+        """
+        Args:
+            x: Input x with T X B X C
+            seq_len: Sequence length of input x
+        """
+        seq_len = x.size(1)
+        if seq_len != self.seq_len_cached:
+            self.seq_len_cached = seq_len
+            t = torch.arange(seq_len, device=x.device).type_as(self.inv_freq)
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+            self.cos_cached = emb.cos()# [:, None, None, :]
+            self.sin_cached = emb.sin()# [:, None, None, :]
+        return self.cos_cached, self.sin_cached
+
+
 # @triton.autotune(
 #     configs=[
 #         triton.Config({"BLOCK_M": 2}),
@@ -328,5 +363,5 @@ def apply_rotary_emb(
     Apply rotary embedding to the first rotary_dim of x.
     """
     return ApplyRotaryEmb.apply(
-        x, cos, sin, interleaved, inplace, seqlen_offsets, cu_seqlens, max_seqlen
+        x, cos.to(x.dtype), sin.to(x.dtype), interleaved, inplace, seqlen_offsets, cu_seqlens, max_seqlen
     )

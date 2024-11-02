@@ -21,7 +21,9 @@ import copy
 import flash_attn
 from einops import rearrange
 
-from multihead_flashdiff_1 import MultiheadFlashDiff1
+# from models.multihead_flashdiff_1 import MultiheadFlashDiff1
+from models.multihead_flashdiff_2 import MultiheadFlashDiff2
+from models.rotary import Rotary
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
@@ -112,7 +114,7 @@ class DiTBlock(nn.Module):
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
-    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, mlp_ratio=4.0, residual_scale=1.0, use_scale_residual=False, **block_kwargs):
+    def __init__(self, hidden_size, num_heads, depth, norm, wo_norm, linear_act, mlp_ratio=4.0, residual_scale=1.0, use_scale_residual=False, **block_kwargs):
         super().__init__()
         self.residual_scale = residual_scale
         self.use_scale_residual = use_scale_residual
@@ -172,7 +174,7 @@ class DiTBlockFlashAttn(nn.Module):
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
-    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, mlp_ratio=4.0, residual_scale=1.0, use_scale_residual=False, **block_kwargs):
+    def __init__(self, hidden_size, num_heads, depth, norm, wo_norm, linear_act, mlp_ratio=4.0, residual_scale=1.0, use_scale_residual=False, **block_kwargs):
         super().__init__()
         self.residual_scale = residual_scale
         self.use_scale_residual = use_scale_residual
@@ -265,7 +267,7 @@ class DiTBlockDiffAttn(nn.Module):
         self.use_scale_residual = use_scale_residual
         self.wo_norm = wo_norm
         self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-5) if not wo_norm else nn.Identity() 
-        self.attn = MultiheadFlashDiff1(hidden_size, depth=depth, num_heads=num_heads, norm_layer=norm) \
+        self.attn = MultiheadFlashDiff2(hidden_size, depth=depth, num_heads=num_heads, norm_layer=norm)
         self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-5) if not wo_norm else nn.Identity()
         mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
         if linear_act == "mish":
@@ -292,11 +294,11 @@ class DiTBlockDiffAttn(nn.Module):
             nn.Linear(hidden_size, 4 * hidden_size, bias=True)
         )
 
-    def forward(self, x, c):
+    def forward(self, x, rotary_cos_sin, c):
         if not self.use_scale_residual:
             x_ori = copy.copy(x)
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-            attn = self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
+            attn = self.attn(modulate(self.norm1(x), shift_msa, scale_msa), rotary_cos_sin)
             x = x + gate_msa.unsqueeze(1) * attn
             mlp = self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
             x = x + gate_mlp.unsqueeze(1) * mlp
@@ -309,7 +311,7 @@ class DiTBlockDiffAttn(nn.Module):
                 print(gate_msa)
         else:
             shift_msa, scale_msa, shift_mlp, scale_mlp = self.adaLN_modulation(c).chunk(4, dim=1)
-            x = x + self.residual_scale * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
+            x = x + self.residual_scale * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), rotary_cos_sin)
             x = x + self.residual_scale * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
         return x
 
@@ -389,6 +391,8 @@ class DiT(nn.Module):
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
+        self.rotary_emb = Rotary(
+            hidden_size // num_heads // 4, precision=torch.bfloat16)
 
         dit_block = BLOCK_ZOO[block_type]
         self.blocks = nn.ModuleList([
@@ -471,9 +475,11 @@ class DiT(nn.Module):
         y = self.y_embedder(y, self.training)    # (N, D)
         c = t + y                                # (N, D)
 
+        rotary_cos_sin = self.rotary_emb(x, seq_len=x.size(1))
+
         with torch.cuda.amp.autocast(dtype=torch.bfloat16):
             for idx, block in enumerate(self.blocks):
-                x = block(x, c)
+                x = block(x, rotary_cos_sin, c)
                 if torch.any(torch.isnan(x)):
                     print(idx)
                     exit()

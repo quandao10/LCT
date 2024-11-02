@@ -10,3 +10,7 @@ accelerate
 einops
 opencv-python
 scikit-image
+piq
+git+https://github.com/jonbarron/robust_loss_pytorch
+POT
+lion-pytorch

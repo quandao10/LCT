@@ -1,3 +1,5 @@
+conda install mpi4py
+
 ## Training
 To train consistency model
 ```
