@@ -16,7 +16,7 @@ from .random_util import get_generator
 import robust_loss_pytorch
 
 
-def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0):
+def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0, norm_scale=None):
     if weight_schedule == "snr":
         weightings = snrs
     elif weight_schedule == "snr+1":
@@ -30,6 +30,10 @@ def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0):
     ### ICT weighting
     elif weight_schedule == "ict":
         weightings = 1/(t-t2)
+    elif weight_schedule == "norm_ict":
+        weightings = 80*(1/(t-t2))/norm_scale
+    elif weight_schedule == "log_ict":
+        weightings = th.log(1/(t-t2)+1)
     else:
         raise NotImplementedError()
     return weightings
@@ -64,6 +68,19 @@ class KarrasDenoiser:
 
     def get_snr(self, sigmas):
         return sigmas**-2
+    
+    def normalize_scale(self, num_scales):
+        indices = th.arange(0, num_scales - 1)
+        next_indices = indices + 1
+        t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
+            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
+        )
+        t = t**self.rho
+        next_t = self.sigma_max ** (1 / self.rho) + next_indices / (num_scales - 1) * (
+            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
+        )
+        next_t = next_t**self.rho
+        return th.sum(1/(t-next_t))
 
     def get_sigmas(self, sigmas):
         return sigmas
@@ -210,6 +227,7 @@ class KarrasDenoiser:
         )
         t2 = t2**self.rho
         
+        norm_scale = self.normalize_scale(num_scales)        
         # t2 < t, indices > indices + 1
 
         x_t = x_start + noise * append_dims(t, dims)
@@ -227,7 +245,7 @@ class KarrasDenoiser:
         distiller_target = distiller_target.detach()
 
         snrs = self.get_snr(t)
-        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t) # ICT: weighting 1/(t2-t)
+        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t, norm_scale) # ICT: weighting 1/(t2-t)
         
         # compute diff losses
         diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
