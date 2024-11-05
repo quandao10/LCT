@@ -1,4 +1,4 @@
-export MASTER_PORT=10130
+export MASTER_PORT=10135
 
 # for epoch in 1675
 # do
@@ -83,10 +83,10 @@ export MASTER_PORT=10130
 #                 # --no-scale \
 # done
 
-for epoch in 675 700
+for epoch in 575 600 625 650 675 700
 do
         CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=4 test_cm_latent_ddp.py \
-                --ckpt ./results/latent_celeb256/celeb_dit_best_setting_700ep_B_relu_eps1e-4_qknorm/checkpoints/0000${epoch}.pt \
+                --ckpt /research/cbim/medical/qd66/lct_v2/latent_celeb256/celeb_dit_best_setting_700ep_B_relu_eps1e-4_unnormalized_linear_norm_ada/checkpoints/0000${epoch}.pt \
                 --seed 42 \
                 --dataset latent_celeb256 \
                 --image-size 32 \
@@ -109,5 +109,7 @@ do
                 --ema \
                 --linear-act relu \
                 --wo-norm \
+                --attn-type flash \
+                # --use-scale-residual \
                 # --no-scale \
 done

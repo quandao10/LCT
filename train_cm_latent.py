@@ -223,7 +223,7 @@ def main(args):
         if args.umt:
             opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
-            opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
+            opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=args.eps)
             # opt = Lion(model.parameters(), lr=args.lr)
             # opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=1e-4)
     # define scheduler
@@ -340,6 +340,7 @@ def main(args):
 
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
+            # with torch.cuda.amp.autocast(dtype=torch.bfloat16):
             losses = diffusion.consistency_losses(model,
                                                 x,
                                                 num_scales,
@@ -359,10 +360,7 @@ def main(args):
                 cm_loss = losses["loss"].mean() 
                 diff_loss = losses["diff_loss"].mean()
                 if args.use_diffloss:
-                    if epoch <600:
-                        loss = cm_loss + 5*diff_loss
-                    else:
-                        loss = cm_loss + 5*diff_loss
+                    loss = cm_loss + args.diff_lamb*diff_loss
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
@@ -379,7 +377,6 @@ def main(args):
             else:
                 nan_count += 1
                 nan_t_list = losses["t"][torch.isnan(losses["loss"])]
-                logger.info(f"NaN time list: {nan_t_list}")
                 logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
                 if nan_count  > 100:
                     args.lr = args.lr/2
@@ -388,6 +385,19 @@ def main(args):
                     for g in opt.param_groups:
                         g['lr'] = args.lr
                     nan_count = 0
+                nan_content = {
+                    "epoch": epoch + 1,
+                    "train_steps": train_steps,
+                    "args": args,
+                    "model": model.module.state_dict(),
+                    "opt": opt.state_dict(),
+                    "ema": ema.state_dict(),
+                    "target": target_model.state_dict(),
+                    "model_umt": model_umt.module.state_dict() if args.umt else None,
+                    "x": x,
+                    "n": n,
+                }
+                torch.save(nan_content, os.path.join(checkpoint_dir, "nan_ckpt.pth"))
                 exit()
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
@@ -572,19 +582,23 @@ if __name__ == "__main__":
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys())+list(UDiT_models.keys()), default="openai_unet")
     parser.add_argument("--no-scale", action="store_true", default=False)
     parser.add_argument("--wo-norm", action="store_true", default=False)
-    parser.add_argument("--use-scale-residual", action="store_true", default=False)
+    parser.add_argument("--attn-type", type=str, default="normal")
     parser.add_argument("--linear-act", type=str, default=None)
+    parser.add_argument("--num-register", type=int, default=0)
+    parser.add_argument("--final-conv", action="store_true", default=False)
     
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
-    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
+    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict", "log_ict", "norm_ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "gm", "huber_new", "cauchy_new", "gm_new"], default="huber")
     parser.add_argument("--ot-hard", action="store_true", default=False)
     parser.add_argument("--c-by-loss-std", action="store_true", default=False)
     parser.add_argument("--custom-constant-c", type=float, default=0.0)
+    parser.add_argument("--diff-lamb", type=float, default=5.0)
+    
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
@@ -600,6 +614,7 @@ if __name__ == "__main__":
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--eps", type=float, default=1e-4)
     parser.add_argument("--no-lr-decay", action='store_true', default=False)
     parser.add_argument("--epochs", type=int, default=2000)
     parser.add_argument("--global-batch-size", type=int, default=256)
