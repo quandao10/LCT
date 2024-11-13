@@ -1,3 +1,25 @@
+#!/bin/bash -e
+#SBATCH --job-name=sbatch-0                                                                 # create a short name for your job
+#SBATCH --output=/lustre/scratch/client/vinai/users/thienlt3/khanhdn10/lct/logs/mbpp%A.out  # create a output file
+#SBATCH --error=/lustre/scratch/client/vinai/users/thienlt3/khanhdn10/lct/logs/mbpp%A.err   # create a error file
+#SBATCH --partition=research                                                                # choose partition
+#SBATCH --gpus-per-node=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-gpu=40GB
+#SBATCH --nodes=1
+#SBATCH --nodelist=sdc2-hpc-dgx-a100-018
+#SBATCH --ntasks=1
+#SBATCH --mail-type=begin                                                                   # send email when job begins
+#SBATCH --mail-type=end                                                                     # send email when job ends
+#SBATCH --mail-type=fail                                                                    # send email when job fails
+#SBATCH --mail-user=v.khanhdn10@vinai.io
+
+# conda env
+module purge
+module load python/miniconda3/miniconda3
+eval "$(conda shell.bash hook)"
+conda activate /lustre/scratch/client/vinai/users/thienlt3/envs/khanhdn10/lct
+
 export MASTER_PORT=10124
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \

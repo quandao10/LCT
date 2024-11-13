@@ -20,10 +20,10 @@ module load python/miniconda3/miniconda3
 eval "$(conda shell.bash hook)"
 conda activate /lustre/scratch/client/vinai/users/thienlt3/envs/khanhdn10/lct
 
-export MASTER_PORT=10121
+export MASTER_PORT=10127
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_allinstancenorm \
+        --exp large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_0.01c_allnonscalinglayernorm \
         --datadir ./dataset/ \
         --dataset latent_celeb256 \
         --results-dir ./results/ \
@@ -54,9 +54,9 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --normalize-matrix celeb256_stat.npy \
         --use-diffloss \
         --ot-hard \
-        --c-by-loss-std \
-        --last-norm-type instance-norm \
-        --block-norm-type instance-norm \
+        --custom-constant-c 0.0003456 \
+        --last-norm-type non-scaling-layer-norm \
+        --block-norm-type non-scaling-layer-norm \
         # --resume \
 
 python ~/envs/slack_workflow/running_finished.py        

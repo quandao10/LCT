@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-gpu=40GB
 #SBATCH --nodes=1
-#SBATCH --nodelist=sdc2-hpc-dgx-a100-019
+#SBATCH --nodelist=sdc2-hpc-dgx-a100-020
 #SBATCH --ntasks=1
 #SBATCH --mail-type=begin                                                                   # send email when job begins
 #SBATCH --mail-type=end                                                                     # send email when job ends
@@ -20,15 +20,15 @@ module load python/miniconda3/miniconda3
 eval "$(conda shell.bash hook)"
 conda activate /lustre/scratch/client/vinai/users/thienlt3/envs/khanhdn10/lct
 
-export MASTER_PORT=10124
+export MASTER_PORT=10123
 
-for epoch in 1400
+for epoch in 0175 0375 0575 0775 0975 1175 1375
+# for epoch in 1400
 do
-    # for ema in "ema_0.999" "ema" "ema_0.99993" "ema_0.99994" "ema_0.99995" "ema_0.99997" "ema_0.9999432189950708"
     for ema in "ema_0.99993"
     do
         CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 test_cm_latent_ddp.py \
-                --ckpt ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_allinstancenorm/checkpoints/000${epoch}.pt \
+                --ckpt ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_0.001c_allnonscalinglayernorm/checkpoints/000${epoch}.pt \
                 --seed 42 \
                 --dataset latent_celeb256 \
                 --image-size 32 \
@@ -49,14 +49,14 @@ do
                 --real-img-dir ~/datasets/celeba_256_jpg/ \
                 --compute-fid \
                 --ema $ema \
-                --last-norm-type instance-norm \
-                --block-norm-type instance-norm \
+                --last-norm-type non-scaling-layer-norm \
+                --block-norm-type non-scaling-layer-norm \
 
             python eval_toolbox/calc_metrics.py \
                 --metrics pr50k3_full \
                 --data ~/datasets/celeba_256_jpg \
                 --mirror 1 \
-                --gen_data generated_samples/latent_celeb256/explarge_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_newc_allinstancenorm_ep000${epoch}_${ema} \
+                --gen_data generated_samples/latent_celeb256/explarge_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_0.001c_allnonscalinglayernorm_ep000${epoch}_${ema} \
                 --img_resolution 256
     done
 done
