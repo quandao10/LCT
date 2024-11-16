@@ -14,6 +14,7 @@ import math
 from .nn import mean_flat, append_dims, append_zero
 from .random_util import get_generator
 import robust_loss_pytorch
+from elatentlpips import ELatentLPIPS
 
 
 def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0):
@@ -56,6 +57,8 @@ class KarrasDenoiser:
         self.loss_norm = loss_norm
         if loss_norm == "lpips":
             self.lpips_loss = LPIPS(replace_pooling=True, reduction="none")
+        elif loss_norm == "latent_lpips":
+            self.latent_lpips_loss = ELatentLPIPS(encoder="sd15", augment=None).to("cuda").eval()
         self.rho = rho
         self.num_timesteps = 40
         self.p_mean = -1.1
@@ -301,6 +304,9 @@ class KarrasDenoiser:
                 )
                 * weights
             )
+        elif self.loss_norm == "latent_lpips":
+            loss = self.latent_lpips_loss(distiller, distiller_target, normalize=False)
+            breakpoint()
         elif adaptive is not None:
             diffs = th.abs(distiller - distiller_target).flatten(1, -1)
             loss = adaptive.lossfun(diffs)
