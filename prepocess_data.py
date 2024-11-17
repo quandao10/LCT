@@ -29,7 +29,7 @@ import logging
 import os
 from diffusers.models import AutoencoderKL, ConsistencyDecoderVAE
 from tqdm import tqdm
-
+from torchvision.utils import save_image
 
 
 def requires_grad(model, flag=True):
@@ -122,7 +122,7 @@ def main(args):
     # Setup a feature folder:
     
     os.makedirs(args.features_path, exist_ok=True)
-    os.makedirs(os.path.join(args.features_path, 'celeba_256'), exist_ok=True)
+    os.makedirs(os.path.join(args.features_path, 'imagenet256_res_'), exist_ok=True)
     # os.makedirs(os.path.join(args.features_path, 'imagenet256_label_flip'), exist_ok=True)
 
     # Create model:
@@ -133,7 +133,7 @@ def main(args):
 
     # Setup data:
     transform = transforms.Compose([
-        # transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
+        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
         # transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
@@ -144,9 +144,9 @@ def main(args):
     #     transforms.ToTensor(),
     #     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     # ])
-    # dataset = ImageFolder(args.data_path, transform=transform)
+    dataset = ImageFolder(args.data_path, transform=transform)
     # flip_dataset = ImageFolder(args.data_path, transform=flip_transform)
-    dataset = CustomDataset(args.data_path, transform=transform)
+    # dataset = CustomDataset(args.data_path, transform=transform)
     # flip_dataset = CustomDataset(args.data_path, transform=flip_transform)
     
     loader = DataLoader(
@@ -165,17 +165,20 @@ def main(args):
     #     drop_last=False
     # )
 
-    for i, x in enumerate(tqdm(loader)):
+    for i, (x, y) in enumerate(tqdm(loader)):
         x = x.to(device)
         # y = y.to(device)
         with torch.no_grad():
             # Map input images to latent space + normalize latents:
             x = vae.encode(x).latent_dist.sample().mul_(0.18215)
-        x = x.detach().cpu().numpy()
+        # x = x.detach().cpu().numpy()
+        x_res = vae.decode(x/0.18215).sample 
+        if i < 1000:
+            save_image(x_res * 0.5 + 0.5, f'{args.features_path}/imagenet256_res_/{str(i).zfill(9)}.jpg')
         # y = y.detach().cpu().numpy()
         
-        np.save(f'{args.features_path}/celeba_256/{str(i).zfill(9)}.npy', x[0])
-        # np.save(f'{args.features_path}/imagenet256_label_flip/{str(i).zfill(9)}.npy', y[0])
+        # np.save(f'{args.features_path}/imagenet256/{str(i).zfill(9)}.npy', x[0])
+        # np.save(f'{args.features_path}/imagenet256_label/{str(i).zfill(9)}.npy', y[0])
     # print("save flip loader")
     # N = len(dataset)
     # print("number of image sample: {}".format(N))
@@ -194,16 +197,12 @@ if __name__ == "__main__":
     # Default args here will train DiT-XL/2 with the hyperparameters we used in our paper (except training iters).
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-path", type=str, required=True)
-    parser.add_argument("--features-path", type=str, default="features")
-    parser.add_argument("--results-dir", type=str, default="results")
+    parser.add_argument("--features-path", type=str, default="../dataset/features_dcvae")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
-    parser.add_argument("--epochs", type=int, default=1400)
     parser.add_argument("--global-batch-size", type=int, default=50)
     parser.add_argument("--global-seed", type=int, default=0)
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--log-every", type=int, default=100)
-    parser.add_argument("--ckpt-every", type=int, default=50_000)
     args = parser.parse_args()
     main(args)

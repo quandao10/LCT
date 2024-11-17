@@ -39,9 +39,10 @@ class CustomDataset(Dataset):
         features = np.load(os.path.join(self.features_dir, file_id))
         if self.labels_dir is not None:
             labels = np.load(os.path.join(self.labels_dir, file_id))
+            return torch.from_numpy(features), torch.from_numpy(labels)
         else:
             return torch.from_numpy(features), torch.tensor(0)
-        return torch.from_numpy(features.copy()), torch.from_numpy(labels)
+        
 
 def get_dataset(args):
     if args.dataset == "cifar10":
@@ -167,8 +168,10 @@ def get_dataset(args):
     #     dataset = CustomDataset("celebhq_flip", "features/celeb512_feature_flip")
     # elif args.dataset == "latent_celeb1024":
     #     dataset = CustomDataset("celebhq", "features/celebahq1024_features")
-    # elif args.dataset == "latent_imagenet256":
-    #     dataset = CustomDataset("imagenet", "features/imagenet256_features", "features/imagenet256_labels")
+    elif args.dataset == "latent_imagenet256":
+        dataset = CustomDataset("imagenet", 
+                                "/research/cbim/vast/qd66/workspace/dataset_new/features/imagenet/features/imagenet256_features", 
+                                "/research/cbim/vast/qd66/workspace/dataset_new/features/imagenet/features/imagenet256_labels")
     # elif args.dataset == "latent_imagenet512":
     #     dataset = CustomDataset("imagenet", "features/imagenet512_features", "features/imagenet512_labels")
     return dataset

@@ -32,7 +32,17 @@ from models.network_karras import GroupNorm, Linear, Conv2d
 # )
 
 def modulate(x, shift, scale):
-    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+    return x * PixelNorm()(1 + scale.unsqueeze(1)) + PixelNorm()(shift.unsqueeze(1))
+
+# def modulate(x, shift, scale):
+#     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
+class PixelNorm(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input):
+        return input / torch.sqrt(torch.mean(input ** 2, dim=-1, keepdim=True) + 1e-8)
 
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
@@ -410,7 +420,7 @@ class DiT(nn.Module):
         depth=28,
         num_heads=16,
         mlp_ratio=4.0,
-        class_dropout_prob=0.1,
+        class_dropout_prob=1e-10,
         num_classes=1000,
         learn_sigma=True,
         no_scale = False,
@@ -571,15 +581,17 @@ class DiT(nn.Module):
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
         model_out = self.forward(combined, t, y)
+        # print(model_out.shape)
+        # exit()
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
         # This can be done by uncommenting the following line and commenting-out the line following that.
         # eps, rest = model_out[:, :self.in_channels], model_out[:, self.in_channels:]
-        eps, rest = model_out[:, :3], model_out[:, 3:]
-        cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
+        # eps, rest = model_out[:, :3], model_out[:, 3:]
+        cond_eps, uncond_eps = torch.split(model_out, len(model_out) // 2, dim=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
-        return torch.cat([eps, rest], dim=1)
+        return eps #torch.cat([eps, rest], dim=1)
 
 
 #################################################################################

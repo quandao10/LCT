@@ -83,22 +83,22 @@ export MASTER_PORT=10135
 #                 # --no-scale \
 # done
 
-for epoch in 575 600 625 650 675 700
+for epoch in 550 575 600 625 650 675 700
 do
-        CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=4 test_cm_latent_ddp.py \
-                --ckpt /research/cbim/medical/qd66/lct_v2/latent_celeb256/celeb_dit_best_setting_700ep_B_relu_eps1e-4_unnormalized_linear_norm_ada/checkpoints/0000${epoch}.pt \
+        CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=4 test_cm_latent_ddp.py \
+                --ckpt /research/cbim/medical/qd66/lct_v2/latent_celeb256/celeb_dit_best_setting_700ep_L_relu_eps1e-4_unnormalized_linear_norm_double_ada/checkpoints/0000${epoch}.pt \
                 --seed 42 \
                 --dataset latent_celeb256 \
                 --image-size 32 \
                 --num-in-channels 4 \
                 --num-classes 0 \
                 --steps 641 \
-                --batch-size $((256*1)) \
+                --batch-size $((200)) \
                 --num-channels 128 \
                 --num-head-channels 64 \
                 --num-res-blocks 4 \
                 --resblock-updown \
-                --model-type DiT-B/2 \
+                --model-type DiT-L/2 \
                 --channel-mult 1,2,3,4 \
                 --attention-resolutions 16,8 \
                 --sampler onestep \
@@ -110,6 +110,33 @@ do
                 --linear-act relu \
                 --wo-norm \
                 --attn-type flash \
-                # --use-scale-residual \
-                # --no-scale \
+                # --final-conv
+                # --num-register 4
 done
+
+
+# torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 test_cm_latent_ddp.py \
+#                 --ckpt /research/cbim/medical/qd66/lct_v2/latent_imagenet256/imagenet_dit_best_setting_700ep_L_relu_eps1e-4_unnormalized_linear_norm/checkpoints/0000054.pt \
+#                 --seed 42 \
+#                 --dataset latent_imagenet256 \
+#                 --image-size 32 \
+#                 --num-in-channels 4 \
+#                 --num-classes 1000 \
+#                 --steps 21 \
+#                 --batch-size $((8*1)) \
+#                 --num-channels 128 \
+#                 --num-head-channels 64 \
+#                 --num-res-blocks 4 \
+#                 --resblock-updown \
+#                 --model-type DiT-L/2 \
+#                 --channel-mult 1,2,3,4 \
+#                 --attention-resolutions 16,8 \
+#                 --sampler multistep \
+#                 --ts 0,13,21 \
+#                 --normalize-matrix latent_imagenet256_stat.npy \
+#                 --real-img-dir ../real_samples/celeba_256/ \
+#                 --ema \
+#                 --linear-act relu \
+#                 --wo-norm \
+#                 --attn-type flash \
+#                 --cfg-scale 2.0 \

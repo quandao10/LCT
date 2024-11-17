@@ -305,6 +305,10 @@ Epoch = 0000625, FID = 8.579579695678206, cfg_scale = 1.0
 Epoch = 0000650, FID = 8.158218584228564, cfg_scale = 1.0
 Epoch = 0000675, FID = 8.078273968832121, cfg_scale = 1.0
 Epoch = 0000700, FID = 8.169493351057866, cfg_scale = 1.0
+
+
+
+
 DiT-B/2 relu eps1e-4
 Epoch = 0000575, FID = 8.095065303297076, cfg_scale = 1.0
 Epoch = 0000600, FID = 8.14949468948555, cfg_scale = 1.0
@@ -347,6 +351,9 @@ Epoch = 0000625, FID = 6.396419848947346, cfg_scale = 1.0
 Epoch = 0000650, FID = 6.446194094302143, cfg_scale = 1.0
 Epoch = 0000675, FID = 6.34955104713373, cfg_scale = 1.0
 Epoch = 0000700, FID = 6.425110856829747, cfg_scale = 1.0
+
+Flash Attention
+
 DiT-B/2 unnormalized flash
 Epoch = 0000575, FID = 7.804001774466258, cfg_scale = 1.0
 Epoch = 0000600, FID = 7.802581089263299, cfg_scale = 1.0
@@ -378,4 +385,74 @@ Epoch = 0000700, FID = 7.328007118461812, cfg_scale = 1.0
 DiT-B/2 unnormalized flash + norm_ada
 Epoch = 0000575, FID = 10.044100493105248, cfg_scale = 1.0
 Epoch = 0000600, FID = 10.003694692827423, cfg_scale = 1.0
+DiT-B/2 unnormalized flash + 4 register
+Epoch = 0000500, FID = 9.007832402760329, cfg_scale = 1.0
+Epoch = 0000525, FID = 7.914213475154554, cfg_scale = 1.0
+Epoch = 0000550, FID = 8.012513410084466, cfg_scale = 1.0
+Epoch = 0000575, FID = 8.046336913134553, cfg_scale = 1.0
+Epoch = 0000600, FID = 8.227221342671896, cfg_scale = 1.0
+DiT-B/2 unnormalized flash + final conv
+Epoch = 0000575, FID = 8.884627926608914, cfg_scale = 1.0
+Epoch = 0000600, FID = 8.788200388344194, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.500216865967644, cfg_scale = 1.0
+Epoch = 0000650, FID = 8.312554925884939, cfg_scale = 1.0
+Epoch = 0000675, FID = 8.377599670586818, cfg_scale = 1.0
+Epoch = 0000700, FID = 13.94134513548596, cfg_scale = 1.0
+DiT-B/2 unnormalized flash + prev linear + clip 040
+Epoch = 0000575, FID = 8.787979939927027, cfg_scale = 1.0
+Epoch = 0000600, FID = 8.723045403936112, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.30821000889324, cfg_scale = 1.0
+Epoch = 0000650, FID = 8.103377604469387, cfg_scale = 1.0
 
+# L/2
+
+DiT-L/2 unnormalized flash + prev linear
+Epoch = 0000550, FID = 7.194891810017509, cfg_scale = 1.0
+Epoch = 0000575, FID = 7.083502853074293, cfg_scale = 1.0
+Epoch = 0000600, FID = 7.893630757854851, cfg_scale = 1.0
+Epoch = 0000625, FID = 7.648424035635088, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.4621848432653906, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.557492159914801, cfg_scale = 1.0
+Epoch = 0000700, FID = 7.517992676764663, cfg_scale = 1.0
+DiT-L/2 unnormalized flash + prev linear
+Epoch = 0000550, FID = 7.054811463290008, cfg_scale = 1.0
+Epoch = 0000575, FID = 6.983829172460958, cfg_scale = 1.0
+Epoch = 0000600, FID = 7.792298144004576, cfg_scale = 1.0
+Epoch = 0000600, FID = 7.702612683998694, cfg_scale = 1.0
+Epoch = 0000580, FID = 7.068015991433441, cfg_scale = 1.0
+Epoch = 0000585, FID = 7.2474800044205665, cfg_scale = 1.0
+Epoch = 0000550, FID = 7.605867051277414, cfg_scale = 1.0
+Epoch = 0000555, FID = 7.794801967998893, cfg_scale = 1.0
+Epoch = 0000550, FID = 7.478860160278913, cfg_scale = 1.0
+Epoch = 0000555, FID = 7.729366049929297, cfg_scale = 1.0
+Epoch = 0000560, FID = 7.829981028083637, cfg_scale = 1.0
+Epoch = 0000565, FID = 8.046326376737227, cfg_scale = 1.0
+Epoch = 0000525, FID = 7.124213410924511, cfg_scale = 1.0
+Epoch = 0000550, FID = 7.068134968415478, cfg_scale = 1.0
+Epoch = 0000560, FID = 7.146896540916117, cfg_scale = 1.0
+Epoch = 0000565, FID = 7.015406094605453, cfg_scale = 1.0
+Epoch = 0000570, FID = 7.019508631366705, cfg_scale = 1.0
+Epoch = 0000575, FID = 6.971758514381236, cfg_scale = 1.0
+Epoch = 0000580, FID = 7.018398913762297, cfg_scale = 1.0
+Epoch = 0000585, FID = 6.997131903976765, cfg_scale = 1.0
+Epoch = 0000590, FID = 7.062961179569527, cfg_scale = 1.0
+Epoch = 0000595, FID = 7.135675912598344, cfg_scale = 1.0
+Epoch = 0000600, FID = 7.311421683437317, cfg_scale = 1.0
+Epoch = 0000605, FID = 7.2108791325129005, cfg_scale = 1.0
+Epoch = 0000610, FID = 7.179822768506966, cfg_scale = 1.0
+Epoch = 0000615, FID = 7.208489182253345, cfg_scale = 1.0
+Epoch = 0000620, FID = 7.089244113278539, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.9664133619367306, cfg_scale = 1.0
+Epoch = 0000630, FID = 7.099709084289685, cfg_scale = 1.0
+Epoch = 0000645, FID = 7.143306439263625, cfg_scale = 1.0
+Epoch = 0000640, FID = 7.08720763560774, cfg_scale = 1.0
+Epoch = 0000645, FID = 7.143306439263625, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.198805033772317, cfg_scale = 1.0
+DiT-L/2 unnormalized flash + prev linear + pixel norm + clipnorm 50 + 5e-5
+Epoch = 0000550, FID = 7.378181409359286, cfg_scale = 1.0
+Epoch = 0000575, FID = 7.534257226050158, cfg_scale = 1.0
+Epoch = 0000600, FID = 7.573545286840272, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.790854574591322, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.037198787408414, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.25436436598784, cfg_scale = 1.0
+Epoch = 0000700, FID = 7.39845508201887, cfg_scale = 1.0
