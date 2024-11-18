@@ -1,4 +1,4 @@
-export MASTER_PORT=10124
+export MASTER_PORT=10125
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
         --exp large_dhariwal_unet_cauchy_no_grad_norm_bs128_origincm_latentlpips \
@@ -30,6 +30,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --attention-resolutions 16,8 \
         --last-norm-type group-norm \
         --block-norm-type group-norm \
+        --model-ckpt results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_bs128_origincm_latentlpips/checkpoints/0000675.pt \
         # --resume \
 
 python ~/envs/slack_workflow/running_finished.py        

@@ -11,3 +11,4 @@ dataset/
 loss_diffs/
 logs/
 notebook/
+ckpt/

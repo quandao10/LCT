@@ -337,7 +337,6 @@ def main(args):
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
-            breakpoint()
             if use_normalize:
                 x = x/0.18215
                 x = (x - mean)/std * 0.5

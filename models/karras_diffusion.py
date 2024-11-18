@@ -305,8 +305,8 @@ class KarrasDenoiser:
                 * weights
             )
         elif self.loss_norm == "latent_lpips":
-            loss = self.latent_lpips_loss(distiller, distiller_target, normalize=False)
-            breakpoint()
+            diffs = self.latent_lpips_loss(distiller, distiller_target, normalize=False, ensembling=False)
+            loss = diffs.squeeze() * weights
         elif adaptive is not None:
             diffs = th.abs(distiller - distiller_target).flatten(1, -1)
             loss = adaptive.lossfun(diffs)

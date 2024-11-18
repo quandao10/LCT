@@ -31,6 +31,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --normalize-matrix celeb256_stat.npy \
         --last-norm-type group-norm \
         --block-norm-type group-norm \
+        --model-ckpt results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_bs128_origincm_l2/checkpoints/0000800.pt \
         # --resume \
 
 python ~/envs/slack_workflow/running_finished.py        
