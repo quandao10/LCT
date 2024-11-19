@@ -4,7 +4,7 @@ from datasets_prep.data_transforms import center_crop_arr
 from datasets_prep.inpainting_dataset import InpaintingTrainDataset
 from datasets_prep.lmdb_datasets import LMDBDataset
 from datasets_prep.lsun import LSUN
-from datasets_prep.dataset_edm2 import ImageFolderDataset
+from datasets_prep.dataset_edm2 import ExtractedDataset
 from torchvision.datasets import CIFAR10, ImageNet
 import numpy as np
 from torch.utils.data import Dataset
@@ -155,7 +155,7 @@ def get_dataset(args):
     elif args.dataset == "latent_ffhq256":
         dataset = CustomDataset("ffhq", "./dataset/latent_ffhq_256")
     elif args.dataset == "latent_imagenet512":
-        dataset = ImageFolderDataset("./dataset/img512-sd.zip", use_labels=True)
+        dataset = ExtractedDataset("./dataset/latent_imagenet_512", use_labels=True)
     # elif args.dataset == "latent_ffhq256":
     #     dataset = CustomDataset("ffhq", "features/ffhq256_features")
     # elif args.dataset == "latent_ffhq256_flip":

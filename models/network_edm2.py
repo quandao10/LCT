@@ -246,7 +246,7 @@ class UNet(torch.nn.Module):
                 self.dec[f'{res}x{res}_block{idx}'] = Block(cin, cout, cemb, flavor='dec', attention=(res in attn_resolutions), **block_kwargs)
         self.out_conv = MPConv(cout, img_channels, kernel=[3,3])
 
-    def forward(self, x, noise_labels, y):
+    def forward(self, x, y, noise_labels):
         # Embedding.
         class_labels = y
         emb = self.emb_noise(self.emb_fourier(noise_labels))
@@ -321,6 +321,12 @@ class Precond(torch.nn.Module):
 #################################################################################
 #                                  EDM2 Configs                                 #
 #################################################################################
+def load_ckpt(ckpt_file):
+    import pickle
+    with open(ckpt_file, "rb") as f:
+        ckpt = pickle.load(f)
+    return ckpt["ema"].unet.state_dict()
+
 
 def EDM2_XXS(img_resolution, img_channels, label_dim, dropout, **kwargs):
     return UNet(
@@ -343,7 +349,7 @@ def EDM2_XS(img_resolution, img_channels, label_dim, dropout, **kwargs):
     )
 
 def EDM2_S(img_resolution, img_channels, label_dim, dropout, **kwargs):
-    return UNet(
+    model = UNet(
         model_channels=192,
         dropout=dropout, # rcm 0.00
         img_resolution=img_resolution,
@@ -351,6 +357,10 @@ def EDM2_S(img_resolution, img_channels, label_dim, dropout, **kwargs):
         label_dim=label_dim,
         **kwargs,
     )
+    breakpoint()
+    state_dict = load_ckpt("./ckpt/edm2-img512-s-2147483-0.025.pkl")
+    model.load_state_dict(state_dict)
+    return model
 
 def EDM2_M(img_resolution, img_channels, label_dim, dropout, **kwargs):
     return UNet(

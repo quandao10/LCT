@@ -16,6 +16,7 @@ import torch
 import torch.utils
 import torch.utils.data
 import dnnlib
+from threading import Lock
 
 try:
     import pyspng
@@ -42,6 +43,7 @@ class Dataset(torch.utils.data.Dataset):
         self._cached_images = dict() # {raw_idx: np.ndarray, ...}
         self._raw_labels = None
         self._label_shape = None
+        self.lock = Lock()
 
         # Apply max_size.
         self._raw_idx = np.arange(self._raw_shape[0], dtype=np.int64)
@@ -90,17 +92,18 @@ class Dataset(torch.utils.data.Dataset):
         return self._raw_idx.size
 
     def __getitem__(self, idx):
-        raw_idx = self._raw_idx[idx]
-        image = self._cached_images.get(raw_idx, None)
-        if image is None:
-            image = self._load_raw_image(raw_idx)
-            if self._cache:
-                self._cached_images[raw_idx] = image
-        assert isinstance(image, np.ndarray)
-        assert list(image.shape) == self._raw_shape[1:]
-        if self._xflip[idx]:
-            assert image.ndim == 3 # CHW
-            image = image[:, :, ::-1]
+        with self.lock:
+            raw_idx = self._raw_idx[idx]
+            image = self._cached_images.get(raw_idx, None)
+            if image is None:
+                image = self._load_raw_image(raw_idx)
+                if self._cache:
+                    self._cached_images[raw_idx] = image
+            assert isinstance(image, np.ndarray)
+            assert list(image.shape) == self._raw_shape[1:]
+            if self._xflip[idx]:
+                assert image.ndim == 3 # CHW
+                image = image[:, :, ::-1]
         return image.copy(), self.get_label(idx)
 
     def get_label(self, idx):
@@ -222,23 +225,19 @@ class ImageFolderDataset(Dataset):
         return dict(super().__getstate__(), _zipfile=None)
 
     def _load_raw_image(self, raw_idx):
-        try:
-            fname = self._image_fnames[raw_idx]
-            ext = self._file_ext(fname)
-            with self._open_file(fname) as f:
-                if ext == '.npy':
-                    image = np.load(f)
-                    image = image.reshape(-1, *image.shape[-2:])
-                elif ext == '.png' and pyspng is not None:
-                    image = pyspng.load(f.read())
-                    image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
-                else:
-                    image = np.array(PIL.Image.open(f))
-                    image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
-            return image
-        except Exception as e:
-            print(e)
-            breakpoint()
+        fname = self._image_fnames[raw_idx]
+        ext = self._file_ext(fname)
+        with self._open_file(fname) as f:
+            if ext == '.npy':
+                image = np.load(f)
+                image = image.reshape(-1, *image.shape[-2:])
+            elif ext == '.png' and pyspng is not None:
+                image = pyspng.load(f.read())
+                image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
+            else:
+                image = np.array(PIL.Image.open(f))
+                image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
+        return image
 
     def _load_raw_labels(self):
         fname = 'dataset.json'
@@ -253,3 +252,20 @@ class ImageFolderDataset(Dataset):
         labels = np.array(labels)
         labels = labels.astype({1: np.int64, 2: np.float32}[labels.ndim])
         return labels
+
+class ExtractedDataset(torch.utils.data.Dataset):
+    def __init__(self, path, use_labels=True):
+        self.path = path
+        self.use_labels = use_labels
+        with open(os.path.join(self.path, 'dataset.json'), 'r') as f:
+            self.items = json.load(f)['labels']
+    
+    def __len__(self):
+        return len(self.items)
+    
+    def __getitem__(self, index):
+        npy_file, label = self.items[index]
+        npy_data = np.load(os.path.join(self.path, npy_file))
+        mean, std = np.array_split(npy_data, indices_or_sections=2, axis=0)
+        sample = mean + np.random.randn(*mean.shape) * std
+        return sample, label

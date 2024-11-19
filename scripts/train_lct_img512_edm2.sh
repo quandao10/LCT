@@ -7,7 +7,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --results-dir ./results/ \
         --image-size 64 \
         --num-in-channels 4 \
-        --num-classes 0 \
+        --num-classes 1000 \
         --weight-schedule ict \
         --loss-norm cauchy \
         --target-ema-mode adaptive \
@@ -23,7 +23,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --ict \
         --max-grad-norm 100.0 \
         --model-type EDM2-S \
-        --normalize-matrix celeb256_stat.npy \
+        --normalize-matrix imagenet512_stat.npy \
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
