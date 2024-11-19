@@ -101,7 +101,6 @@ class Dataset(torch.utils.data.Dataset):
         if self._xflip[idx]:
             assert image.ndim == 3 # CHW
             image = image[:, :, ::-1]
-        breakpoint()
         return image.copy(), self.get_label(idx)
 
     def get_label(self, idx):
@@ -223,19 +222,23 @@ class ImageFolderDataset(Dataset):
         return dict(super().__getstate__(), _zipfile=None)
 
     def _load_raw_image(self, raw_idx):
-        fname = self._image_fnames[raw_idx]
-        ext = self._file_ext(fname)
-        with self._open_file(fname) as f:
-            if ext == '.npy':
-                image = np.load(f)
-                image = image.reshape(-1, *image.shape[-2:])
-            elif ext == '.png' and pyspng is not None:
-                image = pyspng.load(f.read())
-                image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
-            else:
-                image = np.array(PIL.Image.open(f))
-                image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
-        return image
+        try:
+            fname = self._image_fnames[raw_idx]
+            ext = self._file_ext(fname)
+            with self._open_file(fname) as f:
+                if ext == '.npy':
+                    image = np.load(f)
+                    image = image.reshape(-1, *image.shape[-2:])
+                elif ext == '.png' and pyspng is not None:
+                    image = pyspng.load(f.read())
+                    image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
+                else:
+                    image = np.array(PIL.Image.open(f))
+                    image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
+            return image
+        except Exception as e:
+            print(e)
+            breakpoint()
 
     def _load_raw_labels(self):
         fname = 'dataset.json'
