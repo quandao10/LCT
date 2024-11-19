@@ -342,7 +342,7 @@ def EDM2_XXS(img_resolution, img_channels, label_dim, dropout, **kwargs):
     )
 
 def EDM2_XS(img_resolution, img_channels, label_dim, dropout, **kwargs):
-    model = return UNet(
+    model = UNet(
         model_channels=128,
         dropout=dropout, # rcm 0.00
         img_resolution=img_resolution,
@@ -368,7 +368,7 @@ def EDM2_S(img_resolution, img_channels, label_dim, dropout, **kwargs):
     return model
 
 def EDM2_M(img_resolution, img_channels, label_dim, dropout, **kwargs):
-    model = return UNet(
+    model = UNet(
         model_channels=256,
         dropout=dropout, # rcm 0.10
         img_resolution=img_resolution,
