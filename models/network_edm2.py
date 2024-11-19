@@ -10,6 +10,7 @@
 
 import numpy as np
 import torch
+from torch.nn import functional as F
 from torch_utils import persistence
 from torch_utils import misc
 
@@ -246,15 +247,17 @@ class UNet(torch.nn.Module):
                 self.dec[f'{res}x{res}_block{idx}'] = Block(cin, cout, cemb, flavor='dec', attention=(res in attn_resolutions), **block_kwargs)
         self.out_conv = MPConv(cout, img_channels, kernel=[3,3])
 
-    def forward(self, x, y, noise_labels):
+    def forward(self, x, noise_labels, y):
         # Embedding.
-        class_labels = y
         emb = self.emb_noise(self.emb_fourier(noise_labels))
         if self.emb_label is not None:
+            class_labels = y
+            class_labels = F.one_hot(class_labels, num_classes=self.emb_label.weight.shape[1]).to(torch.float32)
             emb = mp_sum(emb, self.emb_label(class_labels * np.sqrt(class_labels.shape[1])), t=self.label_balance)
         emb = mp_silu(emb)
 
         # Encoder.
+        x = x.to(torch.float32)
         x = torch.cat([x, torch.ones_like(x[:, :1])], dim=1)
         skips = []
         for name, block in self.enc.items():
@@ -357,7 +360,6 @@ def EDM2_S(img_resolution, img_channels, label_dim, dropout, **kwargs):
         label_dim=label_dim,
         **kwargs,
     )
-    breakpoint()
     state_dict = load_ckpt("./ckpt/edm2-img512-s-2147483-0.025.pkl")
     model.load_state_dict(state_dict)
     return model
