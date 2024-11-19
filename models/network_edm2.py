@@ -350,7 +350,7 @@ def EDM2_XS(img_resolution, img_channels, label_dim, dropout, **kwargs):
         label_dim=label_dim,
         **kwargs,
     )
-    state_dict = load_ckpt("./ckpt/edm2-img512-xs-2147483-0.045.pkl")
+    state_dict = load_ckpt("./ckpt/edm2-img512-xs-2147483-0.135.pkl")
     model.load_state_dict(state_dict)
     return model
 
@@ -363,7 +363,7 @@ def EDM2_S(img_resolution, img_channels, label_dim, dropout, **kwargs):
         label_dim=label_dim,
         **kwargs,
     )
-    state_dict = load_ckpt("./ckpt/edm2-img512-s-2147483-0.025.pkl")
+    state_dict = load_ckpt("./ckpt/edm2-img512-s-2147483-0.130.pkl")
     model.load_state_dict(state_dict)
     return model
 
@@ -376,7 +376,7 @@ def EDM2_M(img_resolution, img_channels, label_dim, dropout, **kwargs):
         label_dim=label_dim,
         **kwargs,
     )
-    state_dict = load_ckpt("./ckpt/edm2-img512-m-2147483-0.030.pkl")
+    state_dict = load_ckpt("./ckpt/edm2-img512-m-2147483-0.100.pkl")
     model.load_state_dict(state_dict)
     return model
 

@@ -214,6 +214,12 @@ def main(args):
     else:
         model_umt = None
     
+    if args.optim == "RAdam":
+        opt_cls = torch.optim.RAdam
+    elif args.optim == "Adam":
+        opt_cls = torch.optim.Adam
+    else:
+        raise ValueError(f"Not implement for `args.optim` = {args.optim}!")
     if args.loss_norm=="adaptive":
         adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, 
                                                                           alpha_hi=1.0,
@@ -222,15 +228,15 @@ def main(args):
                                                                           scale_init=diffusion.c,
                                                                           device=device)
         if args.umt:
-            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
+            opt = opt_cls(list(model.parameters())+list(adaptive_loss.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4, eps=args.optim_eps)
         else:
-            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
+            opt = opt_cls(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4, eps=args.optim_eps)
     else:
         adaptive_loss = None
         if args.umt:
-            opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
+            opt = opt_cls(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4, eps=args.optim_eps)
         else:
-            opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+            opt = opt_cls(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=args.optim_eps)
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -329,6 +335,8 @@ def main(args):
         
     if rank == 0:
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
+        # noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_min
+        # noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)
 
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     for epoch in range(init_epoch, args.epochs+1):
@@ -432,7 +440,7 @@ def main(args):
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, "
+                    f"(step={train_steps:09d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
@@ -449,104 +457,106 @@ def main(args):
         # if not args.no_lr_decay:
         #     scheduler.step()
 
-        if rank == 0:
-            # latest checkpoint
-            if epoch % args.save_content_every == 0:
-                logger.info("Saving content.")
-                content = {
-                    "epoch": epoch + 1,
-                    "train_steps": train_steps,
-                    "args": args,
-                    "model": model.module.state_dict(),
-                    "opt": opt.state_dict(),
-                    # "ema": ema.state_dict(),
-                    "target": target_model.state_dict(),
-                    "model_umt": model_umt.module.state_dict() if args.umt else None,
-                }
-                for name in EMA_RATES.keys():
-                    content[name] = emas[name].state_dict()
-                torch.save(content, os.path.join(checkpoint_dir, "content.pth"))
+            if rank == 0:
+                # latest checkpoint
+                if train_steps % args.save_content_every == 0:
+                    logger.info("Saving content.")
+                    content = {
+                        "epoch": epoch + 1,
+                        "train_steps": train_steps,
+                        "args": args,
+                        "model": model.module.state_dict(),
+                        "opt": opt.state_dict(),
+                        # "ema": ema.state_dict(),
+                        "target": target_model.state_dict(),
+                        "model_umt": model_umt.module.state_dict() if args.umt else None,
+                    }
+                    for name in EMA_RATES.keys():
+                        content[name] = emas[name].state_dict()
+                    torch.save(content, os.path.join(checkpoint_dir, "content.pth"))
 
-            # Save DiT checkpoint:
-            if epoch % args.ckpt_every == 0 and epoch > 0:
-                checkpoint = {
-                    "epoch": epoch + 1,
-                    "model": model.module.state_dict(),
-                    "train_steps": train_steps,
-                    # "ema": ema.state_dict(),
-                    "opt": opt.state_dict(),
-                    "args": args,
-                    "target": target_model.state_dict(),
-                    "model_umt": model_umt.module.state_dict() if args.umt else None,
-                }
-                for name in EMA_RATES.keys():
-                    checkpoint[name] = emas[name].state_dict()
-                checkpoint_path = f"{checkpoint_dir}/{epoch:07d}.pt"
-                torch.save(checkpoint, checkpoint_path)
-                logger.info(f"Saved checkpoint to {checkpoint_path}")
-            # dist.barrier()
+                # Save DiT checkpoint:
+                if train_steps % args.ckpt_every == 0 and train_steps > 0:
+                    checkpoint = {
+                        "epoch": epoch + 1,
+                        "model": model.module.state_dict(),
+                        "train_steps": train_steps,
+                        # "ema": ema.state_dict(),
+                        "opt": opt.state_dict(),
+                        "args": args,
+                        "target": target_model.state_dict(),
+                        "model_umt": model_umt.module.state_dict() if args.umt else None,
+                    }
+                    for name in EMA_RATES.keys():
+                        checkpoint[name] = emas[name].state_dict()
+                    checkpoint_path = f"{checkpoint_dir}/{train_steps:09d}.pt"
+                    torch.save(checkpoint, checkpoint_path)
+                    logger.info(f"Saved checkpoint to {checkpoint_path}")
+                # dist.barrier()
 
-        if rank == 0 and epoch % args.plot_every == 0:
-            logger.info("Generating EMA samples...")
-            generator = get_generator("dummy", 4, seed)
-            if args.sampler == "multistep":
-                assert len(args.ts) > 0
-                ts = tuple(int(x) for x in args.ts.split(","))
-            else:
-                ts = None
-            with torch.no_grad():
-                sample = karras_sample(
-                    diffusion,
-                    generator,
-                    model,
-                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                    steps=args.steps,
-                    model_kwargs=model_kwargs,
-                    device=device,
-                    clip_denoised=args.clip_denoised,
-                    sampler=args.sampler,
-                    sigma_min=args.sigma_min,
-                    sigma_max=args.sigma_max,
-                    s_churn=args.s_churn,
-                    s_tmin=args.s_tmin,
-                    s_tmax=args.s_tmax,
-                    s_noise=args.s_noise,
-                    noise=noise,
-                    ts=ts,
-                )
-                if use_normalize:
-                    sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
+            if rank == 0 and train_steps % args.plot_every == 0:
+                if use_label:
+                    model_kwargs = dict(y=torch.tensor([207, 360, 387, 974, 88, 979, 417, 279], device=device))
+                logger.info("Generating EMA samples...")
+                generator = get_generator("dummy", 4, seed)
+                if args.sampler == "multistep":
+                    assert len(args.ts) > 0
+                    ts = tuple(int(x) for x in args.ts.split(","))
                 else:
-                    sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
-            sample = torch.concat(sample, dim=0)
-            with torch.no_grad():
-                ema_sample = karras_sample(
-                    diffusion,
-                    generator,
-                    emas["ema"],
-                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                    steps=args.steps,
-                    model_kwargs=model_kwargs,
-                    device=device,
-                    clip_denoised=args.clip_denoised,
-                    sampler=args.sampler,
-                    sigma_min=args.sigma_min,
-                    sigma_max=args.sigma_max,
-                    s_churn=args.s_churn,
-                    s_tmin=args.s_tmin,
-                    s_tmax=args.s_tmax,
-                    s_noise=args.s_noise,
-                    noise=noise,
-                    ts=ts,
-                )
-                if use_normalize:
-                    ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
-                else:
-                    ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
-            ema_sample = torch.concat(ema_sample, dim=0)
-            sample_to_save = torch.concat([sample, ema_sample], dim=0)
-            save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
-            del sample
+                    ts = None
+                with torch.no_grad():
+                    sample = karras_sample(
+                        diffusion,
+                        generator,
+                        model,
+                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                        steps=args.steps,
+                        model_kwargs=model_kwargs,
+                        device=device,
+                        clip_denoised=args.clip_denoised,
+                        sampler=args.sampler,
+                        sigma_min=args.sigma_min,
+                        sigma_max=args.sigma_max,
+                        s_churn=args.s_churn,
+                        s_tmin=args.s_tmin,
+                        s_tmax=args.s_tmax,
+                        s_noise=args.s_noise,
+                        noise=noise,
+                        ts=ts,
+                    )
+                    if use_normalize:
+                        sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
+                    else:
+                        sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
+                sample = torch.concat(sample, dim=0)
+                with torch.no_grad():
+                    ema_sample = karras_sample(
+                        diffusion,
+                        generator,
+                        emas["ema"],
+                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                        steps=args.steps,
+                        model_kwargs=model_kwargs,
+                        device=device,
+                        clip_denoised=args.clip_denoised,
+                        sampler=args.sampler,
+                        sigma_min=args.sigma_min,
+                        sigma_max=args.sigma_max,
+                        s_churn=args.s_churn,
+                        s_tmin=args.s_tmin,
+                        s_tmax=args.s_tmax,
+                        s_noise=args.s_noise,
+                        noise=noise,
+                        ts=ts,
+                    )
+                    if use_normalize:
+                        ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
+                    else:
+                        ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
+                ema_sample = torch.concat(ema_sample, dim=0)
+                sample_to_save = torch.concat([sample, ema_sample], dim=0)
+                save_image(sample_to_save, f"{sample_dir}/image_{train_steps:09d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
+                del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
@@ -628,12 +638,14 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=2000)
     parser.add_argument("--global-batch-size", type=int, default=256)
     parser.add_argument("--max-grad-norm", type=float, default=2.0)
+    parser.add_argument("--optim", type=str, choices=["RAdam", "Adam"], default="RAdam")
+    parser.add_argument("--optim-eps", type=float, default=1e-8)
     
     ###### ploting & saving ######
     parser.add_argument("--log-every", type=int, default=100)
-    parser.add_argument("--ckpt-every", type=int, default=25)
-    parser.add_argument("--save-content-every", type=int, default=5)
-    parser.add_argument("--plot-every", type=int, default=5)
+    parser.add_argument("--ckpt-every", type=int, default=1000)
+    parser.add_argument("--save-content-every", type=int, default=200)
+    parser.add_argument("--plot-every", type=int, default=200)
     parser.add_argument("--exp", type=str, required=True)
     parser.add_argument("--results-dir", type=str, default="results")
     

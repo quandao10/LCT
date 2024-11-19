@@ -1,7 +1,7 @@
 export MASTER_PORT=10121
 
-CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 train_cm_latent.py \
-        --exp edm2_s_cauchy_no_grad_norm_bs128 \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=8 train_cm_latent_im512_edm2.py \
+        --exp edm2_xs_cauchy_no_grad_norm_bs512 \
         --datadir ./dataset/ \
         --dataset latent_imagenet512 \
         --results-dir ./results/ \
@@ -16,17 +16,19 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((32*1)) \
+        --global-batch-size $((64*8)) \
         --epochs $((1400*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
         --ict \
         --max-grad-norm 100.0 \
-        --model-type EDM2-S \
+        --model-type EDM2-XS \
         --normalize-matrix imagenet512_stat.npy \
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
+        --optim RAdam \
+        --optim-eps 1e-4 \
         # --resume \
 
 python ~/envs/slack_workflow/running_finished.py        
