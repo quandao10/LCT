@@ -440,7 +440,7 @@ def main(args):
                 running_diff_loss = 0
                 log_steps = 0
                 start_time = time()
-            if rank == 0 and use_label and (train_steps % args.plot_every == 0): #epoch % args.plot_every == 0:
+            if rank == 0 and False and (train_steps % args.plot_every == 0): #epoch % args.plot_every == 0:
                 logger.info("Generating EMA samples...")
                 generator = get_generator("dummy", 4, seed)
                 if args.sampler == "multistep":
@@ -542,7 +542,7 @@ def main(args):
                 logger.info(f"Saved checkpoint to {checkpoint_path}")
             # dist.barrier()
             
-            if rank == 0 and epoch % args.plot_every == 0 and not use_label: #epoch % args.plot_every == 0:
+            if rank == 0 and epoch % args.plot_every == 0 and True: #epoch % args.plot_every == 0:
                 logger.info("Generating EMA samples...")
                 generator = get_generator("dummy", 4, seed)
                 if args.sampler == "multistep":

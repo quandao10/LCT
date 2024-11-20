@@ -157,7 +157,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0
         --epochs $((1750*1)) \
         --lr 5e-5 \
         --num-sampling 8 \
-        --num-channels 128 \
+        --num-channels 192 \
         --num-head-channels 64 \
         --num-res-blocks 4 \
         --resblock-updown \
@@ -173,7 +173,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0
         --c-by-loss-std \
         --ckpt-every 5 \
         --save-content-every 5 \
-        --plot-every 1000 \
+        --plot-every 1 \
         --eps 1e-4 \
         --linear-act relu \
         --wo-norm \
