@@ -5,6 +5,7 @@ from datasets_prep.inpainting_dataset import InpaintingTrainDataset
 from datasets_prep.lmdb_datasets import LMDBDataset
 from datasets_prep.lsun import LSUN
 from torchvision.datasets import CIFAR10, ImageNet
+from torchvision.datasets.folder import DatasetFolder
 import numpy as np
 from torch.utils.data import Dataset
 import os
@@ -172,6 +173,8 @@ def get_dataset(args):
         dataset = CustomDataset("imagenet", 
                                 "/research/cbim/vast/qd66/workspace/dataset_new/features/imagenet/features/imagenet256_features", 
                                 "/research/cbim/vast/qd66/workspace/dataset_new/features/imagenet/features/imagenet256_labels")
+    elif args.dataset == "compress_latent_imagenet512":
+        dataset = DatasetFolder("/research/cbim/vast/qd66/workspace/efficientvit/assets/data/latent/dc_ae_f32c32_in_1.0/imagenet_512", np.load, [".npy"])
     # elif args.dataset == "latent_imagenet512":
     #     dataset = CustomDataset("imagenet", "features/imagenet512_features", "features/imagenet512_labels")
     return dataset

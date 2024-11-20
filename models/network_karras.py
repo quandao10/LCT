@@ -404,6 +404,7 @@ class DhariwalUNet(torch.nn.Module):
         init = dict(init_mode='kaiming_uniform', init_weight=np.sqrt(1/3), init_bias=np.sqrt(1/3))
         init_zero = dict(init_mode='kaiming_uniform', init_weight=0, init_bias=0)
         block_kwargs = dict(emb_channels=emb_channels, channels_per_head=64, dropout=dropout, init=init, init_zero=init_zero)
+        self.label_dim = label_dim
 
         # Mapping.
         self.map_noise = PositionalEmbedding(num_channels=model_channels)
@@ -442,13 +443,14 @@ class DhariwalUNet(torch.nn.Module):
                 cin = cout + skips.pop()
                 cout = model_channels * mult
                 self.dec[f'{res}x{res}_block{idx}'] = UNetBlock(in_channels=cin, out_channels=cout, attention=(res in attn_resolutions), **block_kwargs)
-        # self.out_norm = GroupNorm(num_channels=cout)
+        self.out_norm = GroupNorm(num_channels=cout)
         # print("use layer norm")
-        self.out_norm = nn.LayerNorm(normalized_shape=[cout, res, res])
+        # self.out_norm = nn.LayerNorm(normalized_shape=[cout, res, res])
         self.out_conv = Conv2d(in_channels=cout, out_channels=out_channels, kernel=3, **init_zero)
 
     def forward(self, x, noise_labels, y=None, augment_labels=None):
         # Mapping.
+        y = torch.nn.functional.one_hot(y, num_classes=self.label_dim).to(dtype=x.dtype)
         emb = self.map_noise(noise_labels)
         if self.map_augment is not None and augment_labels is not None:
             emb = emb + self.map_augment(augment_labels)

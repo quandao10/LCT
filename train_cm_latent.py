@@ -42,6 +42,7 @@ import robust_loss_pytorch
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from lion_pytorch import Lion
+from efficientvit.efficientvit.ae_model_zoo import DCAE_HF
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -189,7 +190,9 @@ def main(args):
         logger = create_logger(None)
     # create vae model
     logger.info("creating the vae model")
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    vae = DCAE_HF.from_pretrained(f"mit-han-lab/dc-ae-f32c32-in-1.0").to(device).eval()
+    vae.requires_grad_(False)
+    # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
     if args.custom_constant_c > 0.0:
@@ -235,8 +238,6 @@ def main(args):
             opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
             opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=args.eps)
-            # opt = Lion(model.parameters(), lr=args.lr)
-            # opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=1e-4)
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -244,8 +245,6 @@ def main(args):
         model.module.load_state_dict(checkpoint["model"])
         ema.load_state_dict(checkpoint["ema"])
         opt.load_state_dict(checkpoint["opt"])
-        # for g in opt.param_groups:
-        #     g['lr'] = args.lr
         target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
         if args.umt:
@@ -259,8 +258,6 @@ def main(args):
         epoch = init_epoch
         model.module.load_state_dict(checkpoint["model"])
         opt.load_state_dict(checkpoint["opt"])
-        # for g in opt.param_groups:
-        #     g['lr'] = args.lr
         ema.load_state_dict(checkpoint["ema"])
         target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
@@ -357,24 +354,20 @@ def main(args):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
             if use_normalize:
-                x = x/0.18215
+                x = x#/0.18215
                 x = (x - mean)/std * 0.5
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
             if args.ot_hard:
                 x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
-            # if rank == 0:
-            #     print(y)
-            #     exit()
             ema_rate, num_scales = ema_scale_fn(train_steps)
 
             # Change diffusion.c w.r.t predicted function by NFE (loss std)
             if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
-                diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85))
+                diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85)) * diffusion.c/torch.tensor(0.00345)
 
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
-            # with torch.cuda.amp.autocast(dtype=torch.bfloat16):
             losses = diffusion.consistency_losses(model,
                                                 x,
                                                 num_scales,
@@ -401,47 +394,21 @@ def main(args):
                     diff_loss = torch.tensor(0)
             after_forward = torch.cuda.memory_allocated(device)
             
-            if not torch.isnan(loss):
-                opt.zero_grad()
-                loss.backward()
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                opt.step()
-                running_loss += loss.item()
-                running_cm_loss += cm_loss.item()
-                running_diff_loss += diff_loss.item()
-            else:
-                nan_count += 1
-                nan_t_list = losses["t"][torch.isnan(losses["loss"])]
-                logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
-                if nan_count  > 100:
-                    args.lr = args.lr/2
-                    args.max_grad_norm = args.max_grad_norm * 0.8
-                    logger.info(f"Reduce lr a half to new lr {args.lr}")
-                    for g in opt.param_groups:
-                        g['lr'] = args.lr
-                    nan_count = 0
-                nan_content = {
-                    "epoch": epoch + 1,
-                    "train_steps": train_steps,
-                    "args": args,
-                    "model": model.module.state_dict(),
-                    "opt": opt.state_dict(),
-                    "ema": ema.state_dict(),
-                    "target": target_model.state_dict(),
-                    "model_umt": model_umt.module.state_dict() if args.umt else None,
-                    "x": x,
-                    "n": n,
-                }
-                torch.save(nan_content, os.path.join(checkpoint_dir, "nan_ckpt.pth"))
-                exit()
+            opt.zero_grad()
+            loss.backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+            for param in model.parameters():
+                if param.grad is not None:
+                    torch.nan_to_num(param.grad, nan=0, posinf=0, neginf=0, out=param.grad) # this is interesting
+            opt.step()
+            running_loss += loss.item()
+            running_cm_loss += cm_loss.item()
+            running_diff_loss += diff_loss.item()
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
             if args.ict:
-                if args.ema_half_nfe and (epoch >= 1350):
-                    update_ema(target_model, ema, 0)
-                else:
-                    update_ema(target_model, model.module, 0)
+                update_ema(target_model, model.module, 0)
             else:
                 update_ema(target_model, model.module, ema_rate)
 
@@ -473,7 +440,7 @@ def main(args):
                 running_diff_loss = 0
                 log_steps = 0
                 start_time = time()
-            if rank == 0 and use_label and (train_steps % args.plot_every == 0 or train_steps == 98080): #epoch % args.plot_every == 0:
+            if rank == 0 and use_label and (train_steps % args.plot_every == 0): #epoch % args.plot_every == 0:
                 logger.info("Generating EMA samples...")
                 generator = get_generator("dummy", 4, seed)
                 if args.sampler == "multistep":
