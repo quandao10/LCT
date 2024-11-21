@@ -11,7 +11,7 @@
 import numpy as np
 import torch
 from torch_utils import persistence
-from torch.nn.functional import silu
+from torch.nn.functional import silu, one_hot
 from torch.nn import LayerNorm, BatchNorm2d, InstanceNorm2d
 
 main_torchver, sub_torchver = torch.__version__.split('.')[:2]
@@ -481,6 +481,7 @@ class DhariwalUNet(torch.nn.Module):
         self.map_layer0 = Linear(in_features=model_channels, out_features=emb_channels, **init)
         self.map_layer1 = Linear(in_features=emb_channels, out_features=emb_channels, **init)
         self.map_label = Linear(in_features=label_dim, out_features=emb_channels, bias=False, init_mode='kaiming_normal', init_weight=np.sqrt(label_dim)) if label_dim else None
+        breakpoint()
 
         # Encoder.
         self.enc = torch.nn.ModuleDict()
@@ -520,6 +521,7 @@ class DhariwalUNet(torch.nn.Module):
 
     def forward(self, x, noise_labels, y=None, augment_labels=None):
         # Mapping.
+        breakpoint()
         emb = self.map_noise(noise_labels)
         if self.map_augment is not None and augment_labels is not None:
             emb = emb + self.map_augment(augment_labels)
@@ -529,6 +531,7 @@ class DhariwalUNet(torch.nn.Module):
             tmp = y
             if self.training and self.label_dropout:
                 tmp = tmp * (torch.rand([x.shape[0], 1], device=x.device) >= self.label_dropout).to(tmp.dtype)
+            tmp = one_hot(tmp, num_classes=self.map_label.weight.shape[1]).to(torch.float32)
             emb = emb + self.map_label(tmp)
         emb = silu(emb)
 

@@ -177,7 +177,7 @@ def main(args):
         logger = create_logger(None)
     # create vae model
     logger.info("creating the vae model")
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
     # with open('./model.txt', 'w') as f:
@@ -328,10 +328,9 @@ def main(args):
     nan_count = 0
     use_label = True if "imagenet" in args.dataset else False
     use_normalize = args.normalize_matrix is not None
-    if use_normalize:
-        data = np.load(args.normalize_matrix, allow_pickle=True).item()
-        mean = data["mean"].to(device)
-        std = data["std"].to(device)
+    data = np.load(args.normalize_matrix, allow_pickle=True).item()
+    mean = data["mean"].to(device)
+    std = data["std"].to(device)
         
     if rank == 0:
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
@@ -344,10 +343,9 @@ def main(args):
         logger.info(f"Beginning epoch {epoch}...")
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
-            x = x.to(device)
-            if use_normalize:
-                x = x/0.18215
-                x = (x - mean)/std * 0.5
+            # x = x.to(device)
+            # x = (x - mean)/std * 0.5
+            x = torch.randn((x.shape[0], args.num_in_channels, args.image_size, args.image_size), device=device)
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
             if args.ot_hard:
@@ -389,32 +387,23 @@ def main(args):
                 cm_loss = losses["loss"].mean() 
                 diff_loss = losses["diff_loss"].mean()
                 if args.use_diffloss:
-                    loss = cm_loss + 5*diff_loss
+                    # loss = cm_loss + 5*diff_loss
+                    loss = cm_loss + 2*diff_loss
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
             after_forward = torch.cuda.memory_allocated(device)
             
-            if not torch.isnan(loss):
-                opt.zero_grad()
-                loss.backward()
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                opt.step()
-                running_loss += loss.item()
-                running_cm_loss += cm_loss.item()
-                running_diff_loss += diff_loss.item()
-            else:
-                nan_count += 1
-                nan_t_list = losses["t"][torch.isnan(losses["loss"])]
-                logger.info(f"NaN time list: {nan_t_list}")
-                logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
-                if nan_count  > 100:
-                    args.lr = args.lr/2
-                    args.max_grad_norm = args.max_grad_norm * 0.8
-                    logger.info(f"Reduce lr a half to new lr {args.lr}")
-                    for g in opt.param_groups:
-                        g['lr'] = args.lr
-                    nan_count = 0
+            opt.zero_grad()
+            loss.backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+            for param in model.parameters():
+                if param.grad is not None:
+                    torch.nan_to_num(param.grad, nan=0, posinf=0, neginf=0, out=param.grad)
+            opt.step()
+            running_loss += loss.item()
+            running_cm_loss += cm_loss.item()
+            running_diff_loss += diff_loss.item()
             after_backward = torch.cuda.memory_allocated(device)
             # update_ema(ema, model.module)
             for name, ema_rate in EMA_RATES.items():
@@ -524,10 +513,7 @@ def main(args):
                         noise=noise,
                         ts=ts,
                     )
-                    if use_normalize:
-                        sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
-                    else:
-                        sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
+                    sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
                 sample = torch.concat(sample, dim=0)
                 with torch.no_grad():
                     ema_sample = karras_sample(
@@ -549,13 +535,10 @@ def main(args):
                         noise=noise,
                         ts=ts,
                     )
-                    if use_normalize:
-                        ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
-                    else:
-                        ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
+                    ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
                 ema_sample = torch.concat(ema_sample, dim=0)
                 sample_to_save = torch.concat([sample, ema_sample], dim=0)
-                save_image(sample_to_save, f"{sample_dir}/image_{train_steps:09d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
+                save_image(sample_to_save, f"{sample_dir}/image_{train_steps:09d}.jpg", nrow=8, normalize=True, value_range=(0, 1))
                 del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
@@ -607,6 +590,7 @@ if __name__ == "__main__":
     parser.add_argument("--block-norm-type", type=str, default="group-norm",
         choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm",
                  "instance-norm", "non-scaling-group-norm", "non-scaling-instance-norm"])
+    parser.add_argument("--edm2-pretrained", action="store_true", default=False)
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
