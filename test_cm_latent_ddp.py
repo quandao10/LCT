@@ -75,10 +75,6 @@ def main(args):
     ckpt = torch.load(args.ckpt)
     print("Finish loading model")
     # loading weights from ddp in single gpu
-    # if not args.ema:
-    #     model.load_state_dict(ckpt["model"], strict=True)
-    # else:
-    #     model.load_state_dict(ckpt["ema"], strict=True)
     model.load_state_dict(ckpt[args.ema], strict=True)
     model.eval()
     if args.statistic_preconditioning:
@@ -93,7 +89,7 @@ def main(args):
     
     if args.cfg_scale > 1.0:
         save_dir += "_cfg{}".format(args.cfg_scale)
-    if not args.ema:
+    if args.ema not in EMA_RATES.keys():
         save_dir += "_noEMA"
     if rank == 0 and not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -208,7 +204,7 @@ def main(args):
     else:
         fake_image = run_sampling(args.batch_size, generator)
         fake_image = torch.cat(fake_image)
-        ema = "" if not args.ema else "_ema"
+        ema = "" if args.ema not in EMA_RATES.keys() else "_ema"
         torchvision.utils.save_image(fake_image, f'{args.exp}_{args.epoch_id}{ema}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
         dist.barrier()
         dist.destroy_process_group()
