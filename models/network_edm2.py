@@ -331,17 +331,17 @@ def load_ckpt(ckpt_file):
     return ckpt["ema"].unet.state_dict()
 
 
-def EDM2_XXS(img_resolution, img_channels, label_dim, dropout, **kwargs):
-    return UNet(
-        model_channels=64,
-        dropout=dropout, # rcm 0.00
-        img_resolution=img_resolution,
-        img_channels=img_channels,
-        label_dim=label_dim,
-        **kwargs,
-    )
+# def EDM2_XXS(img_resolution, img_channels, label_dim, dropout, **kwargs):
+#     return UNet(
+#         model_channels=64,
+#         dropout=dropout, # rcm 0.00
+#         img_resolution=img_resolution,
+#         img_channels=img_channels,
+#         label_dim=label_dim,
+#         **kwargs,
+#     )
 
-def EDM2_XS(img_resolution, img_channels, label_dim, dropout, **kwargs):
+def EDM2_XS(img_resolution, img_channels, label_dim, dropout, pretrained, **kwargs):
     model = UNet(
         model_channels=128,
         dropout=dropout, # rcm 0.00
@@ -350,11 +350,12 @@ def EDM2_XS(img_resolution, img_channels, label_dim, dropout, **kwargs):
         label_dim=label_dim,
         **kwargs,
     )
-    state_dict = load_ckpt("./ckpt/edm2-img512-xs-2147483-0.135.pkl")
-    model.load_state_dict(state_dict)
+    if pretrained:
+        state_dict = load_ckpt("./ckpt/edm2-img512-xs-2147483-0.135.pkl")
+        model.load_state_dict(state_dict)
     return model
 
-def EDM2_S(img_resolution, img_channels, label_dim, dropout, **kwargs):
+def EDM2_S(img_resolution, img_channels, label_dim, dropout, pretrained, **kwargs):
     model = UNet(
         model_channels=192,
         dropout=dropout, # rcm 0.00
@@ -363,11 +364,12 @@ def EDM2_S(img_resolution, img_channels, label_dim, dropout, **kwargs):
         label_dim=label_dim,
         **kwargs,
     )
-    state_dict = load_ckpt("./ckpt/edm2-img512-s-2147483-0.130.pkl")
-    model.load_state_dict(state_dict)
+    if pretrained:
+        state_dict = load_ckpt("./ckpt/edm2-img512-s-2147483-0.130.pkl")
+        model.load_state_dict(state_dict)
     return model
 
-def EDM2_M(img_resolution, img_channels, label_dim, dropout, **kwargs):
+def EDM2_M(img_resolution, img_channels, label_dim, dropout, pretrained, **kwargs):
     model = UNet(
         model_channels=256,
         dropout=dropout, # rcm 0.10
@@ -376,43 +378,44 @@ def EDM2_M(img_resolution, img_channels, label_dim, dropout, **kwargs):
         label_dim=label_dim,
         **kwargs,
     )
-    state_dict = load_ckpt("./ckpt/edm2-img512-m-2147483-0.100.pkl")
-    model.load_state_dict(state_dict)
+    if pretrained:
+        state_dict = load_ckpt("./ckpt/edm2-img512-m-2147483-0.100.pkl")
+        model.load_state_dict(state_dict)
     return model
 
-def EDM2_L(img_resolution, img_channels, label_dim, dropout, **kwargs):
-    return UNet(
-        model_channels=320,
-        dropout=dropout, # rcm 0.10
-        img_resolution=img_resolution,
-        img_channels=img_channels,
-        label_dim=label_dim,
-        **kwargs,
-    )
+# def EDM2_L(img_resolution, img_channels, label_dim, dropout, **kwargs):
+#     return UNet(
+#         model_channels=320,
+#         dropout=dropout, # rcm 0.10
+#         img_resolution=img_resolution,
+#         img_channels=img_channels,
+#         label_dim=label_dim,
+#         **kwargs,
+#     )
 
-def EDM2_XL(img_resolution, img_channels, label_dim, dropout, **kwargs):
-    return UNet(
-        model_channels=384,
-        dropout=dropout, # rcm 0.10
-        img_resolution=img_resolution,
-        img_channels=img_channels,
-        label_dim=label_dim,
-        **kwargs,
-    )
+# def EDM2_XL(img_resolution, img_channels, label_dim, dropout, **kwargs):
+#     return UNet(
+#         model_channels=384,
+#         dropout=dropout, # rcm 0.10
+#         img_resolution=img_resolution,
+#         img_channels=img_channels,
+#         label_dim=label_dim,
+#         **kwargs,
+#     )
 
-def EDM2_XXL(img_resolution, img_channels, label_dim, dropout, **kwargs):
-    return UNet(
-        model_channels=448,
-        dropout=dropout, # rcm 0.10
-        img_resolution=img_resolution,
-        img_channels=img_channels,
-        label_dim=label_dim,
-        **kwargs,
-    )
+# def EDM2_XXL(img_resolution, img_channels, label_dim, dropout, **kwargs):
+#     return UNet(
+#         model_channels=448,
+#         dropout=dropout, # rcm 0.10
+#         img_resolution=img_resolution,
+#         img_channels=img_channels,
+#         label_dim=label_dim,
+#         **kwargs,
+#     )
 
 
 EDM2_models = {
-    'EDM2-XXS': EDM2_XXS, 'EDM2-XS': EDM2_XS, 'EDM2-S': EDM2_S,
-    'EDM2-M': EDM2_M,
-    'EDM2-L': EDM2_L, 'EDM2-XL': EDM2_XL, 'EDM2-XXL': EDM2_XXL,
+    # 'EDM2-XXS': EDM2_XXS,
+    'EDM2-XS': EDM2_XS, 'EDM2-S': EDM2_S, 'EDM2-M': EDM2_M,
+    # 'EDM2-L': EDM2_L, 'EDM2-XL': EDM2_XL, 'EDM2-XXL': EDM2_XXL,
 }

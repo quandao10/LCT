@@ -102,7 +102,8 @@ def create_model_and_diffusion(args):
         model = EDM2_models[args.model_type](img_resolution=args.image_size,
                                              img_channels=args.num_in_channels,
                                              label_dim=args.num_classes,
-                                             dropout=args.dropout)
+                                             dropout=args.dropout,
+                                             pretrained=args.edm2_pretrained,)
     else:
         model = DiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
