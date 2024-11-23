@@ -24,6 +24,7 @@ from einops import rearrange
 # from models.multihead_flashdiff_1 import MultiheadFlashDiff1
 from models.multihead_flashdiff_2 import MultiheadFlashDiff2
 from models.rotary import Rotary
+# from models.ml_sigmoid_attention import flash_sigmoid
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
@@ -214,26 +215,16 @@ class DiTBlockFlashAttn(nn.Module):
         )
 
     def _attn(self, x):
+        batch_size, seq_len = x.size(0), x.size(1)
         qkv = self.attn_qkv(x)
         q, k, v = qkv.chunk(3, dim=2)
         q, k = self.q_norm(q), self.k_norm(k)
-        qkv = torch.cat([q, k, v], dim=2).to(dtype=x.dtype)
-        
-        qkv = rearrange(qkv,
-                        'b s (three h d) -> (b s) three h d',
-                        three=3,
-                        h=self.num_heads)
-        # qkv = rearrange(qkv, 'b s ... -> (b s) ...')
-        batch_size, seq_len = x.size(0), x.size(1)
-        cu_seqlens = torch.arange(
-            0, (batch_size + 1) * seq_len, step=seq_len,
-            dtype=torch.int32, device=qkv.device)
-
-        x = flash_attn.flash_attn_interface.flash_attn_varlen_qkvpacked_func(
-        qkv, cu_seqlens, seq_len, 0., causal=False)
-        x = rearrange(x, '(b s) h d -> b s (h d)', b=batch_size)
+        q = q.view(batch_size, seq_len, self.num_heads, -1).to(torch.bfloat16)
+        k = k.view(batch_size, seq_len, self.num_heads, -1).to(torch.bfloat16)
+        v = v.view(batch_size, seq_len, self.num_heads, -1).to(torch.bfloat16)
+        x = flash_attn.flash_attn_func(q, k, v, causal=False)
+        x = rearrange(x, 'b s h d -> b s (h d)', b=batch_size)
         return self.attn_out(x)
-
 
     def forward(self, x, c):
         if not self.use_scale_residual:
@@ -316,6 +307,71 @@ class DiTBlockDiffAttn(nn.Module):
         return x
 
 
+# class DiTBlockFlashSigmoidAttn(nn.Module):
+#     """
+#     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
+#     """
+#     def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, depth=12, mlp_ratio=4.0, **block_kwargs):
+#         super().__init__()
+#         self.wo_norm = wo_norm
+#         self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity() 
+#         self.num_heads = num_heads
+#         self.attn_qkv = nn.Linear(hidden_size, 3 * hidden_size, bias=False)
+#         self.attn_out = nn.Linear(hidden_size, hidden_size, bias=False)
+#         self.q_norm = norm(hidden_size) if wo_norm else nn.Identity()
+#         self.k_norm = norm(hidden_size) if wo_norm else nn.Identity()
+#         # self.prev_norm = norm(hidden_size) if wo_norm else nn.Identity()
+        
+#         self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) #if not wo_norm else nn.Identity()
+#         mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
+#         if linear_act == "mish":
+#             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
+#         elif linear_act == "relu":
+#             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
+#         elif linear_act == "silu":
+#             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
+#         elif linear_act == "glu_sigmoid":
+#             self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
+#         elif linear_act == "glu_mish":
+#             self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
+#         elif linear_act == "glu_silu":
+#             self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
+#         elif linear_act == "glu_gelu":
+#             self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
+#         elif linear_act == "gelu":
+#             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
+#         self.adaLN_modulation = nn.Sequential(
+#             nn.SiLU(),
+#             nn.Linear(hidden_size, 6 * hidden_size, bias=True),
+#         )
+
+#     def _attn(self, x):
+#         # x = self.prev_norm(x)
+#         qkv = self.attn_qkv(x)
+#         q,k,v = qkv.chunk(3, dim=2)
+#         q, k = self.q_norm(q), self.k_norm(k)
+#         qkv = torch.cat([q, k, v], dim=2).to(dtype=qkv.dtype)
+#         qkv = rearrange(qkv,
+#                         'b s (three h d) -> (b s) three h d',
+#                         three=3,
+#                         h=self.num_heads)
+#         batch_size, seq_len = x.size(0), x.size(1)
+#         cu_seqlens = torch.arange(
+#             0, (batch_size + 1) * seq_len, step=seq_len,
+#             dtype=torch.int32, device=qkv.device)
+#         x = flash_sigmoid.flash_attn_qkvpacked_func(qkv, 0., causal=False)
+#         x = rearrange(x, '(b s) h d -> b s (h d)', b=batch_size)
+#         return self.attn_out(x)
+
+#     def forward(self, x, c):
+#         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+#         attn = self._attn(modulate(self.norm1(x), shift_msa, scale_msa))
+#         x = x + gate_msa.unsqueeze(1) * attn
+#         mlp = self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
+#         x = x + gate_mlp.unsqueeze(1) * mlp
+#         return x
+
+
 class FinalLayer(nn.Module):
     """
     The final layer of DiT.
@@ -391,8 +447,8 @@ class DiT(nn.Module):
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
-        self.rotary_emb = Rotary(
-            hidden_size // num_heads // 4, precision=torch.bfloat16)
+        # self.rotary_emb = Rotary(
+        #     hidden_size // num_heads // 4, precision=torch.bfloat16)
 
         dit_block = BLOCK_ZOO[block_type]
         self.blocks = nn.ModuleList([
@@ -475,11 +531,11 @@ class DiT(nn.Module):
         y = self.y_embedder(y, self.training)    # (N, D)
         c = t + y                                # (N, D)
 
-        rotary_cos_sin = self.rotary_emb(x, seq_len=x.size(1))
+        # rotary_cos_sin = self.rotary_emb(x, seq_len=x.size(1))
 
-        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        with torch.amp.autocast('cuda', dtype=torch.bfloat16):
             for idx, block in enumerate(self.blocks):
-                x = block(x, rotary_cos_sin, c)
+                x = block(x, c)
                 if torch.any(torch.isnan(x)):
                     print(idx)
                     exit()

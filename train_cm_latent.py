@@ -7,6 +7,7 @@
 """
 A minimal training script for DiT using PyTorch DDP.
 """
+import wandb
 import math
 import json
 import torch
@@ -17,7 +18,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from torchvision.utils import save_image
+from torchvision.utils import save_image, make_grid
 import numpy as np
 from collections import OrderedDict
 from PIL import Image
@@ -151,6 +152,15 @@ def main(args):
     Trains a new DiT model.
     """
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
+
+    run = wandb.init(
+        # Set the project where this run will be logged
+        project="CoT",
+        notes="Consistency Transformer",
+        # Track hyperparameters and run metadata
+        config=args,
+        name=args.exp,
+    )
 
     # Setup DDP:
     dist.init_process_group("nccl")
@@ -318,6 +328,8 @@ def main(args):
     if rank == 0:
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
 
+    # logging gradients
+    wandb.watch(model, log_freq=200)
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
@@ -422,6 +434,13 @@ def main(args):
                     f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
                     # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
+                wandb.log(
+                    {
+                     "loss": avg_loss, 
+                     "cm_loss": avg_cm_loss,
+                     "diff_loss": avg_diff_loss,
+                    }
+                )
                 # Reset monitoring variables:
                 running_loss = 0
                 running_cm_loss = 0
@@ -473,6 +492,7 @@ def main(args):
                 ts = tuple(int(x) for x in args.ts.split(","))
             else:
                 ts = None
+            model_kwargs = dict(y=None if args.num_classes == 0 else torch.randint(args.num_classes, (args.num_sampling), device=device))
             with torch.no_grad():
                 sample = karras_sample(
                     diffusion,
@@ -524,7 +544,10 @@ def main(args):
                     ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
             ema_sample = torch.concat(ema_sample, dim=0)
             sample_to_save = torch.concat([sample, ema_sample], dim=0)
-            save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
+            sample_grid = make_grid(sample_to_save, nrow=4, normalize=True, value_range=(-1, 1))
+            save_image(sample_grid, f"{sample_dir}/image_{epoch:07d}.jpg")
+            wandb_images = wandb.Image(sample_grid, caption="image_{epoch:07d}.jpg")
+            wandb.log({"examples": wandb_images})
             del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout

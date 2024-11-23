@@ -21,12 +21,13 @@ conda activate lct
 
 BATCH_SIZE=128
 NUM_GPUS=1
+EXP=celeb_ditb_flashattn_700ep_relu_v1
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=$NUM_GPUS train_cm_latent.py \
-        --exp celeb_dit_diffattn_700ep_B_relu_eps1e-5  \
+        --exp ${EXP} \
         --datadir /share/kuleshov/datasets/latent_celeba_256/ \
         --dataset latent_celeb256 \
-        --results-dir ./results/ \
+        --results-dir /share/kuleshov/htp26/lct/results/ \
         --image-size 32 \
         --num-in-channels 4 \
         --num-classes 0 \
@@ -56,7 +57,9 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --ot-hard \
         --c-by-loss-std \
         --linear-act relu \
-        --block-type DiTBlockDiffAttn \
+        --block-type DiTBlockFlashAttn \
+        --sampler euler \
+        --steps 10 \
         # --resume \
         # --wo-norm \
         # --use-scale-residual \
