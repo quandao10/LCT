@@ -415,6 +415,14 @@ def main(args):
             # Log loss values:
             log_steps += 1
             train_steps += 1
+
+            wandb.log({
+                "ema_rate": ema_rate, 
+                "num_scales": num_scales,
+                "c": diffusion.c,
+                },
+                step=train_steps,
+            )
             if train_steps % args.log_every == 0:
                 # Measure training speed:
                 torch.cuda.synchronize()
@@ -439,8 +447,10 @@ def main(args):
                      "loss": avg_loss, 
                      "cm_loss": avg_cm_loss,
                      "diff_loss": avg_diff_loss,
-                    }
+                    },
+                    step=train_steps,
                 )
+
                 # Reset monitoring variables:
                 running_loss = 0
                 running_cm_loss = 0
@@ -546,7 +556,7 @@ def main(args):
             sample_to_save = torch.concat([sample, ema_sample], dim=0)
             sample_grid = make_grid(sample_to_save, nrow=4, normalize=True, value_range=(-1, 1))
             save_image(sample_grid, f"{sample_dir}/image_{epoch:07d}.jpg")
-            wandb_images = wandb.Image(sample_grid, caption="image_{epoch:07d}.jpg")
+            wandb_images = wandb.Image(sample_grid, caption=f"image_{epoch:07d}.jpg")
             wandb.log({"examples": wandb_images})
             del sample
         # dist.barrier()
