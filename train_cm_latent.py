@@ -329,7 +329,7 @@ def main(args):
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
 
     # logging gradients
-    wandb.watch(model, log_freq=200)
+    run.watch(model, log_freq=200)
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
@@ -416,7 +416,7 @@ def main(args):
             log_steps += 1
             train_steps += 1
 
-            wandb.log({
+            run.log({
                 "ema_rate": ema_rate, 
                 "num_scales": num_scales,
                 "c": diffusion.c,
@@ -442,7 +442,7 @@ def main(args):
                     f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
                     # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
-                wandb.log(
+                run.log(
                     {
                      "loss": avg_loss, 
                      "cm_loss": avg_cm_loss,
@@ -557,12 +557,13 @@ def main(args):
             sample_grid = make_grid(sample_to_save, nrow=4, normalize=True, value_range=(-1, 1))
             save_image(sample_grid, f"{sample_dir}/image_{epoch:07d}.jpg")
             wandb_images = wandb.Image(sample_grid, caption=f"image_{epoch:07d}.jpg")
-            wandb.log({"examples": wandb_images})
+            run.log({"examples": wandb_images})
             del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
     logger.info("Done!")
+    run.finish()
     cleanup()
 
 
