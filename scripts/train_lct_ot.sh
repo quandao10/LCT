@@ -21,7 +21,7 @@ conda activate lct
 
 BATCH_SIZE=128
 NUM_GPUS=1
-EXP=celeb_ditb_flashattn_700ep_relu_v1
+EXP=celeb_ditb_flashattn_700ep_relu_adoptopt_v1
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --exp ${EXP} \
@@ -60,6 +60,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT 
         --block-type DiTBlockFlashAttn \
         --sampler euler \
         --steps 10 \
+        --opt-name adopt \
         # --resume \
         # --wo-norm \
         # --use-scale-residual \

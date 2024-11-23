@@ -43,6 +43,8 @@ import robust_loss_pytorch
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from lion_pytorch import Lion
+from optimizers import ADOPT
+
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -218,6 +220,15 @@ def main(args):
     else:
         model_umt = None
     
+    if args.opt_name == "radm":
+        opt_class = torch.optim.RAdam
+    elif args.opt_name == "adopt":
+        opt_class = ADOPT
+    elif args.opt_name == "lion":
+        opt_class = Lion
+    else:
+        opt_class = torch.optim.SGD
+    
     if args.loss_norm=="adaptive":
         adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, 
                                                                           alpha_hi=1.0,
@@ -226,17 +237,16 @@ def main(args):
                                                                           scale_init=diffusion.c,
                                                                           device=device)
         if args.umt:
-            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
+            opt = opt_class(list(model.parameters())+list(adaptive_loss.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
-            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
+            opt = opt_class(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
     else:
         adaptive_loss = None
         if args.umt:
-            opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
+            opt = opt_class(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
-            opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
-            # opt = Lion(model.parameters(), lr=args.lr)
-            # opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=1e-4)
+            opt = opt_class(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
+
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -665,6 +675,8 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=40)
     parser.add_argument("--num-sampling", type=int, default=4)
     parser.add_argument("--ts", type=str, default="0,22,39")
+
+    parser.add_argument("--opt-name", type=str, default="radam")
 
     args = parser.parse_args()
     main(args)
