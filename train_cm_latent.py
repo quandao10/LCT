@@ -160,6 +160,7 @@ def main(args):
         # Track hyperparameters and run metadata
         config=args,
         name=args.exp,
+        entity="paperx3-team",
     )
 
     # Setup DDP:
