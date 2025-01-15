@@ -30,7 +30,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER
         --c-by-loss-std \
         --optim RAdam \
         --optim-eps 1e-4 \
-        # --resume \
+        --resume \
         # --plot-every 10 \
         # --edm2-pretrained \
 

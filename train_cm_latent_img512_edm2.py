@@ -464,24 +464,24 @@ def main(args):
                         content[name] = emas[name].state_dict()
                     torch.save(content, os.path.join(checkpoint_dir, "content.pth"))
 
-                # Save DiT checkpoint:
-                if train_steps % args.ckpt_every == 0 and train_steps > 0:
-                    checkpoint = {
-                        "epoch": epoch + 1,
-                        "model": model.module.state_dict(),
-                        "train_steps": train_steps,
-                        # "ema": ema.state_dict(),
-                        "opt": opt.state_dict(),
-                        "args": args,
-                        "target": target_model.state_dict(),
-                        "model_umt": model_umt.module.state_dict() if args.umt else None,
-                    }
-                    for name in EMA_RATES.keys():
-                        checkpoint[name] = emas[name].state_dict()
-                    checkpoint_path = f"{checkpoint_dir}/{train_steps:09d}.pt"
-                    torch.save(checkpoint, checkpoint_path)
-                    logger.info(f"Saved checkpoint to {checkpoint_path}")
-                # dist.barrier()
+                # # Save DiT checkpoint:
+                # if train_steps % args.ckpt_every == 0 and train_steps > 0:
+                #     checkpoint = {
+                #         "epoch": epoch + 1,
+                #         "model": model.module.state_dict(),
+                #         "train_steps": train_steps,
+                #         # "ema": ema.state_dict(),
+                #         "opt": opt.state_dict(),
+                #         "args": args,
+                #         "target": target_model.state_dict(),
+                #         "model_umt": model_umt.module.state_dict() if args.umt else None,
+                #     }
+                #     for name in EMA_RATES.keys():
+                #         checkpoint[name] = emas[name].state_dict()
+                #     checkpoint_path = f"{checkpoint_dir}/{train_steps:09d}.pt"
+                #     torch.save(checkpoint, checkpoint_path)
+                #     logger.info(f"Saved checkpoint to {checkpoint_path}")
+                # # dist.barrier()
 
             if rank == 0 and train_steps % args.plot_every == 0:
                 if use_label:
