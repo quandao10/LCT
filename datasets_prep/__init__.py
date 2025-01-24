@@ -151,11 +151,11 @@ def get_dataset(args):
         dataset = LMDBDataset(root=args.datadir, name="ffhq", train=True, transform=train_transform)
     elif args.dataset == "latent_celeb256":
         # dataset = CustomDataset("celebhq256", "/research/cbim/vast/qd66/workspace/dataset/vim/dataset/latent_celeba_256")
-        dataset = CustomDataset("celebhq256", "./dataset/latent_celeba_256")
+        dataset = CustomDataset("celebhq256", f"{args.datadir}/latent_celeba_256")
     elif args.dataset == "latent_ffhq256":
-        dataset = CustomDataset("ffhq", "./dataset/latent_ffhq_256")
+        dataset = CustomDataset("ffhq", f"{args.datadir}/latent_ffhq_256")
     elif args.dataset == "latent_imagenet512":
-        dataset = ExtractedDataset("./dataset/latent_imagenet_512", use_labels=True)
+        dataset = ExtractedDataset(f"{args.datadir}/latent_imagenet_512", use_labels=True)
     # elif args.dataset == "latent_ffhq256":
     #     dataset = CustomDataset("ffhq", "features/ffhq256_features")
     # elif args.dataset == "latent_ffhq256_flip":
