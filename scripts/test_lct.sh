@@ -1,29 +1,29 @@
 export MASTER_PORT=10128
 
-for epoch in 0775 0975 1175
+for epoch in 2000
 do
         CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 test_cm_latent_ddp.py \
-                --ckpt ./results/latent_celeb256/large_dhariwal_unet_cauchy_no_grad_norm_diff_0.75_newdiff_fix_5_bs128_othard_cauchynew_newc/checkpoints/000${epoch}.pt \
+                --ckpt /research/cbim/medical/qd66/lct_v2/compress_latent_imagenet512/imagenet_rebutt_2/checkpoints/000${epoch}.pt \
                 --seed 42 \
-                --dataset latent_celeb256 \
-                --image-size 32 \
-                --num-in-channels 4 \
-                --num-classes 0 \
-                --steps 161 \
-                --batch-size $((256*1)) \
+                --dataset compress_latent_imagenet512 \
+                --image-size 16 \
+                --num-in-channels 32 \
+                --num-classes 1000 \
+                --steps 1281 \
+                --batch-size $((8*1)) \
                 --num-channels 128 \
                 --num-head-channels 64 \
-                --num-res-blocks 4 \
+                --num-res-blocks 3 \
                 --resblock-updown \
                 --model-type dhariwal_unet \
                 --channel-mult 1,2,3,4 \
                 --attention-resolutions 16,8 \
                 --sampler onestep \
-                --ts 0,9,19,39,79,159 \
-                --normalize-matrix celeb256_stat.npy \
+                --ts 0,641,1280 \
+                --normalize-matrix compress_latent_imagenet512.npy \
                 --real-img-dir ~/datasets/celeba_256_jpg/ \
-                --compute-fid \
                 --ema \
+                # --compute-fid \
                 # --test-interval \
 done
 

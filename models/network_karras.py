@@ -11,9 +11,19 @@
 import numpy as np
 import torch
 from torch_utils import persistence
-from torch.nn.functional import silu
+from torch.nn.functional import silu, relu
 import torch.nn as nn
 from torch.nn import LayerNorm, BatchNorm2d, InstanceNorm2d
+
+
+
+class PixelNorm(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input):
+        return input / torch.rsqrt(torch.mean(input ** 2, dim=1, keepdim=True) + 1e-8)
+
 #----------------------------------------------------------------------------
 # Unified routine for initializing weights and biases.
 
@@ -183,6 +193,8 @@ class UNetBlock(torch.nn.Module):
         params = self.affine(emb).unsqueeze(2).unsqueeze(3).to(x.dtype)
         if self.adaptive_scale:
             scale, shift = params.chunk(chunks=2, dim=1)
+            scale = PixelNorm()(scale)
+            shift = PixelNorm()(shift)
             x = silu(torch.addcmul(shift, self.norm1(x), scale + 1))
         else:
             x = silu(self.norm1(x.add_(params)))

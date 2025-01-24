@@ -207,6 +207,7 @@ class UNet(torch.nn.Module):
         cemb = model_channels * channel_mult_emb if channel_mult_emb is not None else max(cblock)
         self.label_balance = label_balance
         self.concat_balance = concat_balance
+        self.label_dim = label_dim
         self.out_gain = torch.nn.Parameter(torch.zeros([]))
 
         # Embedding.
@@ -248,6 +249,7 @@ class UNet(torch.nn.Module):
 
     def forward(self, x, noise_labels, y):
         # Embedding.
+        y = torch.nn.functional.one_hot(y, num_classes=self.label_dim).to(dtype=x.dtype)
         class_labels = y
         emb = self.emb_noise(self.emb_fourier(noise_labels))
         if self.emb_label is not None:

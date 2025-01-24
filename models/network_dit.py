@@ -420,7 +420,7 @@ class DiT(nn.Module):
         depth=28,
         num_heads=16,
         mlp_ratio=4.0,
-        class_dropout_prob=1e-10,
+        class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
         no_scale = False,

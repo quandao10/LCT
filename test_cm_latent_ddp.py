@@ -24,9 +24,10 @@ from models.karras_diffusion import karras_sample
 import numpy as np
 from datasets_prep import get_dataset
 from torch.utils.data import DataLoader
-from models.nn import mean_flat, append_dims, append_zero
-from tqdm import tqdm
-from models.karras_diffusion import get_sigmas_karras
+# from models.nn import mean_flat, append_dims, append_zero
+# from tqdm import tqdm
+# from models.karras_diffusion import get_sigmas_karras
+from efficientvit.efficientvit.ae_model_zoo import DCAE_HF
 
 def main(args):
     torch.backends.cuda.matmul.allow_tf32 = True  # True: fast but may lead to some small numerical differences
@@ -62,7 +63,9 @@ def main(args):
 
     model, diffusion = create_model_and_diffusion(args)
     model.to(device=device)
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    vae = DCAE_HF.from_pretrained(f"mit-han-lab/dc-ae-f32c32-in-1.0").to(device).eval()
+    vae.requires_grad_(False)
     ckpt = torch.load(args.ckpt, map_location=torch.device(f'cuda:{device}'))
     print("Finish loading model")
     # loading weights from ddp in single gpu
@@ -95,7 +98,7 @@ def main(args):
         std = data["std"].to(device)
 
     def run_sampling(num_samples, generator):
-        noise = generator.randn(num_samples, 4, args.image_size, args.image_size).to(device)*args.sigma_max
+        noise = generator.randn(num_samples, args.num_in_channels, args.image_size, args.image_size).to(device)*args.sigma_max
         if not use_label:
             model_kwargs = dict(y=None)
         else:
@@ -140,9 +143,9 @@ def main(args):
         if args.cfg_scale > 1.0:
             fake_sample, _ = fake_sample.chunk(2, dim=0)  # Remove null class samples        
         if use_normalize:
-            fake_image = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in fake_sample] # careful here
+            fake_image = [vae.decode(x.unsqueeze(0)*std/0.5 + mean) for x in fake_sample] # careful here
         else:
-            fake_image = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in fake_sample]
+            fake_image = [vae.decode(x.unsqueeze(0) / 0.18215) for x in fake_sample]
         fake_image = [torch.clamp(x, -1, 1) for x in fake_image]
         return fake_image
     

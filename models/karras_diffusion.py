@@ -62,8 +62,8 @@ class KarrasDenoiser:
             self.lpips_loss = LPIPS(replace_pooling=True, reduction="none")
         self.rho = rho
         self.num_timesteps = 40
-        self.p_mean = -1.1
-        self.p_std = 2.0
+        self.p_mean = -0.8
+        self.p_std = 1.6
         self.c = th.tensor(3.45)
 
     def get_snr(self, sigmas):

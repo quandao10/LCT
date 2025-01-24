@@ -43,6 +43,7 @@ from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from lion_pytorch import Lion
 from efficientvit.efficientvit.ae_model_zoo import DCAE_HF
+from soap import SOAP
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -237,7 +238,8 @@ def main(args):
         if args.umt:
             opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
-            opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=args.eps)
+            # opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=args.eps)
+            opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=args.eps)
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -345,7 +347,6 @@ def main(args):
             sample_model_kwargs = dict(y=ys)
             model_fn = ema.forward
 
-
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
@@ -364,42 +365,39 @@ def main(args):
 
             # Change diffusion.c w.r.t predicted function by NFE (loss std)
             if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
-                diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85)) * diffusion.c/torch.tensor(0.00345)
-
+                diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85)) * torch.sqrt(torch.tensor(2))
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
-            losses = diffusion.consistency_losses(model,
-                                                x,
-                                                num_scales,
-                                                target_model=target_model,
-                                                model_kwargs=model_kwargs,
-                                                noise=n,
-                                                adaptive=adaptive_loss,
-                                                model_umt=model_umt)
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
+                losses = diffusion.consistency_losses(model,
+                                                    x,
+                                                    num_scales,
+                                                    target_model=target_model,
+                                                    model_kwargs=model_kwargs,
+                                                    noise=n,
+                                                    adaptive=adaptive_loss,
+                                                    model_umt=model_umt)
            
             if args.l2_reweight:
-                # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
                 distances = norm_dim(x-n)
-                # weight = (distances-distances.min())/(distances.max()-distances.min()) + distances.min()
                 weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
                 loss = (losses["loss"]*weight).mean()
             else:
                 cm_loss = losses["loss"].mean() 
                 diff_loss = losses["diff_loss"].mean()
                 if args.use_diffloss:
-                    cm_loss = cm_loss * 0.4 if epoch >= args.epochs*6/7 else cm_loss
                     loss = cm_loss + args.diff_lamb*diff_loss
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
             after_forward = torch.cuda.memory_allocated(device)
             
-            opt.zero_grad()
+            opt.zero_grad(set_to_none=True)
             loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             for param in model.parameters():
                 if param.grad is not None:
-                    torch.nan_to_num(param.grad, nan=0, posinf=0, neginf=0, out=param.grad) # this is interesting
+                    torch.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad) # this is interesting
             opt.step()
             running_loss += loss.item()
             running_cm_loss += cm_loss.item()
@@ -432,7 +430,6 @@ def main(args):
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
                     f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
-                    # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
                 # Reset monitoring variables:
                 running_loss = 0
@@ -571,7 +568,7 @@ def main(args):
                         ts=ts,
                     )
                     if use_normalize:
-                        sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
+                        sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean) for x in sample]
                     else:
                         sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
                 sample = torch.concat(sample, dim=0)
@@ -596,7 +593,7 @@ def main(args):
                         ts=ts,
                     )
                     if use_normalize:
-                        ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
+                        ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean) for x in ema_sample]
                     else:
                         ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
                 ema_sample = torch.concat(ema_sample, dim=0)
@@ -660,6 +657,7 @@ if __name__ == "__main__":
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
+    parser.add_argument("--rho", type=float, default=7.0)
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict", "log_ict", "norm_ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "gm", "huber_new", "cauchy_new", "gm_new"], default="huber")
