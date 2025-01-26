@@ -1,7 +1,8 @@
 PREFIX_DATASET=/home/khanhdn10/repo/lct
 PREFIX_CKPT=/lustre/scratch/client/movian/research/users/anhnd72/save_models
 
-torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10123 --nproc_per_node=8 train_cm_latent.py \
+# torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10123 --nproc_per_node=8 train_cm_latent.py \
+torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10123 --nproc_per_node=1 train_cm_latent.py \
 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
         --exp celeb_dit_best_setting_700ep_B_relu_small_lr  \
         --datadir $PREFIX_DATASET/dataset/ \
