@@ -191,7 +191,18 @@ def main(args):
         logger = create_logger(None)
     # create vae model
     logger.info("creating the vae model")
-    vae = DCAE_HF.from_pretrained(f"mit-han-lab/dc-ae-f32c32-in-1.0").to(device).eval()
+    # vae = DCAE_HF.from_pretrained(f"mit-han-lab/dc-ae-f32c32-in-1.0").to(device).eval()
+    def build_vae(args):
+        if args.vae_type == "mit-han-lab/dc-ae-f32c32-in-1.0":
+            vae = DCAE_HF.from_pretrained(f"mit-han-lab/dc-ae-f32c32-in-1.0")
+        elif args.vae_type == "stabilityai/sd-vae-ft-ema":
+            vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema")
+        else:
+            raise ValueError(f"VAE type {args.vae_type} not supported")
+        
+        return vae
+    
+    vae = build_vae(args).to(device).eval()
     vae.requires_grad_(False)
     # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
@@ -628,9 +639,9 @@ if __name__ == "__main__":
     parser.add_argument("--num-classes", type=int, default=0)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--normalize-matrix", type=str, default=None)
-    
     ###### model ######
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
+    parser.add_argument("--vae-type", type=str, default="")
     parser.add_argument("--num-channels", type=int, default=128)
     parser.add_argument("--num-res-blocks", type=int, default=2)
     parser.add_argument("--num-heads", type=int, default=4)

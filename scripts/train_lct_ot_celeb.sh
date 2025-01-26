@@ -35,5 +35,6 @@ torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
         --ot-hard \
         --c-by-loss-std \
         --linear-act relu \
-        --no-scale
+        --no-scale \
+        --vae-type mit-han-lab/dc-ae-f32c32-in-1.0
         # --resume
