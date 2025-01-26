@@ -417,7 +417,7 @@ def main(args):
                 cm_loss = losses["loss"].mean() 
                 diff_loss = losses["diff_loss"].mean()
                 if args.use_diffloss:
-                    loss = cm_loss + 5*diff_loss
+                    loss = cm_loss + args.diff_lamb * diff_loss
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
@@ -654,6 +654,7 @@ if __name__ == "__main__":
     parser.add_argument("--custom-constant-c", type=float, default=0.0)
     parser.add_argument("--c-by-nfe-sigma", action="store_true", default=False)
     parser.add_argument("--statistic-preconditioning", action="store_true", default=False)
+    parser.add_argument("--diff-lamb", type=float, default=5.0)
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
