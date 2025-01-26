@@ -51,6 +51,7 @@ class KarrasDenoiser:
         rho=7.0,
         weight_schedule="karras",
         loss_norm="lpips",
+        use_repa=False
     ):
         self.args = args
         self.sigma_data = sigma_data
@@ -65,7 +66,7 @@ class KarrasDenoiser:
         self.p_mean = -0.8
         self.p_std = 1.6
         self.c = th.tensor(3.45)
-
+        self.use_repa = use_repa
     def get_snr(self, sigmas):
         return sigmas**-2
     
@@ -157,6 +158,8 @@ class KarrasDenoiser:
             model_kwargs = {}
         if noise is None:
             noise = th.randn_like(x_start)
+
+        self.
 
         dims = x_start.ndim
 
@@ -324,11 +327,11 @@ class KarrasDenoiser:
         ]
         rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
         model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
-        if model.use_repa:
+        if self.use_repa:
             model_output, zs = model_output
 
         denoised = c_out * model_output + c_skip * x_t
-        if model.use_repa:
+        if self.use_repa:
             return model_output, denoised, zs
         return model_output, denoised
 

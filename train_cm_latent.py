@@ -396,7 +396,8 @@ def main(args):
                                                     model_kwargs=model_kwargs,
                                                     noise=n,
                                                     adaptive=adaptive_loss,
-                                                    model_umt=model_umt)
+                                                    model_umt=model_umt,
+                                                    )
            
             if args.l2_reweight:
                 distances = norm_dim(x-n)

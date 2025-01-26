@@ -134,7 +134,8 @@ def create_model_and_diffusion(args):
         sigma_min=args.sigma_min,
         weight_schedule=args.weight_schedule,
         loss_norm=args.loss_norm,
-        rho=args.rho
+        rho=args.rho,
+        use_repa=args.use_repa
     )
     return model, diffusion
 
