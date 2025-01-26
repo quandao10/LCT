@@ -216,6 +216,7 @@ def main(args):
         args.z_dims = z_dims
         
     model, diffusion = create_model_and_diffusion(args)
+    model = torch.compile(model)
     if args.custom_constant_c > 0.0:
         diffusion.c = torch.tensor(args.custom_constant_c)
     else:
