@@ -423,8 +423,8 @@ def main(args):
                 "diff_lamb": args.diff_lamb,
                 "repa_lamb": args.repa_lamb,
             }
-            with torch.autocast(device_type='cuda', dtype=__dtype):
-            # if True:
+            # with torch.autocast(device_type='cuda', dtype=__dtype):
+            if True:
                 losses = diffusion.consistency_losses(model,
                                                     x,
                                                     num_scales,
