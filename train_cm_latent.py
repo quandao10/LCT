@@ -216,7 +216,6 @@ def main(args):
         args.z_dims = z_dims
         
     model, diffusion = create_model_and_diffusion(args)
-    model = torch.compile(model)
     if args.custom_constant_c > 0.0:
         diffusion.c = torch.tensor(args.custom_constant_c)
     else:
@@ -234,7 +233,10 @@ def main(args):
     target_model.requires_grad_(False)
     target_model.train()
     
-    model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
+    model = model.to(device)
+    if args.compile:
+        model = torch.compile(model)
+    model = DDP(model, device_ids=[rank], find_unused_parameters=False)
 
     # Uncertainty-based multi-task learning
     if args.umt:
@@ -676,6 +678,7 @@ if __name__ == "__main__":
     parser.add_argument("--linear-act", type=str, default=None)
     parser.add_argument("--num-register", type=int, default=0)
     parser.add_argument("--final-conv", action="store_true", default=False)
+    parser.add_argument("--compile", action="store_true", default=False)
     
     
     ###### diffusion ######
@@ -702,6 +705,8 @@ if __name__ == "__main__":
     parser.add_argument("--use-diffloss", action="store_true", default=False)
     parser.add_argument("--ema-half-nfe", action="store_true", default=False)
     parser.add_argument("--umt", help="Uncertainty-based multi-task learning", action="store_true", default=False)
+    
+    ###### repa ######
     parser.add_argument("--use-repa", action="store_true", default=False)
     parser.add_argument("--enc-type", type=str, default="vit_b_16")
     parser.add_argument("--projector-dim", type=int, default=2048)

@@ -43,6 +43,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --projector-dim 2048 \
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
+        --compile \
         --vae-type $PREFIX_CKPT/stabilityai/sd-vae-ft-ema # mit-han-lab/dc-ae-f32c32-in-1.0
         # --use-repa \
         # --resume
