@@ -18,7 +18,7 @@ torchrun --nnodes=1 --nproc_per_node=8 train_cm_latent.py \
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((24*2)) \
+        --global-batch-size $((32*2)) \
         --epochs $((700*1)) \
         --lr 3e-5 \
         --num-sampling 8 \
