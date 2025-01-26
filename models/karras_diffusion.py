@@ -325,8 +325,8 @@ class KarrasDenoiser:
             loss = loss / logvar.exp() + logvar
 
         # REPA loss
+        repa_loss = 0.
         if self.use_repa:
-            repa_loss = 0.
             projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
             bsz = ssl_feat[0].shape[0]
             for i, (z, z_tilde) in enumerate(zip(ssl_feat, projected_feat)):
