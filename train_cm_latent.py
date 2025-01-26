@@ -649,6 +649,13 @@ if __name__ == "__main__":
     parser.add_argument("--ema-half-nfe", action="store_true", default=False)
     parser.add_argument("--umt", help="Uncertainty-based multi-task learning", action="store_true", default=False)
     
+    ###### repa ######
+    parser.add_argument("--use-repa", action="store_true", default=False)
+    parser.add_argument("--enc-type", type=str, default="vit_b_16")
+    parser.add_argument("--projector-dim", type=int, default=2048)
+    parser.add_argument("--encoder-depth", type=int, default=4)
+    parser.add_argument("--repa-lamb", type=float, default=0.5)
+    
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--no-lr-decay", action='store_true', default=False)
