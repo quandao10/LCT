@@ -3,6 +3,7 @@ PREFIX=/home/khanhdn10/repo/lct
 
 # CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=2 train_cm_latent.py \
 # CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
+
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
         --exp celeb_dit_repa  \
         --datadir $PREFIX/dataset/ \
@@ -32,7 +33,27 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py
         --model-type DiT-B/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
-        --normalize-matrix celeb256_stat.npy \
+        --normalize-matrix celeb256_stat.npy \ 
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
+        
+        # baseline L/2: 
+                - FID 6.3 6.4 (ngang diffusion)
+                -700 epochs (best 675)
+        # baseline B/2: 
+                - FID 7.6
+                -700 epochs (best 650)
+        # RELU (thay vi GeLU, ko tot bang) --> dung GeLU
+
+        # Note: 
+
+        # epochs: ~700-800
+        # 
+
+
+        # Note that:
+        # --normalize-matrix celeb256_stat.npy \ <-- replace this after running extract_stat.py
+        # model cang to hoac cang train lau --> cang de exploding (chi xay ra voi attention)
+        
+        # temporal loss 
