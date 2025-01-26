@@ -40,7 +40,7 @@ from models.network_edm2 import EDM2_models
 import robust_loss_pytorch
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
-
+from repa_utils import preprocess_raw_image
 EMA_RATES = {
     "ema_0.999": 0.999,
     "ema": 0.9999,
@@ -356,7 +356,8 @@ def main(args):
                     raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
                     raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
                     ssl_feat = []
-                    with torch.autocast(device_type='cuda', dtype=__dtype):
+                    # with torch.autocast(device_type='cuda', dtype=__dtype):
+                    with torch.autocast(device_type='cuda'):
                         for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
                             raw_image_ = preprocess_raw_image(raw_image, encoder_type)
                             z = encoder.forward_features(raw_image_)
