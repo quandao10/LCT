@@ -10,6 +10,30 @@ from models.repa import mocov3_vit
 import math
 import warnings
 
+CLIP_DEFAULT_MEAN = (0.48145466, 0.4578275, 0.40821073)
+CLIP_DEFAULT_STD = (0.26862954, 0.26130258, 0.27577711)
+
+def preprocess_raw_image(x, enc_type):
+    if 'clip' in enc_type:
+        x = x / 255.
+        x = torch.nn.functional.interpolate(x, 224, mode='bicubic')
+        x = Normalize(CLIP_DEFAULT_MEAN, CLIP_DEFAULT_STD)(x)
+    elif 'mocov3' in enc_type or 'mae' in enc_type:
+        x = x / 255.
+        x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
+    elif 'dinov2' in enc_type:
+        x = x / 255.
+        x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
+        x = torch.nn.functional.interpolate(x, 224, mode='bicubic')
+    elif 'dinov1' in enc_type:
+        x = x / 255.
+        x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
+    elif 'jepa' in enc_type:
+        x = x / 255.
+        x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
+        x = torch.nn.functional.interpolate(x, 224, mode='bicubic')
+
+    return x
 
 # code from SiT repository
 pretrained_models = {'last.pt'}

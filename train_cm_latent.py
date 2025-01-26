@@ -38,6 +38,7 @@ from diffusers.models import AutoencoderKL
 from models.network_dit import DiT_models
 from models.network_udit import UDiT_models
 from models.network_edm2 import EDM2_models
+from repa_utils import preprocess_raw_image
 import robust_loss_pytorch
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
@@ -383,6 +384,21 @@ def main(args):
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
+            if args.use_repa:
+                with torch.no_grad():
+                    target = x.clone().detach()
+                    raw_image = target / vae.config.scaling_factor
+                    raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
+                    raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+                    zs = []
+                    with torch.autocast(device_type='cuda', dtype=__dtype):
+                        for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
+                            raw_image_ = preprocess_raw_image(raw_image, encoder_type)
+                            z = encoder.forward_features(raw_image_)
+                            if 'mocov3' in encoder_type: z = z = z[:, 1:] 
+                            if 'dinov2' in encoder_type: z = z['x_norm_patchtokens']
+                            zs.append(z.detach())
+            import ipdb; ipdb.set_trace()
             if use_normalize:
                 x = x#/0.18215
                 x = (x - mean)/std * 0.5
@@ -398,6 +414,10 @@ def main(args):
             model_kwargs = dict(y=y, is_train=True)
             before_forward = torch.cuda.memory_allocated(device)
             
+            ####################### REPA #######################
+            
+
+            ####################### END REPA #######################
             with torch.autocast(device_type='cuda', dtype=__dtype):
                 losses = diffusion.consistency_losses(model,
                                                     x,
