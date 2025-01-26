@@ -506,7 +506,6 @@ class DiT(nn.Module):
                 build_mlp(hidden_size, projector_dim, z_dim) for z_dim in z_dims
             ])
         ############## REPA ##############
-        import ipdb; ipdb.set_trace()
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -585,6 +584,7 @@ class DiT(nn.Module):
         else:
             for idx, block in enumerate(self.blocks):
                 x = block(x, c)
+                import ipdb; ipdb.set_trace()
                 if self.use_repa and (idx + 1) == self.encoder_depth:
                     zs = [projector(x.reshape(-1, D)).reshape(N, T, -1) for projector in self.projectors]
         if self.num_register > 0:
