@@ -167,6 +167,7 @@ class KarrasDenoiser:
         if target_model:
             @th.no_grad()
             def target_denoise_fn(x, t):
+                model_kwargs['is_train'] = False
                 return self.denoise(target_model, x, t, **model_kwargs)[1]
 
         else:
@@ -325,12 +326,11 @@ class KarrasDenoiser:
         ]
         rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
         model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
-        print(model)
-        if hasattr(model, 'module') and hasattr(model.module, 'use_repa') and model.module.use_repa:
+        if model_kwargs.get('is_train', False) and self.use_repa:
             model_output, zs = model_output
 
         denoised = c_out * model_output + c_skip * x_t
-        if hasattr(model, 'module') and hasattr(model.module, 'use_repa') and model.module.use_repa:
+        if model_kwargs.get('is_train', False) and self.use_repa:
             return model_output, denoised, zs
         return model_output, denoised
 

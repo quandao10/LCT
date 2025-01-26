@@ -560,7 +560,7 @@ class DiT(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 
-    def forward(self, x, t, y=None):
+    def forward(self, x, t, y=None, is_train=False):
         """
         Forward pass of DiT.
         x: (N, C, H, W) tensor of spatial inputs (images or latent representations of images)
@@ -584,7 +584,7 @@ class DiT(nn.Module):
         else:
             for idx, block in enumerate(self.blocks):
                 x = block(x, c)
-                if self.use_repa and (idx + 1) == self.encoder_depth:
+                if is_train and self.use_repa and (idx + 1) == self.encoder_depth:
                     zs = [projector(x.reshape(-1, D)).reshape(N, T, -1) for projector in self.projectors]
         if self.num_register > 0:
             x = x[:, :self.x_embedder.num_patches, :]
@@ -597,7 +597,7 @@ class DiT(nn.Module):
             x = self.final_layer(x, c)
             x = self.output(x)
         
-        if self.use_repa:
+        if is_train and self.use_repa:
             return x, zs
         return x
 

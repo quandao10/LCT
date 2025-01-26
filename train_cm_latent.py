@@ -230,9 +230,6 @@ def main(args):
     # create target model
     logger.info("creating the target model")
     target_model = deepcopy(model).to(device)
-    target_model.use_repa = False
-    del target_model.projectors
-    target_model.projectors = None
     target_model.requires_grad_(False)
     target_model.train()
     
@@ -398,7 +395,7 @@ def main(args):
             # Change diffusion.c w.r.t predicted function by NFE (loss std)
             if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
                 diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85)) * torch.sqrt(torch.tensor(2))
-            model_kwargs = dict(y=y)
+            model_kwargs = dict(y=y, is_train=True)
             before_forward = torch.cuda.memory_allocated(device)
             
             with torch.autocast(device_type='cuda', dtype=__dtype):
