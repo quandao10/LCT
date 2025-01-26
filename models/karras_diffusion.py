@@ -325,11 +325,12 @@ class KarrasDenoiser:
         ]
         rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
         model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
-        if model.module.use_repa:
+        print(model)
+        if hasattr(model, 'module') and hasattr(model.module, 'use_repa') and model.module.use_repa:
             model_output, zs = model_output
 
         denoised = c_out * model_output + c_skip * x_t
-        if model.module.use_repa:
+        if hasattr(model, 'module') and hasattr(model.module, 'use_repa') and model.module.use_repa:
             return model_output, denoised, zs
         return model_output, denoised
 
