@@ -193,9 +193,9 @@ def main(args):
     logger.info("creating the vae model")
     # vae = DCAE_HF.from_pretrained(f"mit-han-lab/dc-ae-f32c32-in-1.0").to(device).eval()
     def build_vae(args):
-        if args.vae_type == "mit-han-lab/dc-ae-f32c32-in-1.0":
+        if "mit-han-lab/dc-ae-f32c32-in-1.0" in args.vae_type:
             vae = DCAE_HF.from_pretrained(f"mit-han-lab/dc-ae-f32c32-in-1.0")
-        elif args.vae_type == "stabilityai/sd-vae-ft-ema":
+        elif "stabilityai/sd-vae-ft-ema" in args.vae_type:
             vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema")
         else:
             raise ValueError(f"VAE type {args.vae_type} not supported")
