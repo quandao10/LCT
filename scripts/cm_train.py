@@ -4,8 +4,7 @@ Train a diffusion model on images.
 
 import argparse
 
-from . import dist_util
-from models import logger
+from models import dist_util, logger
 from models.image_datasets import load_data
 from models.resample import create_named_schedule_sampler
 from models.script_util import (

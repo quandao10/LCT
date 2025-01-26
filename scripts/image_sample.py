@@ -10,8 +10,7 @@ import numpy as np
 import torch as th
 import torch.distributed as dist
 
-from . import dist_util
-from models import logger
+from models import dist_util, logger
 from models.script_util import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
