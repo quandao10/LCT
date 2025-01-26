@@ -230,6 +230,9 @@ def main(args):
     # create target model
     logger.info("creating the target model")
     target_model = deepcopy(model).to(device)
+    target_model.use_repa = False
+    del target_model.projectors
+    target_model.projectors = None
     target_model.requires_grad_(False)
     target_model.train()
     
