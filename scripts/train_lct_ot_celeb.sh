@@ -42,9 +42,9 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --ot-hard \
         --c-by-loss-std \
         --linear-act relu \
-        --no-scale \
         --plot-every 5 \
         --vae-type $PREFIX_CKPT/stabilityai/sd-vae-ft-ema \
+        # --no-scale \
         # --use-repa \
         # --projector-dim 2048 \
         # --enc-type dinov2-vit-b \
