@@ -374,7 +374,8 @@ def main(args):
         else:
             sample_model_kwargs = dict(y=ys)
             model_fn = ema.forward
-
+    
+    __dtype = torch.bfloat16 if args.use_bf16 else torch.float16
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
@@ -396,7 +397,7 @@ def main(args):
                 diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85)) * torch.sqrt(torch.tensor(2))
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
-            __dtype = torch.bfloat16 if args.use_bf16 else torch.float16
+            
             with torch.autocast(device_type='cuda', dtype=__dtype):
                 losses = diffusion.consistency_losses(model,
                                                     x,

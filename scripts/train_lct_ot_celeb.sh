@@ -21,7 +21,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((32*2)) \
+        --global-batch-size $((24*2)) \
         --epochs $((700*1)) \
         --lr 3e-5 \
         --num-sampling 8 \
@@ -30,7 +30,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --num-res-blocks 4 \
         --resblock-updown \
         --ict \
-        --max-grad-norm 10.0 \
+        --max-grad-norm 100.0 \
         --model-type DiT-B/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
@@ -38,13 +38,13 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --linear-act gelu \
+        --linear-act relu \
         --no-scale \
         --projector-dim 2048 \
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
-        --use-bf16 \
         --vae-type $PREFIX_CKPT/stabilityai/sd-vae-ft-ema # mit-han-lab/dc-ae-f32c32-in-1.0
+        # --use-bf16 \
         # --compile \
         # --use-repa \
         # --resume
