@@ -200,6 +200,7 @@ def main(args):
         else:
             raise ValueError(f"VAE type {args.vae_type} not supported")
         
+        print(f"\033[33mLoaded vae: {args.vae_type}\033[0m")
         return vae
     
     vae = build_vae(args).to(device).eval()
