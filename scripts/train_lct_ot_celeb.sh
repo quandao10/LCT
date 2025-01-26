@@ -39,6 +39,6 @@ torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
         --no-scale \
         --use-repa \
         --projector-dim 2048 \
-        --enc-type dinov2 \
+        --enc-type dinov2-vit-b \
         --vae-type $PREFIX_CKPT/stabilityai/sd-vae-ft-ema # mit-han-lab/dc-ae-f32c32-in-1.0
         # --resume
