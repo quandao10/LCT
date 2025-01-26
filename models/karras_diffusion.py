@@ -49,7 +49,7 @@ class KarrasDenoiser:
         rho=7.0,
         weight_schedule="karras",
         loss_norm="lpips",
-        self.use_repa = use_repa
+        use_repa=False,
     ):
         self.args = args
         self.sigma_data = sigma_data
@@ -66,6 +66,7 @@ class KarrasDenoiser:
         self.p_mean = -1.1
         self.p_std = 2.0
         self.c = None
+        self.use_repa = use_repa
         if args.statistic_preconditioning:
             import json
             with open('./saved_precond.json', 'r') as f:
