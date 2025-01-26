@@ -30,7 +30,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --num-res-blocks 4 \
         --resblock-updown \
         --ict \
-        --max-grad-norm 100.0 \
+        --max-grad-norm 10.0 \
         --model-type DiT-B/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
