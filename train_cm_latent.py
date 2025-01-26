@@ -234,10 +234,7 @@ def main(args):
     target_model.train()
     
     model = model.to(device)
-    if args.compile:
-        model = torch.compile(model)
-        print("\033[33mcompiled model\033[0m")
-    model = DDP(model, device_ids=[rank], find_unused_parameters=False)
+    
 
     # Uncertainty-based multi-task learning
     if args.umt:
@@ -264,6 +261,11 @@ def main(args):
         else:
             # opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=args.eps)
             opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=args.eps)
+
+    if args.compile:
+        print("\033[33mcompiling model\033[0m")
+        model = torch.compile(model)
+    model = DDP(model, device_ids=[rank], find_unused_parameters=False)
 
     print(f"Optimizer: {opt}")
     # define scheduler
