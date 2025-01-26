@@ -396,7 +396,8 @@ def main(args):
                 diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85)) * torch.sqrt(torch.tensor(2))
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
-            with torch.autocast(device_type='cuda', dtype=torch.float16):
+            __dtype = torch.bfloat16 if args.use_bf16 else torch.float16
+            with torch.autocast(device_type='cuda', dtype=__dtype):
                 losses = diffusion.consistency_losses(model,
                                                     x,
                                                     num_scales,
@@ -672,6 +673,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-scale-shift-norm", action="store_true", default=True)
     parser.add_argument("--resblock-updown", action="store_true", default=False)
     parser.add_argument("--use-fp16", action="store_true", default=False)
+    parser.add_argument("--use-bf16", action="store_true", default=False)
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys())+list(UDiT_models.keys()), default="openai_unet")
