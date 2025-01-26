@@ -166,8 +166,11 @@ class KarrasDenoiser:
         dims = x_start.ndim
 
         def denoise_fn(x, t):
-            _, denoised, projected_feat = self.denoise(model, x, t, **model_kwargs)
-            return denoised, projected_feat
+            if self.use_repa:
+                _, denoised, projected_feat = self.denoise(model, x, t, **model_kwargs)
+                return denoised, projected_feat
+            else:
+                return self.denoise(model, x, t, **model_kwargs)[1]
 
         if target_model:
             @th.no_grad()
@@ -240,7 +243,10 @@ class KarrasDenoiser:
         x_t = x_start + noise * append_dims(t, dims)
 
         dropout_state = th.get_rng_state()
-        distiller, projected_feat = denoise_fn(x_t, t)
+        if self.use_repa:
+            distiller, projected_feat = denoise_fn(x_t, t)
+        else:
+            distiller = denoise_fn(x_t, t)
 
         if teacher_model is None:
             x_t2 = euler_solver(x_t, t, t2, x_start).detach()
