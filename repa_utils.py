@@ -9,6 +9,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from models.repa import mocov3_vit
 import math
 import warnings
+from torchvision.transforms import Normalize
+from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 CLIP_DEFAULT_MEAN = (0.48145466, 0.4578275, 0.40821073)
 CLIP_DEFAULT_STD = (0.26862954, 0.26130258, 0.27577711)
