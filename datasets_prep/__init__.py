@@ -25,8 +25,7 @@ class CustomDataset(Dataset):
         elif self.dataset == "celebhq_flip":
             return 60000
         elif self.dataset == "celebhq256":
-            # return 27000
-            return 2
+            return 27000
         elif self.dataset == "church256":
             return 120000
         elif self.dataset == "church256_flip":
