@@ -43,6 +43,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --c-by-loss-std \
         --linear-act relu \
         --plot-every 5 \
+        --eps 1e-4 \
         --vae-type $PREFIX_CKPT/stabilityai/sd-vae-ft-ema \
         # --no-scale \
         # --use-repa \
