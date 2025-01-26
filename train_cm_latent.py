@@ -598,10 +598,15 @@ def main(args):
                         noise=noise,
                         ts=ts,
                     )
+
                     if use_normalize:
                         sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean) for x in sample]
                     else:
                         sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
+                
+                if "sd-vae-ft-ema" in args.vae_type:
+                    sample = [out.sample for out in sample]
+
                 sample = torch.concat(sample, dim=0)
                 with torch.no_grad():
                     ema_sample = karras_sample(
@@ -627,7 +632,11 @@ def main(args):
                         ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean) for x in ema_sample]
                     else:
                         ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
+                
+                if "sd-vae-ft-ema" in args.vae_type:
+                    ema_sample = [out.sample for out in ema_sample]
                 ema_sample = torch.concat(ema_sample, dim=0)
+                
                 sample_to_save = torch.concat([sample, ema_sample], dim=0)
                 save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
                 del sample
