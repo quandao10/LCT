@@ -498,6 +498,7 @@ class DiT(nn.Module):
                 Conv2d(in_channels=hidden_size//2, out_channels=self.out_channels, kernel=3, **init_zero))
         
         ############## REPA ##############
+        self.use_repa = use_repa
         if self.use_repa:   
             self.projectors = nn.ModuleList([
                 build_mlp(hidden_size, projector_dim, z_dim) for z_dim in z_dims
