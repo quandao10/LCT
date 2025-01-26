@@ -276,6 +276,9 @@ class DiT(nn.Module):
                 projected_feat = [projector(x.reshape(-1, D)).reshape(N, T, -1) for projector in self.projectors]
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
+        
+        if is_train and self.use_repa:
+            return x, projected_feat
         return x
 
     def forward_with_cfg(self, x, t, cfg_scale, y=None):
