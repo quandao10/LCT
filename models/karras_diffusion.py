@@ -329,7 +329,7 @@ class KarrasDenoiser:
             model_output, zs = model_output
 
         denoised = c_out * model_output + c_skip * x_t
-        if self.use_repa:
+        if model.module.use_repa:
             return model_output, denoised, zs
         return model_output, denoised
 
