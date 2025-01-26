@@ -405,7 +405,7 @@ def main(args):
             ####################### REPA #######################
             
             if use_normalize:
-                x = x#/0.18215
+                x = x / 0.18215
                 x = (x - mean)/std * 0.5
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
@@ -424,6 +424,7 @@ def main(args):
                 "repa_lamb": args.repa_lamb,
             }
             with torch.autocast(device_type='cuda', dtype=__dtype):
+            # if True:
                 losses = diffusion.consistency_losses(model,
                                                     x,
                                                     num_scales,
