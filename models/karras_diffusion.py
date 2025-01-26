@@ -15,6 +15,7 @@ from .nn import mean_flat, append_dims, append_zero
 from .random_util import get_generator
 import robust_loss_pytorch
 from elatentlpips import ELatentLPIPS
+gradnorm = lambda x, lamb: x
 
 
 def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0):
@@ -48,6 +49,7 @@ class KarrasDenoiser:
         rho=7.0,
         weight_schedule="karras",
         loss_norm="lpips",
+        self.use_repa = use_repa
     ):
         self.args = args
         self.sigma_data = sigma_data
@@ -154,6 +156,8 @@ class KarrasDenoiser:
         noise=None,
         adaptive=None,
         model_umt=None,
+        ssl_feat=None,
+        lamb_dict=None,
     ):
         assert teacher_model is None, "Just implement for CT only!"
         if model_kwargs is None:
@@ -164,11 +168,16 @@ class KarrasDenoiser:
         dims = x_start.ndim
 
         def denoise_fn(x, t, indices):
-            return self.denoise(model, x, t, indices, **model_kwargs)[1]
+            if self.use_repa:
+                _, denoised, projected_feat = self.denoise(model, x, t, indices, **model_kwargs)
+                return denoised, projected_feat
+            else:
+                return self.denoise(model, x, t, indices, **model_kwargs)[1]
 
         if target_model:
             @th.no_grad()
             def target_denoise_fn(x, t, indices):
+                model_kwargs['is_train'] = False
                 return self.denoise(target_model, x, t, indices, **model_kwargs)[1]
 
         else:
@@ -317,10 +326,25 @@ class KarrasDenoiser:
             logvar = model_umt(rescaled_t)
             loss = loss / logvar.exp() + logvar
 
+        # REPA loss
+        repa_loss = 0.
+        if self.use_repa:
+            projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
+            bsz = ssl_feat[0].shape[0]
+            for i, (z, z_tilde) in enumerate(zip(ssl_feat, projected_feat)):
+                for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
+                    z_tilde_j = th.nn.functional.normalize(z_tilde_j, dim=-1) 
+                    z_j = th.nn.functional.normalize(z_j, dim=-1) 
+                    numerator = z_j * z_tilde_j
+                    numerator = th.nan_to_num(numerator, nan=0.0)
+                    repa_loss += mean_flat(-(numerator).sum(dim=-1))
+            repa_loss /= (len(ssl_feat) * bsz)
+
         terms = {}
         terms["loss"] = loss
         terms["diff_loss"] = diff_loss
         terms["t"] = t
+        terms["repa_loss"] = repa_loss
 
         return terms
 
@@ -336,8 +360,14 @@ class KarrasDenoiser:
             c_skip = append_dims(self.cur_precond['c_skip'].type(x_t.dtype).to(x_t.device)[indices], x_t.ndim)
             c_out = append_dims(self.cur_precond['c_out'].type(x_t.dtype).to(x_t.device)[indices], x_t.ndim)
         rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
+
         model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
+        if model_kwargs.get('is_train', False) and self.use_repa:
+            model_output, projected_feat = model_output
         denoised = c_out * model_output + c_skip * x_t
+        
+        if model_kwargs.get('is_train', False) and self.use_repa:
+            return model_output, denoised, projected_feat
         return model_output, denoised
 
 

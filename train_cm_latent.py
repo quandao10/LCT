@@ -326,6 +326,7 @@ def main(args):
     running_loss = 0
     running_cm_loss = 0
     running_diff_loss = 0
+    running_repa_loss = 0
     start_time = time()
     nan_count = 0
     use_label = True if "imagenet" in args.dataset else False
@@ -382,8 +383,12 @@ def main(args):
                     (diffusion.sigma_max**(1/diffusion.rho) - diffusion.sigma_min**(1/diffusion.rho)) / (num_scales - 1)
                 )
 
-            model_kwargs = dict(y=y)
+            model_kwargs = dict(y=y, is_train=True)
             before_forward = torch.cuda.memory_allocated(device)
+            lamb_dict = {
+                "diff_lamb": args.diff_lamb,
+                "repa_lamb": args.repa_lamb,
+            }
             losses = diffusion.consistency_losses(model,
                                                 x,
                                                 num_scales,
@@ -391,7 +396,10 @@ def main(args):
                                                 model_kwargs=model_kwargs,
                                                 noise=n,
                                                 adaptive=adaptive_loss,
-                                                model_umt=model_umt)
+                                                model_umt=model_umt,
+                                                ssl_feat=ssl_feat,
+                                                lamb_dict=lamb_dict,
+                                                )
             # if args.use_diffloss:
             #     diff_losses = diffusion.diffusion_losses(model, 
             #                                             x,
@@ -412,6 +420,12 @@ def main(args):
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
+
+                if args.use_repa:
+                    repa_loss = losses["repa_loss"]
+                    loss += args.repa_lamb * repa_loss
+                else:
+                    repa_loss = torch.tensor(0)
             after_forward = torch.cuda.memory_allocated(device)
             
             if not torch.isnan(loss):
@@ -422,6 +436,7 @@ def main(args):
                 running_loss += loss.item()
                 running_cm_loss += cm_loss.item()
                 running_diff_loss += diff_loss.item()
+                running_repa_loss += repa_loss.item()
             else:
                 nan_count += 1
                 nan_t_list = losses["t"][torch.isnan(losses["loss"])]
@@ -456,10 +471,11 @@ def main(args):
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
                 avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
                 avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
+                avg_repa_loss = torch.tensor(running_repa_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, "
+                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f} Repa Loss: {avg_repa_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
@@ -470,6 +486,7 @@ def main(args):
                 running_loss = 0
                 running_cm_loss = 0
                 running_diff_loss = 0
+                running_repa_loss = 0
                 log_steps = 0
                 start_time = time()
 
@@ -655,7 +672,7 @@ if __name__ == "__main__":
     parser.add_argument("--projector-dim", type=int, default=2048)
     parser.add_argument("--encoder-depth", type=int, default=4)
     parser.add_argument("--repa-lamb", type=float, default=0.5)
-    
+
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--no-lr-decay", action='store_true', default=False)

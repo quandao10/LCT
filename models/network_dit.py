@@ -15,6 +15,14 @@ import numpy as np
 import math
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
 
+def build_mlp(hidden_size, projector_dim, z_dim):
+    return nn.Sequential(
+                nn.Linear(hidden_size, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, z_dim),
+            )
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
@@ -162,6 +170,10 @@ class DiT(nn.Module):
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
+        use_repa=False,
+        projector_dim=None,
+        z_dims=None,
+        encoder_depth=None,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -181,6 +193,16 @@ class DiT(nn.Module):
             DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)
         ])
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
+
+        ############## REPA ##############
+        self.use_repa = use_repa
+        self.encoder_depth = encoder_depth
+        if self.use_repa:   
+            self.projectors = nn.ModuleList([
+                build_mlp(hidden_size, projector_dim, z_dim) for z_dim in z_dims
+            ])
+        ############## REPA ##############
+
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -234,7 +256,7 @@ class DiT(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 
-    def forward(self, x, t, y=None):
+    def forward(self, x, t, y=None, is_train=True):
         """
         Forward pass of DiT.
         x: (N, C, H, W) tensor of spatial inputs (images or latent representations of images)
@@ -244,11 +266,14 @@ class DiT(nn.Module):
         if y is None:
             y = torch.ones(x.size(0), dtype=torch.long, device=x.device) * (self.y_embedder.get_in_channels() - 1)
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
+        N, T, D = x.shape
         t = self.t_embedder(t)                   # (N, D)
         y = self.y_embedder(y, self.training)    # (N, D)
         c = t + y                                # (N, D)
-        for block in self.blocks:
+        for idx, block in enumerate(self.blocks):
             x = block(x, c)                      # (N, T, D)
+            if is_train and self.use_repa and (idx + 1) == self.encoder_depth:
+                projected_feat = [projector(x.reshape(-1, D)).reshape(N, T, -1) for projector in self.projectors]
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
         return x
