@@ -315,7 +315,7 @@ class KarrasDenoiser:
         terms["loss"] = loss
         terms["diff_loss"] = diff_loss
         terms["t"] = t
-
+        
         return terms
 
 
