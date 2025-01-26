@@ -36,5 +36,8 @@ torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
         --c-by-loss-std \
         --linear-act relu \
         --no-scale \
-        --vae-type mit-han-lab/dc-ae-f32c32-in-1.0
+        --vae-type stabilityai/sd-vae-ft-ema # mit-han-lab/dc-ae-f32c32-in-1.0
         # --resume
+
+
+conda create -p /lustre/scratch/client/vinai/users/anhnd72/envs/torch22_cloned4_chitb --clone ./torch22_cloned4_chitb
