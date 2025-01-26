@@ -260,6 +260,8 @@ def main(args):
         else:
             # opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=args.eps)
             opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=args.eps)
+
+    print(f"Optimizer: {opt}")
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
