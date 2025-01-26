@@ -401,6 +401,7 @@ def main(args):
                                                 ssl_feat=ssl_feat,
                                                 lamb_dict=lamb_dict,
                                                 )
+            import ipdb; ipdb.set_trace()
             # if args.use_diffloss:
             #     diff_losses = diffusion.diffusion_losses(model, 
             #                                             x,
