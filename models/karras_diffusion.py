@@ -245,7 +245,10 @@ class KarrasDenoiser:
         x_t = x_start + noise * append_dims(t, dims)
 
         dropout_state = th.get_rng_state()
-        distiller = denoise_fn(x_t, t, indices=indices)
+        if self.use_repa:
+            distiller, projected_feat = denoise_fn(x_t, t, indices=indices)
+        else:
+            distiller = denoise_fn(x_t, t, indices=indices)
 
         if teacher_model is None:
             x_t2 = euler_solver(x_t, t, t2, x_start).detach()
