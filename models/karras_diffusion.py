@@ -153,6 +153,7 @@ class KarrasDenoiser:
         noise=None,
         adaptive=None,
         model_umt=None,
+        zs=None,
     ):
         if model_kwargs is None:
             model_kwargs = {}
@@ -245,6 +246,7 @@ class KarrasDenoiser:
         th.set_rng_state(dropout_state)
         distiller_target = target_denoise_fn(x_t2, t2)
         distiller_target = distiller_target.detach()
+        import ipdb; ipdb.set_trace()
 
         snrs = self.get_snr(t)
         weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t, norm_scale) # ICT: weighting 1/(t2-t)
@@ -315,7 +317,7 @@ class KarrasDenoiser:
         terms["loss"] = loss
         terms["diff_loss"] = diff_loss
         terms["t"] = t
-        
+
         return terms
 
 

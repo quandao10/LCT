@@ -384,6 +384,9 @@ def main(args):
         for i, (x, y) in enumerate(tqdm(loader)):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
+            
+            ####################### REPA #######################
+            zs = None
             if args.use_repa:
                 with torch.no_grad():
                     target = x.clone().detach()
@@ -398,7 +401,8 @@ def main(args):
                             if 'mocov3' in encoder_type: z = z = z[:, 1:] 
                             if 'dinov2' in encoder_type: z = z['x_norm_patchtokens']
                             zs.append(z.detach())
-            import ipdb; ipdb.set_trace()
+            ####################### REPA #######################
+            
             if use_normalize:
                 x = x#/0.18215
                 x = (x - mean)/std * 0.5
@@ -414,10 +418,6 @@ def main(args):
             model_kwargs = dict(y=y, is_train=True)
             before_forward = torch.cuda.memory_allocated(device)
             
-            ####################### REPA #######################
-            
-
-            ####################### END REPA #######################
             with torch.autocast(device_type='cuda', dtype=__dtype):
                 losses = diffusion.consistency_losses(model,
                                                     x,
@@ -427,6 +427,7 @@ def main(args):
                                                     noise=n,
                                                     adaptive=adaptive_loss,
                                                     model_umt=model_umt,
+                                                    zs=zs,
                                                     )
             import ipdb; ipdb.set_trace()
             if args.l2_reweight:
