@@ -741,7 +741,6 @@ if __name__ == "__main__":
     parser.add_argument("--custom-constant-c", type=float, default=0.0)
     parser.add_argument("--diff-lamb", type=float, default=5.0)
     
-    
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
     parser.add_argument("--scale-mode", type=str, choices=["progressive", "fixed"], default="fixed")
@@ -759,6 +758,7 @@ if __name__ == "__main__":
     parser.add_argument("--enc-type", type=str, default="vit_b_16")
     parser.add_argument("--projector-dim", type=int, default=2048)
     parser.add_argument("--encoder-depth", type=int, default=4)
+    parser.add_argument("--repa-lamb", type=float, default=0.5)
 
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
