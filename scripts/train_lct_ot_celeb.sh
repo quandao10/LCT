@@ -48,6 +48,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --encoder-depth 4 \
         --plot-every 5 \
         --use-repa \
+        --repa-lamb 0.5 \
         --vae-type $PREFIX_CKPT/stabilityai/sd-vae-ft-ema # mit-han-lab/dc-ae-f32c32-in-1.0
         # --use-bf16 \
         # --compile \

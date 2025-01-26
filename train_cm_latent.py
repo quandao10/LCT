@@ -349,6 +349,7 @@ def main(args):
     running_loss = 0
     running_cm_loss = 0
     running_diff_loss = 0
+    running_repa_loss = 0
     start_time = time()
     nan_count = 0
     use_label = True if "imagenet" in args.dataset else False
@@ -429,7 +430,6 @@ def main(args):
                                                     model_umt=model_umt,
                                                     ssl_feat=ssl_feat,
                                                     )
-            import ipdb; ipdb.set_trace()
             if args.l2_reweight:
                 distances = norm_dim(x-n)
                 weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
@@ -442,6 +442,13 @@ def main(args):
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
+                
+                if args.use_repa:
+                    repa_loss = losses["repa_loss"]
+                    loss += args.repa_lamb * repa_loss
+                else:
+                    repa_loss = torch.tensor(0)
+
             after_forward = torch.cuda.memory_allocated(device)
             
             opt.zero_grad(set_to_none=True)
@@ -454,6 +461,7 @@ def main(args):
             running_loss += loss.item()
             running_cm_loss += cm_loss.item()
             running_diff_loss += diff_loss.item()
+            running_repa_loss += repa_loss.item()
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
@@ -474,10 +482,11 @@ def main(args):
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
                 avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
                 avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
+                avg_repa_loss = torch.tensor(running_repa_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, "
+                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f} Repa Loss: {avg_repa_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
@@ -487,6 +496,7 @@ def main(args):
                 running_loss = 0
                 running_cm_loss = 0
                 running_diff_loss = 0
+                running_repa_loss = 0
                 log_steps = 0
                 start_time = time()
             if rank == 0 and False and (train_steps % args.plot_every == 0): #epoch % args.plot_every == 0:
