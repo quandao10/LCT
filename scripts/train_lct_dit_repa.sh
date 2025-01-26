@@ -39,7 +39,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --ot-hard \
         --c-by-loss-std \
         --plot-every 5 \
-        --use-bf16 \
+        # --use-bf16 \
         # --use-repa \
         # --projector-dim 2048 \
         # --enc-type dinov2-vit-b \
