@@ -585,7 +585,7 @@ class DiT(nn.Module):
             for idx, block in enumerate(self.blocks):
                 x = block(x, c)
                 if is_train and self.use_repa and (idx + 1) == self.encoder_depth:
-                    zs = [projector(x.reshape(-1, D)).reshape(N, T, -1) for projector in self.projectors]
+                    projected_feat = [projector(x.reshape(-1, D)).reshape(N, T, -1) for projector in self.projectors]
         if self.num_register > 0:
             x = x[:, :self.x_embedder.num_patches, :]
         if not self.final_conv:
@@ -598,7 +598,7 @@ class DiT(nn.Module):
             x = self.output(x)
         
         if is_train and self.use_repa:
-            return x, zs
+            return x, projected_feat
         return x
 
     def forward_with_cfg(self, x, t, cfg_scale, y=None):

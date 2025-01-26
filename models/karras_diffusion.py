@@ -153,7 +153,7 @@ class KarrasDenoiser:
         noise=None,
         adaptive=None,
         model_umt=None,
-        zs=None,
+        ssl_feat=None,
     ):
         if model_kwargs is None:
             model_kwargs = {}
@@ -163,7 +163,8 @@ class KarrasDenoiser:
         dims = x_start.ndim
 
         def denoise_fn(x, t):
-            return self.denoise(model, x, t, **model_kwargs)[1]
+            _, denoised, projected_feat = self.denoise(model, x, t, **model_kwargs)
+            return denoised, projected_feat
 
         if target_model:
             @th.no_grad()
@@ -236,7 +237,7 @@ class KarrasDenoiser:
         x_t = x_start + noise * append_dims(t, dims)
 
         dropout_state = th.get_rng_state()
-        distiller = denoise_fn(x_t, t)
+        distiller, projected_feat = denoise_fn(x_t, t)
 
         if teacher_model is None:
             x_t2 = euler_solver(x_t, t, t2, x_start).detach()
@@ -246,7 +247,6 @@ class KarrasDenoiser:
         th.set_rng_state(dropout_state)
         distiller_target = target_denoise_fn(x_t2, t2)
         distiller_target = distiller_target.detach()
-        import ipdb; ipdb.set_trace()
 
         snrs = self.get_snr(t)
         weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t, norm_scale) # ICT: weighting 1/(t2-t)
@@ -313,6 +313,20 @@ class KarrasDenoiser:
             logvar = model_umt(rescaled_t)
             loss = loss / logvar.exp() + logvar
 
+
+        # REPA loss
+        proj_loss = 0.
+        bsz = ssl_feat[0].shape[0]
+        for i, (z, z_tilde) in enumerate(zip(ssl_feat, projected_feat)):
+            for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
+                z_tilde_j = th.nn.functional.normalize(z_tilde_j, dim=-1) 
+                z_j = th.nn.functional.normalize(z_j, dim=-1) 
+                proj_loss += mean_flat(-(z_j * z_tilde_j).sum(dim=-1))
+        proj_loss /= (len(ssl_feat) * bsz)
+
+        import ipdb; ipdb.set_trace()
+
+
         terms = {}
         terms["loss"] = loss
         terms["diff_loss"] = diff_loss
@@ -329,11 +343,11 @@ class KarrasDenoiser:
         rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
         model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
         if model_kwargs.get('is_train', False) and self.use_repa:
-            model_output, zs = model_output
+            model_output, projected_feat = model_output
 
         denoised = c_out * model_output + c_skip * x_t
         if model_kwargs.get('is_train', False) and self.use_repa:
-            return model_output, denoised, zs
+            return model_output, denoised, projected_feat
         return model_output, denoised
 
 
