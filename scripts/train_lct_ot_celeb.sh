@@ -44,7 +44,6 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --linear-act relu \
         --no-scale \
         --plot-every 5 \
-        --umt \
         --vae-type $PREFIX_CKPT/stabilityai/sd-vae-ft-ema \
         # --use-repa \
         # --projector-dim 2048 \
@@ -53,7 +52,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         # --repa-lamb 0.5 \
         # --use-bf16 \
 
-        
+
         # --compile \
         # --resume
         # --linear-act relu \
