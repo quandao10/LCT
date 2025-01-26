@@ -108,7 +108,11 @@ def create_model_and_diffusion(args):
         model = DiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
                                             num_classes=args.num_classes,
-                                            learn_sigma=args.learn_sigma)
+                                            learn_sigma=args.learn_sigma,
+                                            use_repa=args.use_repa,
+                                            z_dims=args.z_dims,
+                                            projector_dim=args.projector_dim,
+                                            encoder_depth=args.encoder_depth)
             
     diffusion = KarrasDenoiser(
         args=args,
