@@ -208,6 +208,7 @@ def main(args):
     # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     # repa
+    args.z_dims = None
     if args.use_repa:
         from repa_utils import load_encoders
         encoders, encoder_types, architectures = load_encoders(args.enc_type, device)
@@ -701,7 +702,7 @@ if __name__ == "__main__":
     parser.add_argument("--enc-type", type=str, default="vit_b_16")
     parser.add_argument("--projector-dim", type=int, default=2048)
     parser.add_argument("--encoder-depth", type=int, default=4)
-    
+
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--eps", type=float, default=1e-4)
