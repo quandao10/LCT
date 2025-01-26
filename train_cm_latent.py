@@ -418,7 +418,11 @@ def main(args):
                 diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85)) * torch.sqrt(torch.tensor(2))
             model_kwargs = dict(y=y, is_train=True)
             before_forward = torch.cuda.memory_allocated(device)
-            
+
+            lamb_dict = {
+                "diff_lamb": args.diff_lamb,
+                "repa_lamb": args.repa_lamb,
+            }
             with torch.autocast(device_type='cuda', dtype=__dtype):
                 losses = diffusion.consistency_losses(model,
                                                     x,
@@ -429,6 +433,7 @@ def main(args):
                                                     adaptive=adaptive_loss,
                                                     model_umt=model_umt,
                                                     ssl_feat=ssl_feat,
+                                                    lamb_dict=lamb_dict,
                                                     )
             if args.l2_reweight:
                 distances = norm_dim(x-n)

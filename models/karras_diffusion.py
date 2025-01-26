@@ -9,11 +9,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from piq import LPIPS
 from torchvision.transforms import RandomCrop
-from . import dist_util
+from .. import dist_util
 import math
 from .nn import mean_flat, append_dims, append_zero
 from .random_util import get_generator
 import robust_loss_pytorch
+from .grad_utils import gradnorm
 
 
 def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0, norm_scale=None):
@@ -154,6 +155,7 @@ class KarrasDenoiser:
         adaptive=None,
         model_umt=None,
         ssl_feat=None,
+        lamb_dict=None,
     ):
         if model_kwargs is None:
             model_kwargs = {}
@@ -253,9 +255,11 @@ class KarrasDenoiser:
         
         # compute diff losses
         diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
-        diff_loss = mean_flat((distiller - x_start)**2)[diff_indices]*diff_weights
-
+        pred = gradnorm(distiller, lamb_dict["diff_lamb"])
+        diff_loss = mean_flat((pred - x_start)**2)[diff_indices]*diff_weights
+        
         # compute consistency losses
+        pred = gradnorm(distiller, lamb_dict["diff_lamb"])
         if self.loss_norm == "l1":
             diffs = th.abs(distiller - distiller_target)
             loss = mean_flat(diffs) * weights
@@ -316,6 +320,7 @@ class KarrasDenoiser:
         # REPA loss
         if self.use_repa:
             repa_loss = 0.
+            projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
             bsz = ssl_feat[0].shape[0]
             for i, (z, z_tilde) in enumerate(zip(ssl_feat, projected_feat)):
                 for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
