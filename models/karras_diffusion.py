@@ -321,7 +321,9 @@ class KarrasDenoiser:
                 for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
                     z_tilde_j = th.nn.functional.normalize(z_tilde_j, dim=-1) 
                     z_j = th.nn.functional.normalize(z_j, dim=-1) 
-                    repa_loss += mean_flat(-(z_j * z_tilde_j).sum(dim=-1))
+                    numerator = z_j * z_tilde_j
+                    numerator = th.nan_to_num(numerator, nan=0.0)
+                    repa_loss += mean_flat(-(numerator).sum(dim=-1))
             repa_loss /= (len(ssl_feat) * bsz)
 
         terms = {}
