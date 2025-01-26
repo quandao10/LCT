@@ -236,6 +236,7 @@ def main(args):
     model = model.to(device)
     if args.compile:
         model = torch.compile(model)
+        print("\033[33mcompiled model\033[0m")
     model = DDP(model, device_ids=[rank], find_unused_parameters=False)
 
     # Uncertainty-based multi-task learning
