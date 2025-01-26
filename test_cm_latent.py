@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torchvision
-from models.ddp_utils import init_processes
+from ddp_utils import init_processes
 from models import create_network
 from pytorch_fid.fid_score import calculate_fid_given_paths
 from sampler.karras_sample import karras_sample
