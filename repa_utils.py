@@ -6,7 +6,7 @@ import timm
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from models import mocov3_vit
+from models.repa import mocov3_vit
 import math
 import warnings
 
