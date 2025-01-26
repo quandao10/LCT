@@ -37,5 +37,6 @@ torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
         --c-by-loss-std \
         --linear-act relu \
         --no-scale \
+        --use-repa \
         --vae-type $PREFIX_CKPT/stabilityai/sd-vae-ft-ema # mit-han-lab/dc-ae-f32c32-in-1.0
         # --resume

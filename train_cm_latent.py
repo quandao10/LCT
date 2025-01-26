@@ -207,6 +207,13 @@ def main(args):
     vae.requires_grad_(False)
     # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
+    # repa
+    if args.use_repa:
+        from repa_utils import load_encoders
+        encoders, encoder_types, architectures = load_encoders(args.enc_type, device)
+        z_dims = [encoder.embed_dim for encoder in encoders] if args.enc_type != 'None' else [0]
+        args.z_dims = z_dims
+        
     model, diffusion = create_model_and_diffusion(args)
     if args.custom_constant_c > 0.0:
         diffusion.c = torch.tensor(args.custom_constant_c)
@@ -690,7 +697,9 @@ if __name__ == "__main__":
     parser.add_argument("--use-diffloss", action="store_true", default=False)
     parser.add_argument("--ema-half-nfe", action="store_true", default=False)
     parser.add_argument("--umt", help="Uncertainty-based multi-task learning", action="store_true", default=False)
-    
+    parser.add_argument("--use-repa", action="store_true", default=False)
+    parser.add_argument("--projector-dim", type=int, default=2048)
+
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--eps", type=float, default=1e-4)

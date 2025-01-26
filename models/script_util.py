@@ -112,7 +112,10 @@ def create_model_and_diffusion(args):
                                             wo_norm = args.wo_norm,
                                             attn_type = args.attn_type,
                                             num_register = args.num_register,
-                                            final_conv=args.final_conv)
+                                            final_conv=args.final_conv,
+                                            use_repa=args.use_repa,
+                                            z_dims=args.z_dims,
+                                            projector_dim=args.projector_dim)
     elif "U-DiT" in args.model_type:
         model = UDiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,

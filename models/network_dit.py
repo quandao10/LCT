@@ -31,6 +31,15 @@ from models.network_karras import GroupNorm, Linear, Conv2d
 #     flash_attn_qkvpacked_func,
 # )
 
+def build_mlp(hidden_size, projector_dim, z_dim):
+    return nn.Sequential(
+                nn.Linear(hidden_size, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, z_dim),
+            )
+
 def modulate(x, shift, scale):
     return x * PixelNorm()(1 + scale.unsqueeze(1)) + PixelNorm()(shift.unsqueeze(1))
 
@@ -429,6 +438,9 @@ class DiT(nn.Module):
         attn_type=False,
         num_register=0,
         final_conv=False,
+        use_repa=False,
+        projector_dim=None,
+        z_dims=None,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -484,6 +496,14 @@ class DiT(nn.Module):
                 GroupNorm(num_channels=hidden_size//2),
                 # self.out_norm = nn.LayerNorm(normalized_shape=[hidden_size//2, input_size, input_size])
                 Conv2d(in_channels=hidden_size//2, out_channels=self.out_channels, kernel=3, **init_zero))
+        
+        ############## REPA ##############
+        if self.use_repa:   
+            self.projectors = nn.ModuleList([
+                build_mlp(hidden_size, projector_dim, z_dim) for z_dim in z_dims
+            ])
+        ############## REPA ##############
+        import ipdb; ipdb.set_trace()
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -551,6 +571,7 @@ class DiT(nn.Module):
         if self.num_register > 0:
             x = torch.cat([x, self.register_tokens.expand(x.shape[0], -1, -1)], dim=1)
         x = x + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
+        N, T, D = x.shape
         t = self.t_embedder(t)                   # (N, D)
         y = self.y_embedder(y, self.training)    # (N, D)
         c = t + y                                # (N, D)
@@ -561,6 +582,8 @@ class DiT(nn.Module):
         else:
             for idx, block in enumerate(self.blocks):
                 x = block(x, c)
+                if self.use_repa and (idx + 1) == self.encoder_depth:
+                    zs = [projector(x.reshape(-1, D)).reshape(N, T, -1) for projector in self.projectors]
         if self.num_register > 0:
             x = x[:, :self.x_embedder.num_patches, :]
         if not self.final_conv:
@@ -571,6 +594,9 @@ class DiT(nn.Module):
             x = x.reshape(shape=(x.shape[0], h, w, -1)).permute(0, 3, 1, 2)
             x = self.final_layer(x, c)
             x = self.output(x)
+        
+        if self.use_repa:
+            return x, zs
         return x
 
     def forward_with_cfg(self, x, t, cfg_scale, y=None):
