@@ -15,7 +15,7 @@ from .nn import mean_flat, append_dims, append_zero
 from .random_util import get_generator
 import robust_loss_pytorch
 # from .grad_utils import gradnorm
-gradnorm = lambda x: x
+gradnorm = lambda x, lamb: x
 
 
 def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0, norm_scale=None):
