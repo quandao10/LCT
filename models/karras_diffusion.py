@@ -159,8 +159,6 @@ class KarrasDenoiser:
         if noise is None:
             noise = th.randn_like(x_start)
 
-        self.
-
         dims = x_start.ndim
 
         def denoise_fn(x, t):
