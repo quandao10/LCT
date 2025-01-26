@@ -441,6 +441,7 @@ class DiT(nn.Module):
         use_repa=False,
         projector_dim=None,
         z_dims=None,
+        encoder_depth=None,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -499,6 +500,7 @@ class DiT(nn.Module):
         
         ############## REPA ##############
         self.use_repa = use_repa
+        self.encoder_depth = encoder_depth
         if self.use_repa:   
             self.projectors = nn.ModuleList([
                 build_mlp(hidden_size, projector_dim, z_dim) for z_dim in z_dims
