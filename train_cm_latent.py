@@ -179,13 +179,14 @@ def main(args):
     logger.info("creating the vae model")
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
-    # repa
+    ############################## REPA ##############################
     args.z_dims = None
     if args.use_repa:
         from repa_utils import load_encoders
         encoders, encoder_types, architectures = load_encoders(args.enc_type, device)
         z_dims = [encoder.embed_dim for encoder in encoders] if args.enc_type != 'None' else [0]
         args.z_dims = z_dims
+    ############################## REPA ##############################
 
     model, diffusion = create_model_and_diffusion(args)
     # with open('./model.txt', 'w') as f:

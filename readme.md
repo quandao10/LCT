@@ -1,11 +1,12 @@
 ## Training
 To train consistency model
 ```
+conda activate /lustre/scratch/client/vinai/users/anhnd72/envs/torch22_cloned4_chitb
 bash scripts/train_cm.sh
 ```
 To train latent consistency model
 ```
-bash scripts/train_lct.sh
+bash scripts/train_lct_dit_repa.sh
 ```
 
 ## Sampling
