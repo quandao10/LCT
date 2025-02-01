@@ -76,7 +76,10 @@ class RepaDataset(Dataset):
 
         # SSL features
         ssl_feat = torch.load(os.path.join(self.ssl_feat_dir, f"{file_id}.pt"))
-        return latent, ssl_feat
+
+        # label
+        label = torch.tensor(0)
+        return latent, ssl_feat, label
         
 def get_repa_dataset(args):    
     return RepaDataset(args.datadir)
