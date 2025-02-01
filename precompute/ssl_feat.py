@@ -30,7 +30,7 @@ def precompute_ssl_feat(args):
     os.makedirs(save_img_dir, exist_ok=True)
     print(f"\033[33mSaved: {save_img_dir}\033[0m")
     
-    for i, (x, y, file_id) in enumerate(tqdm(loader)):
+    for i, (x, y, file_ids) in enumerate(tqdm(loader)):
         x = x.to(device)
 
         ####################### REPA #######################
@@ -40,8 +40,10 @@ def precompute_ssl_feat(args):
             raw_image = target / vae.config.scaling_factor
             raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
             # raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-            # raw_image.shape = [64, 3, 256, 256] --> create a grid of 8x8 images, then save it
-            save_image(raw_image, os.path.join(save_img_dir, f'{i}.png'), nrow=8, padding=2)
+            # raw_image.shape = [64, 3, 256, 256] --> for-loop over 64 images, save each image as a separate file
+            for file_id, img in zip(file_ids, raw_image):
+                save_image(img, os.path.join(save_img_dir, f'{i}_{file_id}.png'))
+                print(f"Saved: {os.path.join(save_img_dir, f'{i}_{file_id}.png')}")
             import ipdb; ipdb.set_trace()
             ssl_feat = []
             # with torch.autocast(device_type='cuda', dtype=__dtype):
