@@ -1,4 +1,4 @@
-MASTER_PORT=10148
+MASTER_PORT=11148
 DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
 NUM_GPUS=$1
 
@@ -7,7 +7,7 @@ NUM_GPUS=$1
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
 CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
-        --exp baseline_L  \
+        --exp baseline_repa2.0_diff2.0  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
         --results-dir results/ \
@@ -22,7 +22,7 @@ CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((16)) \
+        --global-batch-size $((32*2)) \
         --epochs $((1400*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
@@ -32,7 +32,7 @@ CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master
         --resblock-updown \
         --ict \
         --max-grad-norm 100.0 \
-        --model-type DiT-L/2 \
+        --model-type DiT-B/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
         --normalize-matrix $DATASET/stats.npy \
@@ -45,6 +45,7 @@ CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
         --repa-lamb 2.0 \
+        --diff-lamb 2.0 \
         --z_dims 768 \
         --ckpt-every 100 \
         --use-repa \
