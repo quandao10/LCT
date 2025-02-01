@@ -7,7 +7,7 @@ NUM_GPUS=$1
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
 CUDA_VISIBLE_DEVICES=2,3 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
-        --exp debug  \
+        --exp baseline_L  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
         --results-dir results/ \
@@ -32,7 +32,7 @@ CUDA_VISIBLE_DEVICES=2,3 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master
         --resblock-updown \
         --ict \
         --max-grad-norm 100.0 \
-        --model-type DiT-B/2 \
+        --model-type DiT-L/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
         --normalize-matrix $DATASET/stats.npy \
