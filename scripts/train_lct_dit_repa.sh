@@ -22,7 +22,7 @@ CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((32)) \
+        --global-batch-size $((16)) \
         --epochs $((1400*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
