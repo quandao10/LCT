@@ -37,7 +37,7 @@ def precompute_ssl_feat(args):
         ssl_feat = None
         with torch.no_grad():
             target = x.clone().detach()
-            raw_image = target / 0.18215
+            # raw_image = target / 0.18215
             raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
             save_image(raw_image, os.path.join(save_img_dir, f'{i}.jpg'), nrow=8, padding=2)
             import ipdb; ipdb.set_trace()
