@@ -338,7 +338,10 @@ def main(args):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
         for i, out in enumerate(tqdm(loader)):
-            x, ssl_feat, y = out
+            if args.use_repa:
+                x, ssl_feat, y = out
+            else:
+                x, y = out
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
             ssl_feat = ssl_feat.to(device)
