@@ -37,20 +37,20 @@ def precompute_ssl_feat(args):
         ssl_feat = None
         with torch.no_grad():
             target = x.clone().detach()
-            raw_image = target / vae.config.scaling_factor
+            raw_image = target / 0.18215
             raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
-            save_image(raw_image, os.path.join(save_img_dir, f'{i}.png'), nrow=8, padding=2)
+            save_image(raw_image, os.path.join(save_img_dir, f'{i}.jpg'), nrow=8, padding=2)
             import ipdb; ipdb.set_trace()
-            raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-            ssl_feat = []
-            # with torch.autocast(device_type='cuda', dtype=__dtype):
-            with torch.autocast(device_type='cuda'):
-                for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
-                    raw_image_ = preprocess_raw_image(raw_image, encoder_type)
-                    z = encoder.forward_features(raw_image_)
-                    if 'mocov3' in encoder_type: z = z = z[:, 1:] 
-                    if 'dinov2' in encoder_type: z = z['x_norm_patchtokens']
-                    ssl_feat.append(z.detach())
+            # raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+            # ssl_feat = []
+            # # with torch.autocast(device_type='cuda', dtype=__dtype):
+            # with torch.autocast(device_type='cuda'):
+            #     for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
+            #         raw_image_ = preprocess_raw_image(raw_image, encoder_type)
+            #         z = encoder.forward_features(raw_image_)
+            #         if 'mocov3' in encoder_type: z = z = z[:, 1:] 
+            #         if 'dinov2' in encoder_type: z = z['x_norm_patchtokens']
+            #         ssl_feat.append(z.detach())
     
 def parse_args():
     parser = argparse.ArgumentParser()

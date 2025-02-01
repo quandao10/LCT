@@ -368,8 +368,8 @@ def main(args):
             ####################### REPA #######################
             
             if use_normalize:
-                x = x/0.18215
-                x = (x - mean)/std * 0.5
+                x = x / 0.18215
+                x = (x - mean) / std * 0.5
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
             if args.ot_hard:

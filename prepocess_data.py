@@ -175,20 +175,6 @@ def main(args):
         # y = y.detach().cpu().numpy()
         
         np.save(f'{args.features_path}/celeba_256/{str(i).zfill(9)}.npy', x[0])
-        # np.save(f'{args.features_path}/imagenet256_label_flip/{str(i).zfill(9)}.npy', y[0])
-    # print("save flip loader")
-    # N = len(dataset)
-    # print("number of image sample: {}".format(N))
-    # for i, x in enumerate(tqdm(flip_loader)):
-    #     x = x.to(device)
-    #     # y = y.to(device)
-    #     with torch.no_grad():
-    #         # Map input images to latent space + normalize latents:
-    #         x = vae.encode(x).latent_dist.sample().mul_(0.18215)
-    #     x = x.detach().cpu().numpy()
-    #     # y = y.detach().cpu().numpy()
-    #     np.save(f'{args.features_path}/ffhq256_feature_flip/{str(i+N).zfill(9)}.npy', x[0])
-    #     # np.save(f'{args.features_path}/imagenet256_label_flip/{str(i+N).zfill(9)}.npy', y[0])
             
 if __name__ == "__main__":
     # Default args here will train DiT-XL/2 with the hyperparameters we used in our paper (except training iters).
