@@ -122,7 +122,7 @@ class REPADataset(Dataset):
 
 def save_features(save_tuple):
     image_name, ssl_feat, latent, ssl_feat_dir, vae_dir = save_tuple
-    np.save(ssl_feat, f"{ssl_feat_dir}/{str(image_name)}.npy")
+    torch.save(ssl_feat, f"{ssl_feat_dir}/{str(image_name)}.pt")
     np.save(f"{vae_dir}/{str(image_name)}.npy", latent)
 
 
@@ -170,6 +170,7 @@ def main(args):
         num_workers=args.num_workers,
         drop_last=False,
     )
+    final_dtype = torch.float16
 
     for i, (vae_image, repa_image, image_name) in enumerate(tqdm(loader)):
         vae_image = vae_image.to(device)
@@ -178,7 +179,7 @@ def main(args):
         # VAE latent
         with torch.no_grad():
             latent = vae.encode(vae_image).latent_dist.sample().mul_(0.18215)
-        latent = latent.detach().cpu().numpy()
+        latent = latent.to(final_dtype).detach().cpu().numpy()
 
         # SSL features
         raw_image_ = preprocess_raw_image(repa_image, encoder_type)
@@ -187,7 +188,7 @@ def main(args):
             ssl_feat = z = z[:, 1:]
         if "dinov2" in encoder_type:
             ssl_feat = z["x_norm_patchtokens"]
-        ssl_feat = ssl_feat.detach().cpu()
+        ssl_feat = ssl_feat.detach().cpu().to(final_dtype)
 
         # Prepare data for parallel saving
         save_tuples = [
