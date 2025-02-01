@@ -186,6 +186,8 @@ def main(args):
         if "dinov2" in encoder_type:
             ssl_feat = z["x_norm_patchtokens"]
 
+        import ipdb; ipdb.set_trace()
+
         # Prepare data for parallel saving
         save_tuples = [(name, feat, lat, ssl_feat_dir, vae_dir) 
                       for name, feat, lat in zip(image_name, ssl_feat, latent)]
@@ -203,7 +205,7 @@ def parse_args():
     parser.add_argument("--dataset_name", type=str, default="latent_celeb256")
     parser.add_argument("--output_dir", type=str)
     parser.add_argument("--repa_enc_type", type=str, default="dinov2-vit-b")
-    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--num_workers", type=int, default=32)
     parser.add_argument("--vae_type", type=str, default="stabilityai/sd-vae-ft-ema")
     return parser.parse_args()
