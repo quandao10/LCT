@@ -16,8 +16,40 @@ from .random_util import get_generator
 import robust_loss_pytorch
 from elatentlpips import ELatentLPIPS
 import torch.nn.functional as F
-import torch
-gradnorm = lambda x, lamb: x
+import torch.distributed as dist
+
+class GradNormFunction(th.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, weight):
+        ctx.save_for_backward(weight)
+        return x.clone()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        weight = ctx.saved_tensors[0]
+
+        # grad_output_norm = torch.linalg.vector_norm(
+        #     grad_output, dim=list(range(1, len(grad_output.shape))), keepdim=True
+        # ).mean()
+        grad_output_norm = th.norm(grad_output).mean().item()
+        # nccl over all nodes
+        grad_output_norm = avg_scalar_over_nodes(
+            grad_output_norm, device=grad_output.device
+        )
+
+        grad_output_normalized = weight * grad_output / (grad_output_norm + 1e-8)
+
+        return grad_output_normalized, None
+
+@th.no_grad()
+def avg_scalar_over_nodes(value: float, device):
+    value = th.tensor(value, device=device)
+    dist.all_reduce(value, op=dist.ReduceOp.AVG)
+    return value.item()
+
+def gradnorm(x, weight=1.0):
+    weight = th.tensor(weight, device=x.device)
+    return GradNormFunction.apply(x, weight)
 
 
 def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0):
@@ -270,9 +302,11 @@ class KarrasDenoiser:
         
         # compute diff losses
         diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
-        diff_loss = mean_flat((distiller - x_start)**2)[diff_indices]*diff_weights
+        pred = gradnorm(distiller, lamb_dict["diff_lamb"])
+        diff_loss = mean_flat((pred - x_start)**2)[diff_indices]*diff_weights
 
         # compute consistency losses
+        distiller = gradnorm(distiller, 1.0)
         if self.loss_norm == "l1":
             diffs = th.abs(distiller - distiller_target)
             loss = mean_flat(diffs) * weights
@@ -336,7 +370,7 @@ class KarrasDenoiser:
         # REPA loss
         repa_loss = 0.
         if self.use_repa:
-            # projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
+            projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
             bsz = ssl_feat[0].shape[0]
             for i, (z, z_tilde) in enumerate(zip(ssl_feat, projected_feat)):
                 for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
