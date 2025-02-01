@@ -576,7 +576,7 @@ def main(args):
                 sample_to_save = torch.concat([sample, ema_sample], dim=0)
                 save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
                 del sample
-        # dist.barrier()
+        dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
     logger.info("Done!")
