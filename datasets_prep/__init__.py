@@ -66,7 +66,7 @@ class RepaDataset(Dataset):
         self.basename_files = [os.path.basename(file).split(".")[0] for file in all_files][:10]
 
     def __len__(self):
-        return len(os.listdir(self.ssl_feat_dir))
+        return len(os.listdir(self.basename_files))
 
     def __getitem__(self, idx):
         file_id = self.basename_files[idx]
