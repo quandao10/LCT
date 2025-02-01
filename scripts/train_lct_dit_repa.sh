@@ -38,13 +38,14 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS trai
         --ot-hard \
         --c-by-loss-std \
         --plot-every 5 \
-        --num-workers 16 \
+        --num-workers 32 \
         --use-repa \
         --projector-dim 2048 \
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
         --repa-lamb 0.5 \
         --z_dims 768 \
+        --ckpt-every 1 \
         # --diff-lamb 5 \
         # --use-bf16 \
 

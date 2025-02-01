@@ -510,67 +510,68 @@ def main(args):
                 logger.info(f"Saved checkpoint to {checkpoint_path}")
             # dist.barrier()
 
-        if rank == 0 and epoch % args.plot_every == 0:
-            logger.info("Generating EMA samples...")
-            generator = get_generator("dummy", 4, seed)
-            if args.sampler == "multistep":
-                assert len(args.ts) > 0
-                ts = tuple(int(x) for x in args.ts.split(","))
-            else:
-                ts = None
-            with torch.no_grad():
-                sample = karras_sample(
-                    diffusion,
-                    generator,
-                    model,
-                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                    steps=args.steps,
-                    model_kwargs=model_kwargs,
-                    device=device,
-                    clip_denoised=args.clip_denoised,
-                    sampler=args.sampler,
-                    sigma_min=args.sigma_min,
-                    sigma_max=args.sigma_max,
-                    s_churn=args.s_churn,
-                    s_tmin=args.s_tmin,
-                    s_tmax=args.s_tmax,
-                    s_noise=args.s_noise,
-                    noise=noise,
-                    ts=ts,
-                )
-                if use_normalize:
-                    sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
+            # plot samples
+            if epoch % args.plot_every == 0:
+                logger.info("Generating EMA samples...")
+                generator = get_generator("dummy", 4, seed)
+                if args.sampler == "multistep":
+                    assert len(args.ts) > 0
+                    ts = tuple(int(x) for x in args.ts.split(","))
                 else:
-                    sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
-            sample = torch.concat(sample, dim=0)
-            with torch.no_grad():
-                ema_sample = karras_sample(
-                    diffusion,
-                    generator,
-                    emas["ema"],
-                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                    steps=args.steps,
-                    model_kwargs=model_kwargs,
-                    device=device,
-                    clip_denoised=args.clip_denoised,
-                    sampler=args.sampler,
-                    sigma_min=args.sigma_min,
-                    sigma_max=args.sigma_max,
-                    s_churn=args.s_churn,
-                    s_tmin=args.s_tmin,
-                    s_tmax=args.s_tmax,
-                    s_noise=args.s_noise,
-                    noise=noise,
-                    ts=ts,
-                )
-                if use_normalize:
-                    ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
-                else:
-                    ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
-            ema_sample = torch.concat(ema_sample, dim=0)
-            sample_to_save = torch.concat([sample, ema_sample], dim=0)
-            save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
-            del sample
+                    ts = None
+                with torch.no_grad():
+                    sample = karras_sample(
+                        diffusion,
+                        generator,
+                        model,
+                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                        steps=args.steps,
+                        model_kwargs=model_kwargs,
+                        device=device,
+                        clip_denoised=args.clip_denoised,
+                        sampler=args.sampler,
+                        sigma_min=args.sigma_min,
+                        sigma_max=args.sigma_max,
+                        s_churn=args.s_churn,
+                        s_tmin=args.s_tmin,
+                        s_tmax=args.s_tmax,
+                        s_noise=args.s_noise,
+                        noise=noise,
+                        ts=ts,
+                    )
+                    if use_normalize:
+                        sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
+                    else:
+                        sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
+                sample = torch.concat(sample, dim=0)
+                with torch.no_grad():
+                    ema_sample = karras_sample(
+                        diffusion,
+                        generator,
+                        emas["ema"],
+                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                        steps=args.steps,
+                        model_kwargs=model_kwargs,
+                        device=device,
+                        clip_denoised=args.clip_denoised,
+                        sampler=args.sampler,
+                        sigma_min=args.sigma_min,
+                        sigma_max=args.sigma_max,
+                        s_churn=args.s_churn,
+                        s_tmin=args.s_tmin,
+                        s_tmax=args.s_tmax,
+                        s_noise=args.s_noise,
+                        noise=noise,
+                        ts=ts,
+                    )
+                    if use_normalize:
+                        ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
+                    else:
+                        ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
+                ema_sample = torch.concat(ema_sample, dim=0)
+                sample_to_save = torch.concat([sample, ema_sample], dim=0)
+                save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
+                del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
