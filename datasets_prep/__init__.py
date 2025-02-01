@@ -38,7 +38,7 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         file_id = f"{str(idx).zfill(9)}.npy"
-        features = np.load(os.path.join(self.features_dir, "vae", file_id))
+        features = np.load(os.path.join(self.features_dir, file_id))
         features_tensor = torch.from_numpy(features.copy())
 
         if self.labels_dir is None:
@@ -193,7 +193,7 @@ def get_dataset(args):
         dataset = LMDBDataset(root=args.datadir, name="ffhq", train=True, transform=train_transform)
     elif args.dataset == "latent_celeb256":
         # dataset = CustomDataset("celebhq256", "/research/cbim/vast/qd66/workspace/dataset/vim/dataset/latent_celeba_256")
-        dataset = CustomDataset("celebhq256", f"{args.datadir}/latent_celeba_256")
+        dataset = CustomDataset("celebhq256", f"{args.datadir}/vae")
     elif args.dataset == "latent_ffhq256":
         dataset = CustomDataset("ffhq", f"{args.datadir}/latent_ffhq_256")
     elif args.dataset == "latent_imagenet512":
