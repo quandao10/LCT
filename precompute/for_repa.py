@@ -10,7 +10,7 @@ from repa_utils import load_encoders
 from PIL import Image
 from torchvision.utils import save_image
 import numpy as np
-
+from torchvision import transforms
 
 def requires_grad(model, flag=True):
     """
@@ -114,22 +114,12 @@ def precompute_ssl_feat(args):
 
 
 def main(args):
-    """
-    Trains a new DiT model.
-    """
-    assert torch.cuda.is_available(), "Training currently requires at least one GPU."
-
-    # Setup DDP:
-
     device = "cuda:0"
     torch.cuda.set_device(device)
 
-    # Setup a feature folder:
-
     os.makedirs(args.features_path, exist_ok=True)
     os.makedirs(os.path.join(args.features_path, "celeba_256"), exist_ok=True)
-    # os.makedirs(os.path.join(args.features_path, 'imagenet256_label_flip'), exist_ok=True)
-
+    
     # Create model:
     assert (
         args.image_size % 8 == 0
@@ -141,7 +131,6 @@ def main(args):
     # Setup data:
     transform = transforms.Compose(
         [
-            # transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True
