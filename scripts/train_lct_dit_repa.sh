@@ -7,7 +7,7 @@ NUM_GPUS=$1
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
 CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
-        --exp baseline_repa0.5  \
+        --exp baseline_repa2.0  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
         --results-dir results/ \
@@ -44,7 +44,7 @@ CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm
         --projector-dim 2048 \
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
-        --repa-lamb 0.5 \
+        --repa-lamb 2.0 \
         --z_dims 768 \
         --ckpt-every 100 \
         --use-repa \
