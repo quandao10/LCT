@@ -78,6 +78,8 @@ def get_repa_dataset(args):
     return RepaDataset(args.datadir)
 
 def get_dataset(args):
+    if args.use_repa:
+        return get_repa_dataset(args)
     if args.dataset == "cifar10":
         dataset = CIFAR10(
             args.datadir,
