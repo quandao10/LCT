@@ -1,4 +1,4 @@
-MASTER_PORT=10118
+MASTER_PORT=10148
 DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
 NUM_GPUS=$1
 
