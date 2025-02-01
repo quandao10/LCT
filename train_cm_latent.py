@@ -409,7 +409,7 @@ def main(args):
             if args.use_repa:
                 repa_loss = losses["repa_loss"]
                 # loss += args.repa_lamb * repa_loss
-                loss += args.repa_lamb
+                loss += repa_loss
             else:
                 repa_loss = torch.tensor(0)
             # after_forward = torch.cuda.memory_allocated(device)
