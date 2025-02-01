@@ -335,7 +335,7 @@ class KarrasDenoiser:
         repa_loss = 0.
         if self.use_repa:
             # Apply gradnorm to all projected features at once
-            projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
+            # projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
             
             # Normalize all features at once
             ssl_feat = [th.nn.functional.normalize(z, dim=-1) for z in ssl_feat]
