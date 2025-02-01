@@ -345,9 +345,12 @@ def main(args):
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
-        for i, (x, y) in enumerate(tqdm(loader)):
+        for i, out in enumerate(tqdm(loader)):
+            # latent, ssl_feat
+            x, ssl_feat = out
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
+            ssl_feat = ssl_feat.to(device)
 
             ####################### REPA #######################
             ssl_feat = None
