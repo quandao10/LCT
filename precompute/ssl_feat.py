@@ -58,7 +58,9 @@ def precompute_ssl_feat(args):
         drop_last=False
     )
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
-
+    save_img_dir = os.path.join(args.output_dir, "debug_precompute_ssl_feat")
+    os.makedirs(save_img_dir, exist_ok=True)
+    print(f"\033[33mSaved: {save_img_dir}\033[0m")
     
     for i, (x, y) in enumerate(tqdm(loader)):
         x = x.to(device)
@@ -71,6 +73,7 @@ def precompute_ssl_feat(args):
                 raw_image = target / vae.config.scaling_factor
                 raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
                 raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+                import ipdb; ipdb.set_trace()
                 ssl_feat = []
                 # with torch.autocast(device_type='cuda', dtype=__dtype):
                 with torch.autocast(device_type='cuda'):
