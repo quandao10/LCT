@@ -179,15 +179,6 @@ def main(args):
     logger.info("creating the vae model")
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
-    ############################## REPA ##############################
-    args.z_dims = None
-    if args.use_repa:
-        from repa_utils import load_encoders
-        encoders, encoder_types, architectures = load_encoders(args.enc_type, device)
-        z_dims = [encoder.embed_dim for encoder in encoders] if args.enc_type != 'None' else [0]
-        args.z_dims = z_dims
-    ############################## REPA ##############################
-
     model, diffusion = create_model_and_diffusion(args)
     # with open('./model.txt', 'w') as f:
     #     f.write(str(model))
@@ -351,25 +342,7 @@ def main(args):
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
             ssl_feat = ssl_feat.to(device)
-
-            ####################### REPA #######################
-            ssl_feat = None
-            if args.use_repa:
-                with torch.no_grad():
-                    target = x.clone().detach()
-                    raw_image = target / vae.config.scaling_factor
-                    raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
-                    raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-                    ssl_feat = []
-                    # with torch.autocast(device_type='cuda', dtype=__dtype):
-                    with torch.autocast(device_type='cuda'):
-                        for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
-                            raw_image_ = preprocess_raw_image(raw_image, encoder_type)
-                            z = encoder.forward_features(raw_image_)
-                            if 'mocov3' in encoder_type: z = z = z[:, 1:] 
-                            if 'dinov2' in encoder_type: z = z['x_norm_patchtokens']
-                            ssl_feat.append(z.detach())
-            ####################### REPA #######################
+            ssl_feat = [ssl_feat]
             
             if use_normalize:
                 x = x / 0.18215
