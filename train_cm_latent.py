@@ -327,6 +327,7 @@ def main(args):
         data = np.load(args.normalize_matrix, allow_pickle=True).item()
         mean = torch.tensor(data["mean"]).to(device)
         std = torch.tensor(data["std"]).to(device)
+        print("mean.shape, std.shape", mean.shape, std.shape)
         
     if rank == 0:
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
