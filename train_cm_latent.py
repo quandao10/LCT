@@ -325,8 +325,8 @@ def main(args):
     use_normalize = args.normalize_matrix is not None
     if use_normalize:
         data = np.load(args.normalize_matrix, allow_pickle=True).item()
-        mean = data["mean"].to(device)
-        std = data["std"].to(device)
+        mean = torch.tensor(data["mean"]).to(device)
+        std = torch.tensor(data["std"]).to(device)
         
     if rank == 0:
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
