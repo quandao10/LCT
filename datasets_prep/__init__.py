@@ -12,11 +12,11 @@ import os
 
 
 class CustomDataset(Dataset):
-    def __init__(self, dataset, features_dir, labels_dir=None, get_id=False):
+    def __init__(self, dataset, features_dir, labels_dir=None, get_file_id=False):
         self.features_dir = features_dir
         self.labels_dir = labels_dir
         self.dataset = dataset
-        self.get_id = get_id
+        self.get_file_id = get_file_id
 
     def __len__(self):
         if self.dataset == "imagenet":
@@ -42,12 +42,14 @@ class CustomDataset(Dataset):
         features_tensor = torch.from_numpy(features.copy())
 
         if self.labels_dir is None:
+            if self.get_file_id:
+                return features_tensor, torch.tensor(0), file_id
             return features_tensor, torch.tensor(0)
 
         labels = np.load(os.path.join(self.labels_dir, file_id))
         labels_tensor = torch.from_numpy(labels)
 
-        if self.get_id:
+        if self.get_file_id:
             return features_tensor, labels_tensor, file_id
             
         return features_tensor, labels_tensor
@@ -159,7 +161,7 @@ def get_dataset(args):
         dataset = LMDBDataset(root=args.datadir, name="ffhq", train=True, transform=train_transform)
     elif args.dataset == "latent_celeb256":
         # dataset = CustomDataset("celebhq256", "/research/cbim/vast/qd66/workspace/dataset/vim/dataset/latent_celeba_256")
-        dataset = CustomDataset("celebhq256", f"{args.datadir}/latent_celeba_256")
+        dataset = CustomDataset("celebhq256", f"{args.datadir}/latent_celeba_256", get_file_id=args.get_file_id)
     elif args.dataset == "latent_ffhq256":
         dataset = CustomDataset("ffhq", f"{args.datadir}/latent_ffhq_256")
     elif args.dataset == "latent_imagenet512":

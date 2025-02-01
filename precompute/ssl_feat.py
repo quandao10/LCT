@@ -12,6 +12,7 @@ from repa_utils import load_encoders
 def precompute_ssl_feat(args):
     device = torch.device("cuda")
     encoders, encoder_types, architectures = load_encoders(args.enc_type, device)
+    args.get_file_id = True
     dataset = get_dataset(args)
     loader = DataLoader(
         dataset,
@@ -26,7 +27,7 @@ def precompute_ssl_feat(args):
     os.makedirs(save_img_dir, exist_ok=True)
     print(f"\033[33mSaved: {save_img_dir}\033[0m")
     
-    for i, (x, y) in enumerate(tqdm(loader)):
+    for i, (x, y, file_id) in enumerate(tqdm(loader)):
         x = x.to(device)
 
         ####################### REPA #######################
