@@ -41,6 +41,8 @@ import robust_loss_pytorch
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from repa_utils import preprocess_raw_image
+from accelerate import Accelerator
+from accelerate.utils import set_seed
 EMA_RATES = {
     "ema_0.999": 0.999,
     "ema": 0.9999,
@@ -78,16 +80,16 @@ def requires_grad(model, flag=True):
 
 def cleanup():
     """
-    End DDP training.
+    End training.
     """
-    dist.destroy_process_group()
+    pass # No longer needed with accelerator
 
 
 def create_logger(logging_dir):
     """
     Create a logger that writes to a log file and stdout.
     """
-    if dist.get_rank() == 0:  # real logger
+    if logging_dir:  # Only create real logger for main process
         logging.basicConfig(
             level=logging.INFO,
             format='[\033[34m%(asctime)s\033[0m] %(message)s',
@@ -95,7 +97,7 @@ def create_logger(logging_dir):
             handlers=[logging.StreamHandler(), logging.FileHandler(f"{logging_dir}/log.txt")]
         )
         logger = logging.getLogger(__name__)
-    else:  # dummy logger (does nothing)
+    else:  # dummy logger for other processes
         logger = logging.getLogger(__name__)
         logger.addHandler(logging.NullHandler())
     return logger
@@ -151,66 +153,59 @@ def main(args):
     """
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
 
-    # Setup DDP:
-    dist.init_process_group("nccl")
-    rank = dist.get_rank()
-    device = rank % torch.cuda.device_count()
-    world_size = dist.get_world_size()
-    assert args.global_batch_size % world_size == 0, f"Batch size must be divisible by world size."
-    seed = args.global_seed * world_size + rank
-    torch.manual_seed(seed)
-    torch.cuda.set_device(device)
-    print(f"Starting rank={rank}, seed={seed}, world_size={world_size}.")
+    # Setup accelerator
+    accelerator = Accelerator()
+    device = accelerator.device
 
+    # Set random seed
+    seed = args.global_seed
+    if accelerator.is_main_process:
+        print(f"Global seed: {seed}")
+    set_seed(seed)
+
+    
+    torch.manual_seed(seed)
+    
     # Setup an experiment folder:
     experiment_index = args.exp
-    experiment_dir = f"{args.results_dir}/{args.dataset}/{experiment_index}"  # Create an experiment folder 
-    checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
+    experiment_dir = f"{args.results_dir}/{args.dataset}/{experiment_index}"
+    checkpoint_dir = f"{experiment_dir}/checkpoints"  
     sample_dir = f"{experiment_dir}/samples"
-    if rank == 0:
-        os.makedirs(args.results_dir, exist_ok=True)  # Make results folder (holds all experiment subfolders)
+    
+    if accelerator.is_main_process:
+        os.makedirs(args.results_dir, exist_ok=True)
         os.makedirs(checkpoint_dir, exist_ok=True)
         os.makedirs(sample_dir, exist_ok=True)
         logger = create_logger(experiment_dir)
         logger.info(f"Experiment directory created at {experiment_dir}")
     else:
         logger = create_logger(None)
-    # create vae model
-    logger.info("creating the vae model")
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
-    # create diffusion and model
+
+    # Create models
+    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema")
     model, diffusion = create_model_and_diffusion(args)
-    # with open('./model.txt', 'w') as f:
-    #     f.write(str(model))
-    # exit(0)
+    
     if args.custom_constant_c > 0.0:
         diffusion.c = torch.tensor(args.custom_constant_c)
     else:
         diffusion.c = torch.tensor(0.00054*math.sqrt(args.num_in_channels*args.image_size**2))
-    # diffusion.c = torch.tensor(0.00345)
     logger.info("c in huber loss is {}".format(diffusion.c.item()))
-    # create ema for training model
-    logger.info("creating the ema model")
-    # ema = deepcopy(model)  # Create an EMA of the model for use after training
-    # update_ema(ema, model, decay=0)  # Ensure EMA is initialized with synced weights
-    # ema.to(device)
+    
     emas = dict()
     for name in EMA_RATES.keys():
         emas[name] = deepcopy(model)  # Create an EMA of the model for use after training
         update_ema(emas[name], model, decay=0)  # Ensure EMA is initialized with synced weights
         emas[name].to(device)
-    # create target model
-    logger.info("creating the target model")
     target_model = deepcopy(model).to(device)
     target_model.requires_grad_(False)
     target_model.train()
     
-    model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
+    model = model.to(device)
 
     # Uncertainty-based multi-task learning
     if args.umt:
         model_umt = create_model_umt(args)
-        model_umt = DDP(model_umt.to(device), device_ids=[rank], find_unused_parameters=False)
+        model_umt = model_umt.to(device)
     else:
         model_umt = None
     
@@ -231,66 +226,28 @@ def main(args):
             opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
             opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    # define scheduler
-    if args.model_ckpt and os.path.exists(args.model_ckpt):
-        checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
-        epoch = init_epoch = checkpoint["epoch"]
-        model.module.load_state_dict(checkpoint["model"])
-        # ema.load_state_dict(checkpoint["ema"])
-        for name in EMA_RATES.keys():
-            emas[name].load_state_dict(checkpoint[name])
-        opt.load_state_dict(checkpoint["opt"])
-        target_model.load_state_dict(checkpoint["target"])
-        train_steps = checkpoint["train_steps"]
-        if args.umt:
-            model_umt.module.load_state_dict(checkpoint["model_umt"])
-        logger.info("=> loaded checkpoint (epoch {})".format(epoch))
-        del checkpoint
-    elif args.resume:
-        checkpoint_file = os.path.join(checkpoint_dir, "content.pth")
-        checkpoint = torch.load(checkpoint_file, map_location=torch.device(f'cuda:{device}'))
-        init_epoch = checkpoint["epoch"]
-        epoch = init_epoch
-        model.module.load_state_dict(checkpoint["model"])
-        opt.load_state_dict(checkpoint["opt"])
-        # ema.load_state_dict(checkpoint["ema"])
-        for name in EMA_RATES.keys():
-            emas[name].load_state_dict(checkpoint[name])
-        target_model.load_state_dict(checkpoint["target"])
-        train_steps = checkpoint["train_steps"]
-        if args.umt:
-            model_umt.module.load_state_dict(checkpoint["model_umt"])
-        logger.info("=> resume checkpoint (epoch {})".format(checkpoint["epoch"]))
-        del checkpoint
-    else:
-        init_epoch = 0
-        train_steps = 0
-    # requires_grad(ema, False)
-    # ema.eval()
-    for name in EMA_RATES.keys():
-        requires_grad(emas[name], False)
-        emas[name].eval()
 
+    # Load dataset
     dataset = get_dataset(args)
-    sampler = DistributedSampler(
-        dataset,
-        num_replicas=world_size,
-        rank=rank,
-        shuffle=True,
-        seed=args.global_seed
-    )
     loader = DataLoader(
         dataset,
-        batch_size=int(args.global_batch_size // world_size),
-        shuffle=False,
-        sampler=sampler,
+        batch_size=args.global_batch_size,
+        shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True
     )
+
+    # Prepare everything with accelerator
+    if args.umt:
+        model, model_umt, opt, loader = accelerator.prepare(model, model_umt, opt, loader)
+    else:
+        model, opt, loader = accelerator.prepare(model, opt, loader)
+    vae = accelerator.prepare(vae)
+
     logger.info(f"Dataset contains {len(dataset):,} images ({args.datadir})")
     args.total_training_steps = math.ceil(len(dataset)//args.global_batch_size)*args.epochs
-    if rank == 0:
+    if accelerator.is_main_process:
         config = vars(args)
         with open(f"{experiment_dir}/config.json", 'w') as out:
             json.dump(config, out)
@@ -329,17 +286,16 @@ def main(args):
         std = torch.tensor(data["std"]).to(device)
         print("mean.shape, std.shape", mean.shape, std.shape)
         
-    if rank == 0:
+    if accelerator.is_main_process:
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
 
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     
-    for epoch in range(init_epoch, args.epochs+1):
-        sampler.set_epoch(epoch)
+    train_steps = 0
+    for epoch in range(args.epochs):
         logger.info(f"Beginning epoch {epoch}...")
         for i, out in enumerate(tqdm(loader)):
             x, ssl_feat, y = out
-            # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
             ssl_feat = ssl_feat.to(device)
             ssl_feat = [ssl_feat]
@@ -363,7 +319,6 @@ def main(args):
                 )
 
             model_kwargs = dict(y=y, is_train=True)
-            # before_forward = torch.cuda.memory_allocated(device)
             lamb_dict = {
                 "diff_lamb": args.diff_lamb,
                 "repa_lamb": args.repa_lamb,
@@ -380,16 +335,8 @@ def main(args):
                                                 lamb_dict=lamb_dict,
                                                 )
             
-            # if args.use_diffloss:
-            #     diff_losses = diffusion.diffusion_losses(model, 
-            #                                             x,
-            #                                             num_scales,
-            #                                             model_kwargs=model_kwargs,
-            #                                             noise=n)
             if args.l2_reweight:
-                # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
                 distances = norm_dim(x-n)
-                # weight = (distances-distances.min())/(distances.max()-distances.min()) + distances.min()
                 weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
                 loss = (losses["loss"]*weight).mean()
             else:
@@ -406,12 +353,12 @@ def main(args):
                 loss += args.repa_lamb * repa_loss
             else:
                 repa_loss = torch.tensor(0)
-            # after_forward = torch.cuda.memory_allocated(device)
             
             if not torch.isnan(loss):
                 opt.zero_grad()
-                loss.backward()
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                accelerator.backward(loss)
+                if accelerator.sync_gradients:
+                    accelerator.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 opt.step()
                 running_loss += loss.item()
                 running_cm_loss += cm_loss.item()
@@ -429,15 +376,12 @@ def main(args):
                     for g in opt.param_groups:
                         g['lr'] = args.lr
                     nan_count = 0
-            # after_backward = torch.cuda.memory_allocated(device)
-            # update_ema(ema, model.module)
             for name, ema_rate in EMA_RATES.items():
-                update_ema(emas[name], model.module, ema_rate)
-            ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
+                update_ema(emas[name], model, ema_rate)
             if args.ict:
-                update_ema(target_model, model.module, 0)
+                update_ema(target_model, model, 0)
             else:
-                update_ema(target_model, model.module, ema_rate)
+                update_ema(target_model, model, ema_rate)
             
             # Log loss values:
             log_steps += 1
@@ -453,14 +397,10 @@ def main(args):
                 avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
                 avg_repa_loss = torch.tensor(running_repa_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
-                avg_loss = avg_loss.item() / world_size
+                avg_loss = avg_loss.item() / dist.get_world_size()
                 logger.info(
-                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f} Repa Loss: {avg_repa_loss:.4f}, "
-                    f"Train Steps/Sec: {steps_per_sec:.2f}, "
-                    # f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
-                    # f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
-                    # f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
-                    # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
+                    f"(step={log_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f} Repa Loss: {avg_repa_loss:.4f}, "
+                    f"Train Steps/Sec: {steps_per_sec:.2f}"
                 )
                 # Reset monitoring variables:
                 running_loss = 0
@@ -470,10 +410,7 @@ def main(args):
                 log_steps = 0
                 start_time = time()
 
-        # if not args.no_lr_decay:
-        #     scheduler.step()
-
-        if rank == 0:
+        if accelerator.is_main_process:
             # latest checkpoint
             if epoch % args.save_content_every == 0:
                 logger.info("Saving content.")
@@ -481,11 +418,10 @@ def main(args):
                     "epoch": epoch + 1,
                     "train_steps": train_steps,
                     "args": args,
-                    "model": model.module.state_dict(),
+                    "model": model.state_dict(),
                     "opt": opt.state_dict(),
-                    # "ema": ema.state_dict(),
                     "target": target_model.state_dict(),
-                    "model_umt": model_umt.module.state_dict() if args.umt else None,
+                    "model_umt": model_umt.state_dict() if args.umt else None,
                 }
                 for name in EMA_RATES.keys():
                     content[name] = emas[name].state_dict()
@@ -495,20 +431,18 @@ def main(args):
             if epoch % args.ckpt_every == 0 and epoch > 0:
                 checkpoint = {
                     "epoch": epoch + 1,
-                    "model": model.module.state_dict(),
-                    "train_steps": train_steps,
-                    # "ema": ema.state_dict(),
+                    "model": model.state_dict(),
+                    "train_steps": i,
                     "opt": opt.state_dict(),
                     "args": args,
                     "target": target_model.state_dict(),
-                    "model_umt": model_umt.module.state_dict() if args.umt else None,
+                    "model_umt": model_umt.state_dict() if args.umt else None,
                 }
                 for name in EMA_RATES.keys():
                     checkpoint[name] = emas[name].state_dict()
                 checkpoint_path = f"{checkpoint_dir}/{epoch:07d}.pt"
                 torch.save(checkpoint, checkpoint_path)
                 logger.info(f"Saved checkpoint to {checkpoint_path}")
-            # dist.barrier()
 
             # plot samples
             if epoch % args.plot_every == 0:
@@ -572,13 +506,12 @@ def main(args):
                 sample_to_save = torch.concat([sample, ema_sample], dim=0)
                 save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
                 del sample
-        # dist.barrier()
-    model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
+    model.eval()  # important! This disables randomized embedding dropout
+    accelerator.wait_for_everyone()
     logger.info("Done!")
-    cleanup()
-
-
+    accelerator.end_training()
+    
 def none_or_str(value):
     if value == 'None':
         return None
