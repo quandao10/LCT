@@ -25,10 +25,10 @@ feats = torch.cat(feat_ls, dim=0)
 std, mean = torch.std_mean(feats, dim=0)
 
 # Save results
-np.save(os.path.join(base_dir, "celeb256_stat.npy"), {"mean": mean.cpu().numpy(), "std": std.cpu().numpy()})
+np.save(os.path.join(base_dir, "stats.npy"), {"mean": mean.cpu().numpy(), "std": std.cpu().numpy()})
 print(f"mean: {mean}, std: {std}")
 print(f"mean.shape: {mean.shape}, std.shape: {std.shape}")
-print(f"Saved to {os.path.join(base_dir, 'celeb256_stat.npy')}")
+print(f"Saved to {os.path.join(base_dir, 'stats.npy')}")
 print(f"Total samples: {total_samples}")
 
 
