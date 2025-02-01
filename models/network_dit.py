@@ -196,6 +196,8 @@ class DiT(nn.Module):
 
         ############## REPA ##############
         self.use_repa = use_repa
+        if not isinstance(z_dims, list):
+            z_dims = [z_dims]
         self.encoder_depth = encoder_depth
         if self.use_repa:   
             self.projectors = nn.ModuleList([
