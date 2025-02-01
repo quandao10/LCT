@@ -135,8 +135,8 @@ def main(args):
     device = "cuda:0"
     torch.cuda.set_device(device)
 
-    os.makedirs(args.features_path, exist_ok=True)
-    os.makedirs(os.path.join(args.features_path, "celeba_256"), exist_ok=True)
+    os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.output_dir, "celeba_256"), exist_ok=True)
 
     # VAE
     assert (
