@@ -341,6 +341,7 @@ def main(args):
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
 
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
+    import ipdb; ipdb.set_trace()
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
