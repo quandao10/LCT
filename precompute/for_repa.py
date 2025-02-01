@@ -24,6 +24,35 @@ import numpy as np
 from torchvision import transforms
 import PIL
 from torch.utils.data import Dataset
+from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from torchvision.transforms import Normalize
+
+
+CLIP_DEFAULT_MEAN = (0.48145466, 0.4578275, 0.40821073)
+CLIP_DEFAULT_STD = (0.26862954, 0.26130258, 0.27577711)
+
+def preprocess_raw_image(x, enc_type):
+    resolution = x.shape[-1]
+    if 'clip' in enc_type:
+        x = x / 255.
+        x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
+        x = Normalize(CLIP_DEFAULT_MEAN, CLIP_DEFAULT_STD)(x)
+    elif 'mocov3' in enc_type or 'mae' in enc_type:
+        x = x / 255.
+        x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
+    elif 'dinov2' in enc_type:
+        x = x / 255.
+        x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
+        x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
+    elif 'dinov1' in enc_type:
+        x = x / 255.
+        x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
+    elif 'jepa' in enc_type:
+        x = x / 255.
+        x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
+        x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
+
+    return x
 
 def requires_grad(model, flag=True):
     """
@@ -81,62 +110,17 @@ class REPADataset(Dataset):
         return vae_image, repa_image, image_name
 
 
-def precompute_ssl_feat(args):
-    device = torch.device("cuda")
-
-    # Dataset
-    args.get_file_id = True
-    dataset = get_dataset(args)
-    loader = DataLoader(
-        dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.num_workers,
-        pin_memory=True,
-        drop_last=False,
-    )
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
-    save_img_dir = os.path.join(args.output_dir, "debug_precompute_ssl_feat")
-    os.makedirs(save_img_dir, exist_ok=True)
-    print(f"\033[33mSaved: {save_img_dir}\033[0m")
-
-    for i, (x, y, file_id) in enumerate(tqdm(loader)):
-        x = x.to(device)
-
-        ####################### REPA #######################
-        ssl_feat = None
-        with torch.no_grad():
-            target = x.clone().detach()
-            raw_image = target / vae.config.scaling_factor
-            raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
-            save_image(
-                raw_image, os.path.join(save_img_dir, f"{i}.png"), nrow=8, padding=2
-            )
-            import ipdb
-
-            ipdb.set_trace()
-            raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-            ssl_feat = []
-            # with torch.autocast(device_type='cuda', dtype=__dtype):
-            with torch.autocast(device_type="cuda"):
-                for encoder, encoder_type, arch in zip(
-                    encoders, encoder_types, architectures
-                ):
-                    raw_image_ = preprocess_raw_image(raw_image, encoder_type)
-                    z = encoder.forward_features(raw_image_)
-                    if "mocov3" in encoder_type:
-                        z = z = z[:, 1:]
-                    if "dinov2" in encoder_type:
-                        z = z["x_norm_patchtokens"]
-                    ssl_feat.append(z.detach())
-
-
+@torch.no_grad()
 def main(args):
     device = "cuda:0"
     torch.cuda.set_device(device)
 
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(os.path.join(args.output_dir, "celeba_256"), exist_ok=True)
+    vae_dir = os.path.join(args.output_dir, "vae")
+    os.makedirs(vae_dir, exist_ok=True)
+    ssl_feat_dir = os.path.join(args.output_dir, "ssl_feat")
+    os.makedirs(ssl_feat_dir, exist_ok=True)
 
     # VAE
     vae = AutoencoderKL.from_pretrained(args.vae_type).to(device)
@@ -144,6 +128,9 @@ def main(args):
 
     # DINOv2
     encoders, encoder_types, architectures = load_encoders(args.repa_enc_type, device)
+    assert len(encoders) == 1
+    ssl_encoder = encoders[0]
+    encoder_type = encoder_types[0]
 
     # Dataset
     transform = transforms.Compose(
@@ -170,20 +157,18 @@ def main(args):
         with torch.no_grad():
             latent = vae.encode(vae_image).latent_dist.sample().mul_(0.18215)
         latent = latent.detach().cpu().numpy()
-        import ipdb; ipdb.set_trace()
-        np.save(f"{args.output_dir}/celeba_256/{str(i).zfill(9)}.npy", latent)
 
+        # for image_name, latent in zip(image_name, latent):
+        #     np.save(f"{vae_dir}/{str(image_name)}.npy", latent)
 
         # SSL features
-        ssl_feat = None
-        with torch.no_grad():
-            target = x.clone().detach()
-            raw_image = target / vae.config.scaling_factor
-            raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
-            save_image(
-                raw_image, os.path.join(save_img_dir, f"{i}.png"), nrow=8, padding=2
-            )
-        np.save(f"{args.output_dir}/celeba_256/{str(i).zfill(9)}.npy", latent)
+        raw_image_ = preprocess_raw_image(repa_image, encoder_type)
+        z = ssl_encoder.forward_features(raw_image_)
+        if 'mocov3' in encoder_type: ssl_feat = z = z[:, 1:] 
+        if 'dinov2' in encoder_type: ssl_feat = z['x_norm_patchtokens']
+        import ipdb; ipdb.set_trace()
+        # for ssl_feat, image_name in zip(ssl_feat, image_name):
+        #     np.save(f"{ssl_feat_dir}/{str(image_name)}.pt", ssl_feat)
 
 def parse_args():
     parser = argparse.ArgumentParser()
