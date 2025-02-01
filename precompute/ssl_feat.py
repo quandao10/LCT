@@ -7,6 +7,7 @@ from tqdm import tqdm
 from diffusers.models import AutoencoderKL
 from repa_utils import preprocess_raw_image
 from repa_utils import load_encoders
+from PIL import Image
 
 
 def precompute_ssl_feat(args):
@@ -37,6 +38,13 @@ def precompute_ssl_feat(args):
             raw_image = target / vae.config.scaling_factor
             raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
             raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+            # raw_image.shape = [64, 3, 256, 256] --> create a grid of 8x8 images, then save it
+            grid = torch.cat([raw_image[i] for i in range(0, 64, 8)], dim=2)
+            grid = torch.cat([grid[i] for i in range(0, 256, 32)], dim=1)
+            grid = grid.cpu().numpy()
+            grid = Image.fromarray(grid)
+            grid.save(os.path.join(save_img_dir, f"{i}.png"))
+            print(f"Saved: {os.path.join(save_img_dir, f'{i}.png')}")
             import ipdb; ipdb.set_trace()
             ssl_feat = []
             # with torch.autocast(device_type='cuda', dtype=__dtype):
@@ -54,8 +62,8 @@ def parse_args():
     parser.add_argument("--dataset", type=str, default="latent_celeb256")
     parser.add_argument("--output_dir", type=str, default="results/")
     parser.add_argument("--enc_type", type=str, default="dinov2-vit-b")
-    parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--num_workers", type=int, default=8)
     return parser.parse_args()
 
 if __name__ == "__main__":
