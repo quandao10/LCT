@@ -355,7 +355,7 @@ class KarrasDenoiser:
 
         #     # Dot product along the last dimension, then mean over all
         #     proj_loss = - (z_stack * z_tilde_stack).sum(dim=-1).mean()
-            return proj_loss
+            # return proj_loss
         
         terms = {}
         terms["loss"] = loss
