@@ -6,8 +6,9 @@ from PIL import Image
 # Encode and decode image
 
 device = "cuda:0"
-vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
-
+# vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+# openai/consistency-decoder
+vae = AutoencoderKL.from_pretrained("openai/consistency-decoder").to(device)
 image_path = "/lustre/scratch/client/movian/research/users/khanhdn10/datasets/celeba_256_png/img00000170.png"
 image = Image.open(image_path)
 image = image.convert("RGB")
