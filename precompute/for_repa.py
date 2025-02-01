@@ -139,10 +139,6 @@ def main(args):
     os.makedirs(os.path.join(args.output_dir, "celeba_256"), exist_ok=True)
 
     # VAE
-    assert (
-        args.image_size % 8 == 0
-    ), "Image size must be divisible by 8 (for the VAE encoder)."
-    latent_size = args.image_size // 8
     vae = AutoencoderKL.from_pretrained(args.vae_type).to(device)
     vae.requires_grad_(False)
 
