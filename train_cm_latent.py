@@ -390,7 +390,6 @@ def main(args):
             #                                             num_scales,
             #                                             model_kwargs=model_kwargs,
             #                                             noise=n)
-            
             if args.l2_reweight:
                 # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
                 distances = norm_dim(x-n)
@@ -402,27 +401,20 @@ def main(args):
                 diff_loss = losses["diff_loss"].mean()
                 if args.use_diffloss:
                     loss = cm_loss + args.diff_lamb * diff_loss
-                    diff_loss = args.diff_lamb * diff_loss
                 else:
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
 
             if args.use_repa:
                 repa_loss = losses["repa_loss"]
-                repa_loss = args.repa_lamb * repa_loss
-                loss += repa_loss
+                loss += args.repa_lamb * repa_loss
             else:
                 repa_loss = torch.tensor(0)
             # after_forward = torch.cuda.memory_allocated(device)
             
-            cm_loss = losses["loss"].mean()
-            # if not torch.isnan(loss) or True:
-            if True:
+            if not torch.isnan(loss):
                 opt.zero_grad()
-                # loss.backward()
-                cm_loss.backward()
-                diff_loss.backward()
-                repa_loss.backward()
+                loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 opt.step()
                 running_loss += loss.item()
