@@ -41,7 +41,7 @@ CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm
         --c-by-loss-std \
         --plot-every 5 \
         --num-workers 16 \
-        --projector-dim 1024 \
+        --projector-dim 2048 \
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
         --repa-lamb 0.5 \
