@@ -6,8 +6,8 @@ NUM_GPUS=$1
 # CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
-CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
-        --exp baseline_repa2.0  \
+CUDA_VISIBLE_DEVICES=2,3 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
+        --exp debug  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
         --results-dir results/ \
