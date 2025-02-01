@@ -44,7 +44,7 @@ CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm
         --projector-dim 2048 \
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
-        --repa-lamb 0.5 \
+        --repa-lamb 2.0 \
         --z_dims 768 \
         --ckpt-every 100 \
         --use-repa \
