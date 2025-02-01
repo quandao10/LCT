@@ -401,7 +401,7 @@ def main(args):
                 cm_loss = losses["loss"].mean() 
                 diff_loss = losses["diff_loss"].mean()
                 if args.use_diffloss:
-                    # loss = cm_loss + args.diff_lamb * diff_loss
+                    loss = cm_loss + args.diff_lamb * diff_loss
                     diff_loss = args.diff_lamb * diff_loss
                 else:
                     loss = cm_loss
@@ -410,7 +410,7 @@ def main(args):
             if args.use_repa:
                 repa_loss = losses["repa_loss"]
                 repa_loss = args.repa_lamb * repa_loss
-                # loss += args.repa_lamb * repa_loss
+                loss += repa_loss
             else:
                 repa_loss = torch.tensor(0)
             # after_forward = torch.cuda.memory_allocated(device)
