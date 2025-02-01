@@ -54,27 +54,27 @@ class CustomDataset(Dataset):
             
         return features_tensor, labels_tensor
 
-def get_repa_dataset(args):
-    class RepaDataset(Dataset):
-        def __init__(self, base_dir):
-            """
-            base_dir: /lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
-            """
-            self.ssl_feat_dir = os.path.join(base_dir, "ssl_feat")
-            self.vae_dir = os.path.join(base_dir, "vae")
+class RepaDataset(Dataset):
+    def __init__(self, base_dir):
+        """
+        base_dir: /lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
+        """
+        self.ssl_feat_dir = os.path.join(base_dir, "ssl_feat")
+        self.vae_dir = os.path.join(base_dir, "vae")
 
-        def __len__(self):
-            return len(os.listdir(self.ssl_feat_dir))
+    def __len__(self):
+        return len(os.listdir(self.ssl_feat_dir))
 
-        def __getitem__(self, idx):
-            # VAE latent
-            latent = np.load(os.path.join(self.vae_dir, f"{idx}.npy"))
-            latent = torch.from_numpy(latent)
+    def __getitem__(self, idx):
+        # VAE latent
+        latent = np.load(os.path.join(self.vae_dir, f"{idx}.npy"))
+        latent = torch.from_numpy(latent)
 
-            # SSL features
-            ssl_feat = torch.load(os.path.join(self.ssl_feat_dir, f"{idx}.pt"))
-            return latent, ssl_feat
+        # SSL features
+        ssl_feat = torch.load(os.path.join(self.ssl_feat_dir, f"{idx}.pt"))
+        return latent, ssl_feat
         
+def get_repa_dataset(args):    
     return RepaDataset(args.datadir)
 
 def get_dataset(args):
