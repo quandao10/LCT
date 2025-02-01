@@ -337,7 +337,6 @@ def main(args):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
         for i, out in enumerate(tqdm(loader)):
-            # latent, ssl_feat
             x, ssl_feat, y = out
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
