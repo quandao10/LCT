@@ -415,7 +415,7 @@ def main(args):
             if not torch.isnan(loss):
                 opt.zero_grad()
                 loss.backward()
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 opt.step()
                 running_loss += loss.item()
                 running_cm_loss += cm_loss.item()
