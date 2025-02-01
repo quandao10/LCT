@@ -122,7 +122,7 @@ class REPADataset(Dataset):
 
 def save_features(save_tuple):
     image_name, ssl_feat, latent, ssl_feat_dir, vae_dir = save_tuple
-    torch.save(ssl_feat, f"{ssl_feat_dir}/{str(image_name)}.pt")
+    np.save(ssl_feat, f"{ssl_feat_dir}/{str(image_name)}.npy")
     np.save(f"{vae_dir}/{str(image_name)}.npy", latent)
 
 
