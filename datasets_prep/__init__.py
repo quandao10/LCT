@@ -61,17 +61,20 @@ class RepaDataset(Dataset):
         """
         self.ssl_feat_dir = os.path.join(base_dir, "ssl_feat")
         self.vae_dir = os.path.join(base_dir, "vae")
+        all_files = os.listdir(self.features_dir)
+        self.basename_files = [os.path.basename(file) for file in all_files]
 
     def __len__(self):
         return len(os.listdir(self.ssl_feat_dir))
 
     def __getitem__(self, idx):
+        file_id = self.basename_files[idx]
         # VAE latent
-        latent = np.load(os.path.join(self.vae_dir, f"{idx}.npy"))
+        latent = np.load(os.path.join(self.vae_dir, f"{file_id}.npy"))
         latent = torch.from_numpy(latent)
 
         # SSL features
-        ssl_feat = torch.load(os.path.join(self.ssl_feat_dir, f"{idx}.pt"))
+        ssl_feat = torch.load(os.path.join(self.ssl_feat_dir, f"{file_id}.pt"))
         return latent, ssl_feat
         
 def get_repa_dataset(args):    
