@@ -16,11 +16,9 @@ loader = DataLoader(dataset, batch_size=16, num_workers=16, shuffle=False, drop_
 total_samples = len(dataset)
 feat_ls = []
 
-import ipdb; ipdb.set_trace()
 # Load features in batches
 for batch in tqdm(loader):
     feat_ls.append(batch[0] / 0.18215)
-    import ipdb; ipdb.set_trace()
 
 # Calculate statistics
 feats = torch.stack(feat_ls)
