@@ -40,13 +40,13 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --c-by-loss-std \
         --plot-every 5 \
         --num-workers 16 \
-        --use-repa \
         --projector-dim 1024 \
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
         --repa-lamb 0.5 \
         --z_dims 768 \
         --ckpt-every 1 \
+        # --use-repa \
         # --diff-lamb 5 \
         # --use-bf16 \
         # --projector-dim 2048 \
