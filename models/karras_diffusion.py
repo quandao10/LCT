@@ -360,7 +360,7 @@ class KarrasDenoiser:
         if self.use_repa:
             # repa_loss = projection_loss(ssl_feat, projected_feat)
             repa_loss = ssl_feat[0] - projected_feat[0]
-            repa_loss = repa_loss.sum(dim=-1).mean()
+            repa_loss = repa_loss.mean()
         terms = {}
         terms["loss"] = loss
         terms["diff_loss"] = diff_loss
