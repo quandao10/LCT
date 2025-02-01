@@ -75,7 +75,8 @@ class RepaDataset(Dataset):
         latent = torch.from_numpy(latent)
 
         # SSL features
-        ssl_feat = torch.load(os.path.join(self.ssl_feat_dir, f"{file_id}.pt"))
+        ssl_feat = np.load(os.path.join(self.ssl_feat_dir, f"{file_id}.npy"))
+        ssl_feat = torch.from_numpy(ssl_feat)
 
         # label
         label = torch.tensor(0)
