@@ -10,8 +10,8 @@ from repa_utils import load_encoders
 
 
 def precompute_ssl_feat(args):
-    encoders, encoder_types, architectures = load_encoders(args.enc_type, device)
     device = torch.device("cuda")
+    encoders, encoder_types, architectures = load_encoders(args.enc_type, device)
     dataset = get_dataset(args)
     loader = DataLoader(
         dataset,
