@@ -2,7 +2,7 @@ image_dir="/lustre/scratch/client/movian/research/users/khanhdn10/datasets/celeb
 dataset_name="celeba_256"
 output_dir="/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256"
 repa_enc_type="dinov2-vit-b"
-batch_size=128
+batch_size=64
 num_workers=64
 vae_type="stabilityai/sd-vae-ft-ema"
 
