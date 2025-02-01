@@ -145,7 +145,7 @@ def main(args):
     # DINOv2
     encoders, encoder_types, architectures = load_encoders(args.repa_enc_type, device)
 
-    # Setup data:
+    # Dataset
     transform = transforms.Compose(
         [
             transforms.ToTensor(),
@@ -154,7 +154,7 @@ def main(args):
             ),
         ]
     )
-    dataset = REPADataset(args.data_path, transform=transform)
+    dataset = REPADataset(args.image_dir, transform=transform)
 
     loader = DataLoader(
         dataset,
