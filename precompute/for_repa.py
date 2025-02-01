@@ -23,6 +23,7 @@ from torchvision.utils import save_image
 import numpy as np
 from torchvision import transforms
 import PIL
+from torch.utils.data import Dataset
 
 def requires_grad(model, flag=True):
     """
