@@ -26,33 +26,43 @@ import PIL
 from torch.utils.data import Dataset
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from torchvision.transforms import Normalize
+import multiprocessing
+from functools import partial
 
 
 CLIP_DEFAULT_MEAN = (0.48145466, 0.4578275, 0.40821073)
 CLIP_DEFAULT_STD = (0.26862954, 0.26130258, 0.27577711)
 
+
 def preprocess_raw_image(x, enc_type):
     resolution = x.shape[-1]
-    if 'clip' in enc_type:
-        x = x / 255.
-        x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
+    if "clip" in enc_type:
+        x = x / 255.0
+        x = torch.nn.functional.interpolate(
+            x, 224 * (resolution // 256), mode="bicubic"
+        )
         x = Normalize(CLIP_DEFAULT_MEAN, CLIP_DEFAULT_STD)(x)
-    elif 'mocov3' in enc_type or 'mae' in enc_type:
-        x = x / 255.
+    elif "mocov3" in enc_type or "mae" in enc_type:
+        x = x / 255.0
         x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
-    elif 'dinov2' in enc_type:
-        x = x / 255.
+    elif "dinov2" in enc_type:
+        x = x / 255.0
         x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
-        x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
-    elif 'dinov1' in enc_type:
-        x = x / 255.
+        x = torch.nn.functional.interpolate(
+            x, 224 * (resolution // 256), mode="bicubic"
+        )
+    elif "dinov1" in enc_type:
+        x = x / 255.0
         x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
-    elif 'jepa' in enc_type:
-        x = x / 255.
+    elif "jepa" in enc_type:
+        x = x / 255.0
         x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
-        x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
+        x = torch.nn.functional.interpolate(
+            x, 224 * (resolution // 256), mode="bicubic"
+        )
 
     return x
+
 
 def requires_grad(model, flag=True):
     """
@@ -110,6 +120,12 @@ class REPADataset(Dataset):
         return vae_image, repa_image, image_name
 
 
+def save_features(save_tuple):
+    image_name, ssl_feat, latent, ssl_feat_dir, vae_dir = save_tuple
+    np.save(f"{ssl_feat_dir}/{str(image_name)}.pt", ssl_feat)
+    np.save(f"{vae_dir}/{str(image_name)}.npy", latent)
+
+
 @torch.no_grad()
 def main(args):
     device = "cuda:0"
@@ -121,6 +137,10 @@ def main(args):
     os.makedirs(vae_dir, exist_ok=True)
     ssl_feat_dir = os.path.join(args.output_dir, "ssl_feat")
     os.makedirs(ssl_feat_dir, exist_ok=True)
+
+    print(f"\033[33mProcessing {args.image_dir}...\033[0m")
+    print(f"\033[33mVAE output dir: {vae_dir}\033[0m")
+    print(f"\033[33mSSL features output dir: {ssl_feat_dir}\033[0m")
 
     # VAE
     vae = AutoencoderKL.from_pretrained(args.vae_type).to(device)
@@ -158,17 +178,22 @@ def main(args):
             latent = vae.encode(vae_image).latent_dist.sample().mul_(0.18215)
         latent = latent.detach().cpu().numpy()
 
-        # for image_name, latent in zip(image_name, latent):
-        #     np.save(f"{vae_dir}/{str(image_name)}.npy", latent)
-
         # SSL features
         raw_image_ = preprocess_raw_image(repa_image, encoder_type)
         z = ssl_encoder.forward_features(raw_image_)
-        if 'mocov3' in encoder_type: ssl_feat = z = z[:, 1:] 
-        if 'dinov2' in encoder_type: ssl_feat = z['x_norm_patchtokens']
-        import ipdb; ipdb.set_trace()
-        # for ssl_feat, image_name in zip(ssl_feat, image_name):
-        #     np.save(f"{ssl_feat_dir}/{str(image_name)}.pt", ssl_feat)
+        if "mocov3" in encoder_type:
+            ssl_feat = z = z[:, 1:]
+        if "dinov2" in encoder_type:
+            ssl_feat = z["x_norm_patchtokens"]
+
+        # Prepare data for parallel saving
+        save_tuples = [(name, feat, lat, ssl_feat_dir, vae_dir) 
+                      for name, feat, lat in zip(image_name, ssl_feat, latent)]
+        
+        # Use process pool to save features in parallel
+        # with multiprocessing.Pool(processes=min(args.num_workers, len(save_tuples))) as pool:
+        #     pool.map(save_features, save_tuples)
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -179,7 +204,7 @@ def parse_args():
     parser.add_argument("--output_dir", type=str)
     parser.add_argument("--repa_enc_type", type=str, default="dinov2-vit-b")
     parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--num_workers", type=int, default=8)
+    parser.add_argument("--num_workers", type=int, default=32)
     parser.add_argument("--vae_type", type=str, default="stabilityai/sd-vae-ft-ema")
     return parser.parse_args()
 
