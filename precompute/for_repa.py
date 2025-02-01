@@ -122,7 +122,7 @@ class REPADataset(Dataset):
 
 def save_features(save_tuple):
     image_name, ssl_feat, latent, ssl_feat_dir, vae_dir = save_tuple
-    np.save(ssl_feat, f"{ssl_feat_dir}/{str(image_name)}.npy")
+    np.save(f"{ssl_feat_dir}/{str(image_name)}.npy", ssl_feat)
     np.save(f"{vae_dir}/{str(image_name)}.npy", latent)
 
 
@@ -188,7 +188,7 @@ def main(args):
             ssl_feat = z = z[:, 1:]
         if "dinov2" in encoder_type:
             ssl_feat = z["x_norm_patchtokens"]
-        ssl_feat = ssl_feat.detach().cpu().to(final_dtype).numpy()
+        ssl_feat = ssl_feat.to(final_dtype).detach().cpu().numpy()
 
         # Prepare data for parallel saving
         save_tuples = [
