@@ -46,7 +46,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --encoder-depth 4 \
         --repa-lamb 0.5 \
         --z_dims 768 \
-        --ckpt-every 1 \
+        --ckpt-every 100 \
         --use-repa \
         # --diff-lamb 5 \
         # --use-bf16 \
