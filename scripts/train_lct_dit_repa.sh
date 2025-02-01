@@ -35,7 +35,7 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_l
         --model-type DiT-B/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
-        --normalize-matrix $DATASET/stats.npy \
+        --normalize-matrix celeb256_stat.npy \
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
@@ -48,6 +48,8 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_l
         --z_dims 768 \
         --ckpt-every 100 \
         --use-repa \
+        # --normalize-matrix $DATASET/stats.npy \
+        # 
         # --diff-lamb 5 \
         # --use-bf16 \
         # --projector-dim 2048 \
