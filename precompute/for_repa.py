@@ -1,3 +1,14 @@
+"""
+Input:
+    - VAE
+    - Dataset
+    - Repa encoder
+
+Output:
+    - Latent 
+    - SSL features
+"""
+
 import torch
 from torch.utils.data import DataLoader
 import argparse
@@ -11,6 +22,7 @@ from PIL import Image
 from torchvision.utils import save_image
 import numpy as np
 from torchvision import transforms
+import PIL
 
 def requires_grad(model, flag=True):
     """
@@ -43,7 +55,7 @@ def center_crop_arr(pil_image, image_size):
     )
 
 
-class CustomDataset(Dataset):
+class REPADataset(Dataset):
     def __init__(self, path, transform):
         self.path = path
         self.img_list = [os.path.join(path, img) for img in os.listdir(path)]
@@ -54,17 +66,22 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = self.img_list[idx]
-        image = Image.open(img_path).convert("RGB")
-        if self.transform:
-            image = self.transform(image)
-        return image
+        image_name = os.path.basename(img_path).split(".")[0]
+
+        # VAE image
+        vae_image = Image.open(img_path).convert("RGB")
+        vae_image = self.transform(vae_image)
+
+        # REPA image
+        repa_image = np.array(PIL.Image.open(img_path))
+        repa_image = repa_image.reshape(*repa_image.shape[:2], -1).transpose(2, 0, 1)
+        repa_image = torch.from_numpy(repa_image).float()
+
+        return vae_image, repa_image, image_name
 
 
 def precompute_ssl_feat(args):
     device = torch.device("cuda")
-
-    # DINOv2
-    encoders, encoder_types, architectures = load_encoders(args.repa_enc_type, device)
 
     # Dataset
     args.get_file_id = True
@@ -119,14 +136,17 @@ def main(args):
 
     os.makedirs(args.features_path, exist_ok=True)
     os.makedirs(os.path.join(args.features_path, "celeba_256"), exist_ok=True)
-    
-    # Create model:
+
+    # VAE
     assert (
         args.image_size % 8 == 0
     ), "Image size must be divisible by 8 (for the VAE encoder)."
     latent_size = args.image_size // 8
     vae = AutoencoderKL.from_pretrained(args.vae_type).to(device)
     vae.requires_grad_(False)
+
+    # DINOv2
+    encoders, encoder_types, architectures = load_encoders(args.repa_enc_type, device)
 
     # Setup data:
     transform = transforms.Compose(
@@ -137,7 +157,7 @@ def main(args):
             ),
         ]
     )
-    dataset = CustomDataset(args.data_path, transform=transform)
+    dataset = REPADataset(args.data_path, transform=transform)
 
     loader = DataLoader(
         dataset,
@@ -163,7 +183,7 @@ def parse_args():
         "--image_dir", type=str, default="/home/khanhdn10/repo/lct/dataset/"
     )
     parser.add_argument("--dataset_name", type=str, default="latent_celeb256")
-    parser.add_argument("--output_dir", type=str, default="results/")
+    parser.add_argument("--output_dir", type=str)
     parser.add_argument("--repa_enc_type", type=str, default="dinov2-vit-b")
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--num_workers", type=int, default=8)
