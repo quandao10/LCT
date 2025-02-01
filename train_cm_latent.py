@@ -380,7 +380,6 @@ def main(args):
                                                 lamb_dict=lamb_dict,
                                                 )
             
-            import ipdb; ipdb.set_trace()
             # if args.use_diffloss:
             #     diff_losses = diffusion.diffusion_losses(model, 
             #                                             x,
@@ -402,11 +401,11 @@ def main(args):
                     loss = cm_loss
                     diff_loss = torch.tensor(0)
 
-                if args.use_repa:
-                    repa_loss = losses["repa_loss"]
-                    loss += args.repa_lamb * repa_loss
-                else:
-                    repa_loss = torch.tensor(0)
+            if args.use_repa:
+                repa_loss = losses["repa_loss"]
+                loss += args.repa_lamb * repa_loss
+            else:
+                repa_loss = torch.tensor(0)
             after_forward = torch.cuda.memory_allocated(device)
             
             if not torch.isnan(loss):
