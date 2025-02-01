@@ -170,9 +170,9 @@ def main(args):
         with torch.no_grad():
             latent = vae.encode(vae_image).latent_dist.sample().mul_(0.18215)
         latent = latent.detach().cpu().numpy()
+        import ipdb; ipdb.set_trace()
         np.save(f"{args.output_dir}/celeba_256/{str(i).zfill(9)}.npy", latent)
 
-        import ipdb; ipdb.set_trace()
 
         # SSL features
         ssl_feat = None
