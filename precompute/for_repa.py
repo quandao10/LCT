@@ -174,6 +174,8 @@ def main(args):
     for i, (vae_image, repa_image, image_name) in enumerate(tqdm(loader)):
         vae_image = vae_image.to(device)
         repa_image = repa_image.to(device)
+
+        # VAE latent
         with torch.no_grad():
             latent = vae.encode(vae_image).latent_dist.sample().mul_(0.18215)
         latent = latent.detach().cpu().numpy()
@@ -185,13 +187,14 @@ def main(args):
             ssl_feat = z = z[:, 1:]
         if "dinov2" in encoder_type:
             ssl_feat = z["x_norm_patchtokens"]
-
-        import ipdb; ipdb.set_trace()
+        ssl_feat = ssl_feat.detach().cpu()
 
         # Prepare data for parallel saving
-        save_tuples = [(name, feat, lat, ssl_feat_dir, vae_dir) 
-                      for name, feat, lat in zip(image_name, ssl_feat, latent)]
-        
+        save_tuples = [
+            (name, feat, lat, ssl_feat_dir, vae_dir)
+            for name, feat, lat in zip(image_name, ssl_feat, latent)
+        ]
+
         # Use process pool to save features in parallel
         # with multiprocessing.Pool(processes=min(args.num_workers, len(save_tuples))) as pool:
         #     pool.map(save_features, save_tuples)
@@ -205,7 +208,7 @@ def parse_args():
     parser.add_argument("--dataset_name", type=str, default="latent_celeb256")
     parser.add_argument("--output_dir", type=str)
     parser.add_argument("--repa_enc_type", type=str, default="dinov2-vit-b")
-    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--num_workers", type=int, default=32)
     parser.add_argument("--vae_type", type=str, default="stabilityai/sd-vae-ft-ema")
     return parser.parse_args()
