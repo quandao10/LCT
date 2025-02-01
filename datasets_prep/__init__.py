@@ -63,7 +63,7 @@ class RepaDataset(Dataset):
         self.vae_dir = os.path.join(base_dir, "vae")
 
         all_files = os.listdir(self.ssl_feat_dir)
-        self.basename_files = [os.path.basename(file).split(".")[0] for file in all_files][:64]
+        self.basename_files = [os.path.basename(file).split(".")[0] for file in all_files]
 
     def __len__(self):
         return len(self.basename_files)
