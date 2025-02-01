@@ -41,8 +41,7 @@ def precompute_ssl_feat(args):
             raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
             # raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
             # raw_image.shape = [64, 3, 256, 256] --> create a grid of 8x8 images, then save it
-            import ipdb; ipdb.set_trace()
-            save_image(raw_image / 2.0, os.path.join(save_img_dir, f'{i}.png'), nrow=8, padding=2)
+            save_image(raw_image, os.path.join(save_img_dir, f'{i}.png'), nrow=8, padding=2)
             import ipdb; ipdb.set_trace()
             ssl_feat = []
             # with torch.autocast(device_type='cuda', dtype=__dtype):
