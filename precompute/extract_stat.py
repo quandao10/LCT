@@ -10,7 +10,7 @@ print(f"Processing {base_dir}")
 
 # Create dataset and dataloader for parallel processing
 dataset = RepaDataset(base_dir)
-loader = DataLoader(dataset, batch_size=128, num_workers=32, shuffle=False, drop_last=False)
+loader = DataLoader(dataset, batch_size=64, num_workers=32, shuffle=False, drop_last=False)
 
 # Pre-allocate tensor to store all features
 total_samples = len(dataset)
