@@ -1,52 +1,16 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
-"""
-A minimal training script for DiT using PyTorch DDP.
-"""
-import math
-import json
 import torch
-# the first flag below was False when we tested this script but True makes A100 training a lot faster:
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
-from torchvision.utils import save_image
-import numpy as np
-from collections import OrderedDict
-from PIL import Image
-from copy import deepcopy
-from time import time
 import argparse
-import logging
 import os
 from datasets_prep import get_dataset
 from tqdm import tqdm
-from models.script_util import (
-    create_model_and_diffusion,
-    create_ema_and_scales_fn,
-    create_model_umt,
-)
-from models.karras_diffusion import karras_sample
 from diffusers.models import AutoencoderKL
-from models.network_dit import DiT_models
-from models.network_edm2 import EDM2_models
-import robust_loss_pytorch
-from sampler.random_util import get_generator
-from models.optimal_transport import OTPlanSampler
 from repa_utils import preprocess_raw_image
-
 from repa_utils import load_encoders
-encoders, encoder_types, architectures = load_encoders(args.enc_type, device)
-z_dims = [encoder.embed_dim for encoder in encoders] if args.enc_type != 'None' else [0]
+
 
 def precompute_ssl_feat(args):
+    encoders, encoder_types, architectures = load_encoders(args.enc_type, device)
     device = torch.device("cuda")
     dataset = get_dataset(args)
     loader = DataLoader(
