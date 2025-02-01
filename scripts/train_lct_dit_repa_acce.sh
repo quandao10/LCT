@@ -5,7 +5,12 @@ NUM_GPUS=$1
 # CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=2 train_cm_latent.py \
 # CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
 
-CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
+NUM_GPUS=$1
+CONFIG_FILE="accelerator/${NUM_GPUS}gpus.yaml"
+echo "Using config file: $CONFIG_FILE"
+python_file="train_cm_latent.py"
+
+accelerate launch --config_file $CONFIG_FILE --main_process_port 31228 $python_file \
         --exp baseline_repa0.5  \
         --datadir $DATASET/ \
         --results-dir results/ \
