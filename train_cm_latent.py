@@ -344,6 +344,7 @@ def main(args):
                 ssl_feat = [ssl_feat]
             else:
                 x, y = out
+                ssl_feat = None
             # adjust_learning_rate(opt, i / len(loader) + epoch, args)
             x = x.to(device)
             
