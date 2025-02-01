@@ -5,7 +5,8 @@ NUM_GPUS=$1
 # CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=2 train_cm_latent.py \
 # CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
 
-CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
+# CUDA_VISIBLE_DEVICES=4,5,6,7 
+torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --exp baseline_repa0.5  \
         --datadir $DATASET/ \
         --results-dir results/ \
@@ -40,7 +41,7 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS trai
         --plot-every 5 \
         --num-workers 16 \
         --use-repa \
-        --projector-dim 2048 \
+        --projector-dim 1024 \
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
         --repa-lamb 0.5 \
@@ -48,6 +49,7 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS trai
         --ckpt-every 1 \
         # --diff-lamb 5 \
         # --use-bf16 \
+        # --projector-dim 2048 \
 
         
         
