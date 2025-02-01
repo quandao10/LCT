@@ -17,7 +17,7 @@ class CustomDataset(Dataset):
         self.labels_dir = labels_dir
         self.dataset = dataset
         self.get_file_id = get_file_id
-
+        self.file_ids = os.listdir(self.features_dir)
     def __len__(self):
         if self.dataset == "imagenet":
             return 1281167
@@ -37,7 +37,7 @@ class CustomDataset(Dataset):
             return 70000
 
     def __getitem__(self, idx):
-        file_id = f"{str(idx).zfill(9)}.npy"
+        file_id = self.file_ids[idx]
         features = np.load(os.path.join(self.features_dir, file_id))
         features_tensor = torch.from_numpy(features.copy())
 
