@@ -208,7 +208,7 @@ def parse_args():
     parser.add_argument("--dataset_name", type=str, default="latent_celeb256")
     parser.add_argument("--output_dir", type=str)
     parser.add_argument("--repa_enc_type", type=str, default="dinov2-vit-b")
-    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--num_workers", type=int, default=32)
     parser.add_argument("--vae_type", type=str, default="stabilityai/sd-vae-ft-ema")
     return parser.parse_args()
