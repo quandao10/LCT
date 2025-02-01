@@ -1,4 +1,4 @@
-export MASTER_PORT=10120
+export MASTER_PORT=10110
 DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
 NUM_GPUS=$1
 
