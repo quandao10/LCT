@@ -164,15 +164,26 @@ def main(args):
         drop_last=False,
     )
 
-    for i, x in enumerate(tqdm(loader)):
-        x = x.to(device)
-        # y = y.to(device)
+    for i, (vae_image, repa_image, image_name) in enumerate(tqdm(loader)):
+        vae_image = vae_image.to(device)
+        repa_image = repa_image.to(device)
         with torch.no_grad():
-            x = vae.encode(x).latent_dist.sample().mul_(0.18215)
-        x = x.detach().cpu().numpy()
-        # y = y.detach().cpu().numpy()
+            latent = vae.encode(vae_image).latent_dist.sample().mul_(0.18215)
+        latent = latent.detach().cpu().numpy()
+        np.save(f"{args.output_dir}/celeba_256/{str(i).zfill(9)}.npy", latent)
 
-        np.save(f"{args.features_path}/celeba_256/{str(i).zfill(9)}.npy", x[0])
+        import ipdb; ipdb.set_trace()
+
+        # SSL features
+        ssl_feat = None
+        with torch.no_grad():
+            target = x.clone().detach()
+            raw_image = target / vae.config.scaling_factor
+            raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
+            save_image(
+                raw_image, os.path.join(save_img_dir, f"{i}.png"), nrow=8, padding=2
+            )
+        np.save(f"{args.output_dir}/celeba_256/{str(i).zfill(9)}.npy", latent)
 
 def parse_args():
     parser = argparse.ArgumentParser()
