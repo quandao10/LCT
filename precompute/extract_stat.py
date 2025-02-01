@@ -21,7 +21,7 @@ for batch in tqdm(loader):
     feat_ls.append(batch[0] / 0.18215)
 
 # Calculate statistics
-feats = torch.stack(feat_ls)
+feats = torch.cat(feat_ls, dim=0)
 std, mean = torch.std_mean(feats, dim=0)
 
 # Save results
@@ -30,3 +30,5 @@ print(f"mean: {mean}, std: {std}")
 print(f"mean.shape: {mean.shape}, std.shape: {std.shape}")
 print(f"Saved to {os.path.join(base_dir, 'celeb256_stat.npy')}")
 print(f"Total samples: {total_samples}")
+
+
