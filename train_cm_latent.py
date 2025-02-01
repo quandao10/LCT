@@ -415,10 +415,12 @@ def main(args):
                 repa_loss = torch.tensor(0)
             # after_forward = torch.cuda.memory_allocated(device)
             
+            cm_loss = losses["loss"].mean()
             # if not torch.isnan(loss) or True:
             if True:
                 opt.zero_grad()
-                loss.backward()
+                # loss.backward()
+                cm_loss.backward()
                 diff_loss.backward()
                 repa_loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
