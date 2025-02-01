@@ -188,7 +188,7 @@ def main(args):
             ssl_feat = z = z[:, 1:]
         if "dinov2" in encoder_type:
             ssl_feat = z["x_norm_patchtokens"]
-        ssl_feat = ssl_feat.detach().cpu().to(final_dtype)
+        ssl_feat = ssl_feat.detach().cpu().to(final_dtype).numpy()
 
         # Prepare data for parallel saving
         save_tuples = [
