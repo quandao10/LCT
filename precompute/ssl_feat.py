@@ -40,6 +40,7 @@ def precompute_ssl_feat(args):
             raw_image = target / vae.config.scaling_factor
             raw_image = vae.decode(raw_image.to(dtype=vae.dtype)).sample.float()
             save_image(raw_image, os.path.join(save_img_dir, f'{i}.png'), nrow=8, padding=2)
+            import ipdb; ipdb.set_trace()
             raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
             ssl_feat = []
             # with torch.autocast(device_type='cuda', dtype=__dtype):
