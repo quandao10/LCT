@@ -415,7 +415,8 @@ def main(args):
                 repa_loss = torch.tensor(0)
             # after_forward = torch.cuda.memory_allocated(device)
             
-            if not torch.isnan(loss) or True:
+            # if not torch.isnan(loss) or True:
+            if True:
                 opt.zero_grad()
                 loss.backward()
                 diff_loss.backward()
