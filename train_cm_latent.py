@@ -653,6 +653,8 @@ if __name__ == "__main__":
     parser.add_argument("--projector-dim", type=int, default=2048)
     parser.add_argument("--encoder-depth", type=int, default=4)
     parser.add_argument("--repa-lamb", type=float, default=0.5)
+    parser.add_argument("--z_dims", type=int, default=768)
+
 
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
