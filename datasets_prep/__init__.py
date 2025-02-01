@@ -12,10 +12,11 @@ import os
 
 
 class CustomDataset(Dataset):
-    def __init__(self, dataset, features_dir, labels_dir=None):
+    def __init__(self, dataset, features_dir, labels_dir=None, get_id=False):
         self.features_dir = features_dir
         self.labels_dir = labels_dir
         self.dataset = dataset
+        self.get_id = get_id
 
     def __len__(self):
         if self.dataset == "imagenet":
@@ -38,11 +39,18 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx):
         file_id = f"{str(idx).zfill(9)}.npy"
         features = np.load(os.path.join(self.features_dir, file_id))
-        if self.labels_dir is not None:
-            labels = np.load(os.path.join(self.labels_dir, file_id))
-        else:
-            return torch.from_numpy(features), torch.tensor(0)
-        return torch.from_numpy(features.copy()), torch.from_numpy(labels)
+        features_tensor = torch.from_numpy(features.copy())
+
+        if self.labels_dir is None:
+            return features_tensor, torch.tensor(0)
+
+        labels = np.load(os.path.join(self.labels_dir, file_id))
+        labels_tensor = torch.from_numpy(labels)
+
+        if self.get_id:
+            return features_tensor, labels_tensor, file_id
+            
+        return features_tensor, labels_tensor
 
 def get_dataset(args):
     if args.dataset == "cifar10":
