@@ -196,11 +196,10 @@ class DiT(nn.Module):
 
         ############## REPA ##############
         self.use_repa = use_repa
-        if not isinstance(z_dims, list):
-            z_dims = [z_dims]
-            
-        self.encoder_depth = encoder_depth
         if self.use_repa:   
+            if not isinstance(z_dims, list):
+                z_dims = [z_dims]
+            self.encoder_depth = encoder_depth
             self.projectors = nn.ModuleList([
                 build_mlp(hidden_size, projector_dim, z_dim) for z_dim in z_dims
             ])
@@ -259,7 +258,7 @@ class DiT(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 
-    def forward(self, x, t, y=None, is_train=True):
+    def forward(self, x, t, y=None, is_train=False):
         """
         Forward pass of DiT.
         x: (N, C, H, W) tensor of spatial inputs (images or latent representations of images)

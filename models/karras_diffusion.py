@@ -170,6 +170,7 @@ class KarrasDenoiser:
 
         def denoise_fn(x, t, indices):
             if self.use_repa:
+                model_kwargs['is_train'] = True
                 _, denoised, projected_feat = self.denoise(model, x, t, indices, **model_kwargs)
                 return denoised, projected_feat
             else:

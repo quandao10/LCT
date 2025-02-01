@@ -366,7 +366,7 @@ def main(args):
                     (diffusion.sigma_max**(1/diffusion.rho) - diffusion.sigma_min**(1/diffusion.rho)) / (num_scales - 1)
                 )
 
-            model_kwargs = dict(y=y, is_train=True)
+            model_kwargs = dict(y=y, is_train=False)
             # before_forward = torch.cuda.memory_allocated(device)
             lamb_dict = {
                 "diff_lamb": args.diff_lamb,
