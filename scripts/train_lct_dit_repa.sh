@@ -1,5 +1,5 @@
 export MASTER_PORT=10121
-PREFIX=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
+DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
 NUM_GPUS=$1
 
 # CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=2 train_cm_latent.py \
@@ -7,7 +7,7 @@ NUM_GPUS=$1
 
 CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --exp baseline_repa0.5  \
-        --datadir $PREFIX/ \
+        --datadir $DATASET/ \
         --results-dir results/ \
         --image-size 32 \
         --num-in-channels 4 \
@@ -46,6 +46,8 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_l
         --z_dims 768 \
         # --diff-lamb 5 \
         # --use-bf16 \
+        # --normalize-matrix $DATASET/stats.npy \
+
         
         
         
