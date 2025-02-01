@@ -335,32 +335,28 @@ class KarrasDenoiser:
 
         # REPA loss
         repa_loss = 0.
-        # if self.use_repa:
-        #     # projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
-        #     bsz = ssl_feat[0].shape[0]
-        #     for i, (z, z_tilde) in enumerate(zip(ssl_feat, projected_feat)):
-        #         for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
-        #             z_tilde_j = th.nn.functional.normalize(z_tilde_j, dim=-1) 
-        #             z_j = th.nn.functional.normalize(z_j, dim=-1) 
-        #             numerator = z_j * z_tilde_j
-        #             # numerator = th.nan_to_num(numerator, nan=0.0)
-        #             repa_loss += mean_flat(-(numerator).sum(dim=-1))
-        #     repa_loss /= (len(ssl_feat) * bsz)
+        if self.use_repa:
+            # projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
+            bsz = ssl_feat[0].shape[0]
+            for i, (z, z_tilde) in enumerate(zip(ssl_feat, projected_feat)):
+                for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
+                    z_tilde_j = th.nn.functional.normalize(z_tilde_j, dim=-1) 
+                    z_j = th.nn.functional.normalize(z_j, dim=-1) 
+                    numerator = z_j * z_tilde_j
+                    # numerator = th.nan_to_num(numerator, nan=0.0)
+                    repa_loss += mean_flat(-(numerator).sum(dim=-1))
+            repa_loss /= (len(ssl_feat) * bsz)
 
-        def projection_loss(zs, zs_tilde):
-            # Normalize and concatenate all z
-            z_stack = torch.cat([F.normalize(z, dim=-1) for z in zs], dim=0)  # shape: (n*B, D)
-            # Normalize and concatenate all z_tilde
-            z_tilde_stack = torch.cat([F.normalize(z_t, dim=-1) for z_t in zs_tilde], dim=0)  # shape: (n*B, D)
+        # def projection_loss(zs, zs_tilde):
+        #     # Normalize and concatenate all z
+        #     z_stack = torch.cat([F.normalize(z, dim=-1) for z in zs], dim=0)  # shape: (n*B, D)
+        #     # Normalize and concatenate all z_tilde
+        #     z_tilde_stack = torch.cat([F.normalize(z_t, dim=-1) for z_t in zs_tilde], dim=0)  # shape: (n*B, D)
 
-            # Dot product along the last dimension, then mean over all
-            proj_loss = - (z_stack * z_tilde_stack).sum(dim=-1).mean()
+        #     # Dot product along the last dimension, then mean over all
+        #     proj_loss = - (z_stack * z_tilde_stack).sum(dim=-1).mean()
             return proj_loss
         
-        if self.use_repa:
-            # repa_loss = projection_loss(ssl_feat, projected_feat)
-            repa_loss = ssl_feat[0] - projected_feat[0]
-            repa_loss = repa_loss.mean()
         terms = {}
         terms["loss"] = loss
         terms["diff_loss"] = diff_loss
