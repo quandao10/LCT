@@ -332,6 +332,7 @@ def main(args):
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
 
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
+    dist.barrier()
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
@@ -437,7 +438,7 @@ def main(args):
                 update_ema(target_model, model.module, 0)
             else:
                 update_ema(target_model, model.module, ema_rate)
-
+            
             # Log loss values:
             log_steps += 1
             train_steps += 1
