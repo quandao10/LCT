@@ -196,8 +196,8 @@ def main(args):
         ]
 
         # Use process pool to save features in parallel
-        # with multiprocessing.Pool(processes=min(args.num_workers, len(save_tuples))) as pool:
-        #     pool.map(save_features, save_tuples)
+        with multiprocessing.Pool(processes=min(args.num_workers, len(save_tuples))) as pool:
+            pool.map(save_features, save_tuples)
 
 
 def parse_args():
