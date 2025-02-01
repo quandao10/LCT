@@ -334,16 +334,21 @@ class KarrasDenoiser:
         # REPA loss
         repa_loss = 0.
         if self.use_repa:
+            # Apply gradnorm to all projected features at once
             projected_feat = [gradnorm(z, lamb_dict["repa_lamb"]) for z in projected_feat]
-            bsz = ssl_feat[0].shape[0]
-            for i, (z, z_tilde) in enumerate(zip(ssl_feat, projected_feat)):
-                for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
-                    z_tilde_j = th.nn.functional.normalize(z_tilde_j, dim=-1) 
-                    z_j = th.nn.functional.normalize(z_j, dim=-1) 
-                    numerator = z_j * z_tilde_j
-                    numerator = th.nan_to_num(numerator, nan=0.0)
-                    repa_loss += mean_flat(-(numerator).sum(dim=-1))
-            repa_loss /= (len(ssl_feat) * bsz)
+            
+            # Normalize all features at once
+            ssl_feat = [th.nn.functional.normalize(z, dim=-1) for z in ssl_feat]
+            projected_feat = [th.nn.functional.normalize(z, dim=-1) for z in projected_feat]
+            
+            # Calculate loss using vectorized operations
+            for z, z_tilde in zip(ssl_feat, projected_feat):
+                # Compute dot product for all pairs at once
+                numerator = (z * z_tilde).sum(dim=-1)  # Shape: [bsz]
+                numerator = th.nan_to_num(numerator, nan=0.0)
+                repa_loss += mean_flat(-numerator)
+            
+            repa_loss /= len(ssl_feat)
 
         terms = {}
         terms["loss"] = loss
