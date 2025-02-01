@@ -9,6 +9,7 @@ NUM_GPUS=$1
 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS train_cm_latent.py \
         --exp baseline_repa0.5  \
         --datadir $DATASET/ \
+        --dataset latent_celeb256 \
         --results-dir results/ \
         --image-size 32 \
         --num-in-channels 4 \
