@@ -8,7 +8,7 @@ from diffusers.models import AutoencoderKL
 from repa_utils import preprocess_raw_image
 from repa_utils import load_encoders
 from PIL import Image
-from torchvision.utils import make_grid, save_image
+from torchvision.utils import make_grid
 
 
 
@@ -42,7 +42,11 @@ def precompute_ssl_feat(args):
             raw_image = (raw_image * 127.5 + 128).clamp(0, 255).to(torch.uint8)
             # raw_image.shape = [64, 3, 256, 256] --> create a grid of 8x8 images, then save it
             grid = make_grid(raw_image, nrow=8, padding=2)
-            save_image(grid, os.path.join(save_img_dir, f"{i}.png"))
+            # save using PIL
+            import ipdb; ipdb.set_trace()
+            grid = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+            im = Image.fromarray(grid)
+            im.save(os.path.join(save_img_dir, f'{i}.png'))
             print(f"Saved: {os.path.join(save_img_dir, f'{i}.png')}")
             import ipdb; ipdb.set_trace()
             ssl_feat = []
