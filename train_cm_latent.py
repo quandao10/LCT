@@ -363,7 +363,7 @@ def main(args):
                 )
 
             model_kwargs = dict(y=y, is_train=True)
-            before_forward = torch.cuda.memory_allocated(device)
+            # before_forward = torch.cuda.memory_allocated(device)
             lamb_dict = {
                 "diff_lamb": args.diff_lamb,
                 "repa_lamb": args.repa_lamb,
@@ -406,7 +406,7 @@ def main(args):
                 loss += args.repa_lamb * repa_loss
             else:
                 repa_loss = torch.tensor(0)
-            after_forward = torch.cuda.memory_allocated(device)
+            # after_forward = torch.cuda.memory_allocated(device)
             
             if not torch.isnan(loss):
                 opt.zero_grad()
@@ -429,7 +429,7 @@ def main(args):
                     for g in opt.param_groups:
                         g['lr'] = args.lr
                     nan_count = 0
-            after_backward = torch.cuda.memory_allocated(device)
+            # after_backward = torch.cuda.memory_allocated(device)
             # update_ema(ema, model.module)
             for name, ema_rate in EMA_RATES.items():
                 update_ema(emas[name], model.module, ema_rate)
@@ -457,9 +457,9 @@ def main(args):
                 logger.info(
                     f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f} Repa Loss: {avg_repa_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
-                    f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
-                    f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
-                    f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
+                    # f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
+                    # f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
+                    # f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
                     # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
                 # Reset monitoring variables:
