@@ -227,11 +227,10 @@ def main(args):
             emas[name], model, decay=0
         )  # Ensure EMA is initialized with synced weights
         emas[name].to(device)
-    target_model = deepcopy(model).to(device)
+    target_model = deepcopy(model)
     target_model.requires_grad_(False)
     target_model.train()
 
-    model = model.to(device)
 
     # Uncertainty-based multi-task learning
     if args.umt:
