@@ -436,11 +436,12 @@ def main(args):
                 
                 if accelerator.sync_gradients:
                     for name, ema_rate in EMA_RATES.items():
-                        update_ema(emas[name], model, ema_rate)
+                        update_ema(emas[name], model.module, ema_rate)
+                    ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
                     if args.ict:
-                        update_ema(target_model, model, 0)
+                        update_ema(target_model, model.module, 0)
                     else:
-                        update_ema(target_model, model, ema_rate)
+                        update_ema(target_model, model.module, ema_rate)
             
             # Log loss values:
             if accelerator.sync_gradients:
