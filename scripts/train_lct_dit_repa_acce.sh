@@ -8,7 +8,7 @@ NUM_GPUS=$1
 NUM_GPUS=$1
 CONFIG_FILE="accelerator/${NUM_GPUS}gpus.yaml"
 echo "Using config file: $CONFIG_FILE"
-python_file="train_cm_latent.py"
+python_file="train_cm_latent_acce.py"
 
 accelerate launch --config_file $CONFIG_FILE --main_process_port 31228 $python_file \
         --exp baseline_repa0.5  \
