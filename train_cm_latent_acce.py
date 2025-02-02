@@ -309,7 +309,10 @@ def main(args):
     for epoch in range(args.epochs):
         logger.info(f"Beginning epoch {epoch}...")
         for i, out in enumerate(tqdm(loader)):
-            x, ssl_feat, y = out
+            if args.use_repa:
+                x, ssl_feat, y = out
+            else:
+                x, y = out
             x = x.to(device)
             ssl_feat = ssl_feat.to(device)
             ssl_feat = [ssl_feat]
