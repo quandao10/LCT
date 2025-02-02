@@ -315,6 +315,7 @@ def main(args):
                 ssl_feat = [ssl_feat]
             else:
                 x, y = out
+                ssl_feat = None
             x = x.to(device)
             
             if use_normalize:
