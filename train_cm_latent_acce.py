@@ -309,7 +309,7 @@ def main(args):
     train_steps = 0
 
     ######## gradnorm ########
-    class GradNormFunction(th.autograd.Function):
+    class GradNormFunction(torch.autograd.Function):
         @staticmethod
         def forward(ctx, x, weight):
             ctx.save_for_backward(weight)
@@ -322,7 +322,7 @@ def main(args):
             # grad_output_norm = torch.linalg.vector_norm(
             #     grad_output, dim=list(range(1, len(grad_output.shape))), keepdim=True
             # ).mean()
-            grad_output_norm = th.norm(grad_output).mean().item()
+            grad_output_norm = torch.norm(grad_output).mean().item()
             # nccl over all nodes
             grad_output_norm = avg_scalar_over_nodes(
                 grad_output_norm, device=grad_output.device
