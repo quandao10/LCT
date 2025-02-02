@@ -390,7 +390,7 @@ def main(args):
                                                     lamb_dict=lamb_dict,
                                                     gradnorm=gradnorm,
                                                     )
-                import ipdb; ipdb.set_trace()
+                
                 if args.l2_reweight:
                     distances = norm_dim(x-n)
                     weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
