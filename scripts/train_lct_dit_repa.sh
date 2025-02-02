@@ -1,4 +1,4 @@
-MASTER_PORT=11240
+MASTER_PORT=11241
 DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
 NUM_GPUS=$1
 
@@ -7,7 +7,7 @@ NUM_GPUS=$1
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
-        --exp baseline_repa2.0_diff5.0_depth1  \
+        --exp baseline_repa2.0_diff5.0_depth2  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
         --results-dir results/ \
@@ -43,7 +43,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_p
         --num-workers 16 \
         --projector-dim 2048 \
         --enc-type dinov2-vit-b \
-        --encoder-depth 1 \
+        --encoder-depth 2 \
         --repa-lamb 2.0 \
         --diff-lamb 5.0 \
         --z_dims 768 \
