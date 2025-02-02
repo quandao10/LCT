@@ -10,11 +10,13 @@ A minimal training script for DiT using PyTorch DDP.
 import math
 import json
 import torch
-
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from torchvision.utils import save_image
 import numpy as np
 from collections import OrderedDict
@@ -41,7 +43,6 @@ from models.optimal_transport import OTPlanSampler
 from repa_utils import preprocess_raw_image
 from accelerate import Accelerator
 from accelerate.utils import set_seed, ProjectConfiguration
-
 EMA_RATES = {
     "ema_0.999": 0.999,
     "ema": 0.9999,
@@ -55,7 +56,6 @@ EMA_RATES = {
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
-
 
 @torch.no_grad()
 def update_ema(ema_model, model, decay=0.9999):
@@ -82,7 +82,7 @@ def cleanup():
     """
     End training.
     """
-    pass  # No longer needed with accelerator
+    pass # No longer needed with accelerator
 
 
 def create_logger(logging_dir):
@@ -92,12 +92,9 @@ def create_logger(logging_dir):
     if logging_dir:  # Only create real logger for main process
         logging.basicConfig(
             level=logging.INFO,
-            format="[\033[34m%(asctime)s\033[0m] %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler(f"{logging_dir}/log.txt"),
-            ],
+            format='[\033[34m%(asctime)s\033[0m] %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            handlers=[logging.StreamHandler(), logging.FileHandler(f"{logging_dir}/log.txt")]
         )
         logger = logging.getLogger(__name__)
     else:  # dummy logger for other processes
@@ -124,24 +121,16 @@ def center_crop_arr(pil_image, image_size):
     arr = np.array(pil_image)
     crop_y = (arr.shape[0] - image_size) // 2
     crop_x = (arr.shape[1] - image_size) // 2
-    return Image.fromarray(
-        arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size]
-    )
+    return Image.fromarray(arr[crop_y: crop_y + image_size, crop_x: crop_x + image_size])
 
 
 def adjust_learning_rate(optimizer, epoch, args):
     """Decay the learning rate with half-cycle cosine after warmup"""
     if epoch < args.warmup_epochs:
-        lr = args.lr * epoch / args.warmup_epochs
+        lr = args.lr * epoch / args.warmup_epochs 
     else:
-        lr = args.min_lr + (args.lr - args.min_lr) * 0.5 * (
-            1.0
-            + math.cos(
-                math.pi
-                * (epoch - args.warmup_epochs)
-                / (args.epochs - args.warmup_epochs)
-            )
-        )
+        lr = args.min_lr + (args.lr - args.min_lr) * 0.5 * \
+            (1. + math.cos(math.pi * (epoch - args.warmup_epochs) / (args.epochs - args.warmup_epochs)))
     for param_group in optimizer.param_groups:
         if "lr_scale" in param_group:
             param_group["lr"] = lr * param_group["lr_scale"]
@@ -149,16 +138,14 @@ def adjust_learning_rate(optimizer, epoch, args):
             param_group["lr"] = lr
     return lr
 
-
 def norm_dim(x):
     _, C, H, W = x.shape
-    return torch.sqrt(torch.sum(x**2, dim=(1, 2, 3)) / (C * H * W))
+    return torch.sqrt(torch.sum(x**2, dim=(1,2,3))/(C*H*W))
 
 
 #################################################################################
 #                                  Training Loop                                #
 #################################################################################
-
 
 def main(args):
     """
@@ -189,14 +176,15 @@ def main(args):
         print(f"Global seed: {seed}")
     set_seed(seed)
 
+    
     torch.manual_seed(seed)
-
+    
     # Setup an experiment folder:
     experiment_index = args.exp
     experiment_dir = f"{args.results_dir}/{args.dataset}/{experiment_index}"
-    checkpoint_dir = f"{experiment_dir}/checkpoints"
+    checkpoint_dir = f"{experiment_dir}/checkpoints"  
     sample_dir = f"{experiment_dir}/samples"
-
+    
     if accelerator.is_main_process:
         os.makedirs(args.results_dir, exist_ok=True)
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -209,28 +197,23 @@ def main(args):
     # Create models
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema")
     model, diffusion = create_model_and_diffusion(args)
-
+    
     if args.custom_constant_c > 0.0:
         diffusion.c = torch.tensor(args.custom_constant_c)
     else:
-        diffusion.c = torch.tensor(
-            0.00054 * math.sqrt(args.num_in_channels * args.image_size**2)
-        )
+        diffusion.c = torch.tensor(0.00054*math.sqrt(args.num_in_channels*args.image_size**2))
     logger.info("c in huber loss is {}".format(diffusion.c.item()))
-
+    
     emas = dict()
     for name in EMA_RATES.keys():
-        emas[name] = deepcopy(
-            model
-        )  # Create an EMA of the model for use after training
-        update_ema(
-            emas[name], model, decay=0
-        )  # Ensure EMA is initialized with synced weights
+        emas[name] = deepcopy(model)  # Create an EMA of the model for use after training
+        update_ema(emas[name], model, decay=0)  # Ensure EMA is initialized with synced weights
         emas[name].to(device)
-    target_model = deepcopy(model)
+    target_model = deepcopy(model).to(device)
     target_model.requires_grad_(False)
     target_model.train()
-
+    
+    model = model.to(device)
 
     # Uncertainty-based multi-task learning
     if args.umt:
@@ -238,38 +221,22 @@ def main(args):
         model_umt = model_umt.to(device)
     else:
         model_umt = None
-
-    if args.loss_norm == "adaptive":
-        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(
-            num_dims=args.num_in_channels * args.image_size**2,
-            alpha_hi=1.0,
-            alpha_lo=0.0,
-            float_dtype=np.float32,
-            scale_init=diffusion.c,
-            device=device,
-        )
+    
+    if args.loss_norm=="adaptive":
+        adaptive_loss = robust_loss_pytorch.adaptive.AdaptiveLossFunction(num_dims=args.num_in_channels*args.image_size**2, 
+                                                                          alpha_hi=1.0,
+                                                                          alpha_lo=0.0,
+                                                                          float_dtype=np.float32, 
+                                                                          scale_init=diffusion.c,
+                                                                          device=device)
         if args.umt:
-            opt = torch.optim.RAdam(
-                list(model.parameters())
-                + list(adaptive_loss.parameters())
-                + list(model_umt.parameters()),
-                lr=args.lr,
-                weight_decay=1e-4,
-            )
+            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
-            opt = torch.optim.RAdam(
-                list(model.parameters()) + list(adaptive_loss.parameters()),
-                lr=args.lr,
-                weight_decay=1e-4,
-            )
+            opt = torch.optim.RAdam(list(model.parameters())+list(adaptive_loss.parameters()), lr=args.lr, weight_decay=1e-4)
     else:
         adaptive_loss = None
         if args.umt:
-            opt = torch.optim.RAdam(
-                list(model.parameters()) + list(model_umt.parameters()),
-                lr=args.lr,
-                weight_decay=1e-4,
-            )
+            opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
             opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
@@ -282,25 +249,21 @@ def main(args):
         shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True,
-        drop_last=True,
+        drop_last=True
     )
 
     # Prepare everything with accelerator
     if args.umt:
-        model, model_umt, opt, loader = accelerator.prepare(
-            model, model_umt, opt, loader
-        )
+        model, model_umt, opt, loader = accelerator.prepare(model, model_umt, opt, loader)
     else:
         model, opt, loader = accelerator.prepare(model, opt, loader)
     vae = accelerator.prepare(vae)
 
     logger.info(f"Dataset contains {len(dataset):,} images ({args.datadir})")
-    args.total_training_steps = (
-        math.ceil(len(dataset) // args.global_batch_size) * args.epochs
-    )
+    args.total_training_steps = math.ceil(len(dataset)//args.global_batch_size)*args.epochs
     if accelerator.is_main_process:
         config = vars(args)
-        with open(f"{experiment_dir}/config.json", "w") as out:
+        with open(f"{experiment_dir}/config.json", 'w') as out:
             json.dump(config, out)
 
     # create ema schedule
@@ -320,7 +283,7 @@ def main(args):
         ot_sampler = OTPlanSampler(method="exact", normalize_cost=True)
     else:
         ot_sampler = None
-
+    
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
@@ -336,25 +299,12 @@ def main(args):
         mean = torch.tensor(data["mean"]).to(device)
         std = torch.tensor(data["std"]).to(device)
         print("mean.shape, std.shape", mean.shape, std.shape)
-
+        
     if accelerator.is_main_process:
-        noise = (
-            torch.randn(
-                (
-                    args.num_sampling,
-                    args.num_in_channels,
-                    args.image_size,
-                    args.image_size,
-                ),
-                device=device,
-            )
-            * args.sigma_max
-        )
+        noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
 
-    logger.info(
-        f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations..."
-    )
-
+    logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
+    
     train_steps = 0
     for epoch in range(args.epochs):
         logger.info(f"Beginning epoch {epoch}...")
@@ -363,33 +313,23 @@ def main(args):
             x = x.to(device)
             ssl_feat = ssl_feat.to(device)
             ssl_feat = [ssl_feat]
-
+            
             if use_normalize:
                 x = x / 0.18215
                 x = (x - mean) / std * 0.5
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
             if args.ot_hard:
-                x, n, y, _ = ot_sampler.sample_plan_with_labels(
-                    x0=x, x1=n, y0=y, y1=None, replace=False
-                )
+                x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
             ema_rate, num_scales = ema_scale_fn(train_steps)
             diffusion.update_cur_precond(num_scales=num_scales)
 
             # Change diffusion.c w.r.t predicted function by NFE (loss std)
-            if args.c_by_loss_std and (
-                num_scales > (args.start_scales + 1)
-            ):  # From the second NFE scale
-                diffusion.c = torch.tensor(
-                    math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85)
-                )
+            if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
+                diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85))
             elif args.c_by_nfe_sigma:
                 diffusion.c = torch.tensor(
-                    (
-                        diffusion.sigma_max ** (1 / diffusion.rho)
-                        - diffusion.sigma_min ** (1 / diffusion.rho)
-                    )
-                    / (num_scales - 1)
+                    (diffusion.sigma_max**(1/diffusion.rho) - diffusion.sigma_min**(1/diffusion.rho)) / (num_scales - 1)
                 )
 
             model_kwargs = dict(y=y, is_train=True)
@@ -398,27 +338,24 @@ def main(args):
                 "repa_lamb": args.repa_lamb,
             }
             with accelerator.accumulate(model):
-                losses = diffusion.consistency_losses(
-                    model,
-                    x,
-                    num_scales,
-                    target_model=target_model,
-                    model_kwargs=model_kwargs,
-                    noise=n,
-                    adaptive=adaptive_loss,
-                    model_umt=model_umt,
-                    ssl_feat=ssl_feat,
-                    lamb_dict=lamb_dict,
-                )
-
+                losses = diffusion.consistency_losses(model,
+                                                    x,
+                                                    num_scales,
+                                                    target_model=target_model,
+                                                    model_kwargs=model_kwargs,
+                                                    noise=n,
+                                                    adaptive=adaptive_loss,
+                                                    model_umt=model_umt,
+                                                    ssl_feat=ssl_feat,
+                                                    lamb_dict=lamb_dict,
+                                                    )
+                import ipdb; ipdb.set_trace()
                 if args.l2_reweight:
-                    distances = norm_dim(x - n)
-                    weight = (distances - distances.min()) / (
-                        distances.max() - distances.min()
-                    ) + 0.1
-                    loss = (losses["loss"] * weight).mean()
+                    distances = norm_dim(x-n)
+                    weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
+                    loss = (losses["loss"]*weight).mean()
                 else:
-                    cm_loss = losses["loss"].mean()
+                    cm_loss = losses["loss"].mean() 
                     diff_loss = losses["diff_loss"].mean()
                     if args.use_diffloss:
                         loss = cm_loss + args.diff_lamb * diff_loss
@@ -431,14 +368,12 @@ def main(args):
                     loss += args.repa_lamb * repa_loss
                 else:
                     repa_loss = torch.tensor(0)
-
+                
                 if not torch.isnan(loss):
                     opt.zero_grad()
                     accelerator.backward(loss)
                     if accelerator.sync_gradients:
-                        accelerator.clip_grad_norm_(
-                            model.parameters(), args.max_grad_norm
-                        )
+                        accelerator.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                     opt.step()
                     running_loss += loss.item()
                     running_cm_loss += cm_loss.item()
@@ -449,14 +384,14 @@ def main(args):
                     nan_t_list = losses["t"][torch.isnan(losses["loss"])]
                     logger.info(f"NaN time list: {nan_t_list}")
                     logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
-                    if nan_count > 100:
-                        args.lr = args.lr / 2
+                    if nan_count  > 100:
+                        args.lr = args.lr/2
                         args.max_grad_norm = args.max_grad_norm * 0.8
                         logger.info(f"Reduce lr a half to new lr {args.lr}")
                         for g in opt.param_groups:
-                            g["lr"] = args.lr
+                            g['lr'] = args.lr
                         nan_count = 0
-
+                
                 if accelerator.sync_gradients:
                     for name, ema_rate in EMA_RATES.items():
                         update_ema(emas[name], model, ema_rate)
@@ -464,12 +399,12 @@ def main(args):
                         update_ema(target_model, model, 0)
                     else:
                         update_ema(target_model, model, ema_rate)
-
+            
             # Log loss values:
             if accelerator.sync_gradients:
                 log_steps += 1
                 train_steps += 1
-
+            
             if accelerator.is_main_process:
                 if train_steps % args.log_every == 0:
                     # Measure training speed:
@@ -477,15 +412,9 @@ def main(args):
                     steps_per_sec = log_steps / (end_time - start_time)
                     # Reduce loss history over all processes:
                     avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                    avg_cm_loss = torch.tensor(
-                        running_cm_loss / log_steps, device=device
-                    )
-                    avg_diff_loss = torch.tensor(
-                        running_diff_loss / log_steps, device=device
-                    )
-                    avg_repa_loss = torch.tensor(
-                        running_repa_loss / log_steps, device=device
-                    )
+                    avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
+                    avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
+                    avg_repa_loss = torch.tensor(running_repa_loss / log_steps, device=device)
                     gathered_avg_loss = accelerator.gather(avg_loss)
                     avg_loss = gathered_avg_loss.mean().item()
                     logger.info(
@@ -548,12 +477,7 @@ def main(args):
                         diffusion,
                         generator,
                         model,
-                        (
-                            args.num_sampling,
-                            args.num_in_channels,
-                            args.image_size,
-                            args.image_size,
-                        ),
+                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
                         steps=args.steps,
                         model_kwargs=model_kwargs,
                         device=device,
@@ -569,26 +493,16 @@ def main(args):
                         ts=ts,
                     )
                     if use_normalize:
-                        sample = [
-                            vae.decode(x.unsqueeze(0) * std / 0.5 + mean).sample
-                            for x in sample
-                        ]
+                        sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
                     else:
-                        sample = [
-                            vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample
-                        ]
+                        sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
                 sample = torch.concat(sample, dim=0)
                 with torch.no_grad():
                     ema_sample = karras_sample(
                         diffusion,
                         generator,
                         emas["ema"],
-                        (
-                            args.num_sampling,
-                            args.num_in_channels,
-                            args.image_size,
-                            args.image_size,
-                        ),
+                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
                         steps=args.steps,
                         model_kwargs=model_kwargs,
                         device=device,
@@ -604,34 +518,21 @@ def main(args):
                         ts=ts,
                     )
                     if use_normalize:
-                        ema_sample = [
-                            vae.decode(x.unsqueeze(0) * std / 0.5 + mean).sample
-                            for x in ema_sample
-                        ]
+                        ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
                     else:
-                        ema_sample = [
-                            vae.decode(x.unsqueeze(0) / 0.18215).sample
-                            for x in ema_sample
-                        ]
+                        ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
                 ema_sample = torch.concat(ema_sample, dim=0)
                 sample_to_save = torch.concat([sample, ema_sample], dim=0)
-                save_image(
-                    sample_to_save,
-                    f"{sample_dir}/image_{epoch:07d}.jpg",
-                    nrow=8,
-                    normalize=True,
-                    value_range=(-1, 1),
-                )
+                save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
                 del sample
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
     model.eval()  # important! This disables randomized embedding dropout
     accelerator.wait_for_everyone()
     logger.info("Done!")
     accelerator.end_training()
-
-
+    
 def none_or_str(value):
-    if value == "None":
+    if value == 'None':
         return None
     return value
 
@@ -642,18 +543,16 @@ if __name__ == "__main__":
     ###### misc ######
     parser.add_argument("--global-seed", type=int, default=0)
     ###### data specs ######
-    parser.add_argument("--dataset", default="cifar10", help="name of dataset")
+    parser.add_argument('--dataset', default='cifar10', help='name of dataset')
     parser.add_argument("--datadir", type=str, required=True)
     parser.add_argument("--image-size", type=int, default=32)
     parser.add_argument("--num-in-channels", type=int, default=3)
     parser.add_argument("--num-classes", type=int, default=0)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--normalize-matrix", type=str, default=None)
-
+    
     ###### model ######
-    parser.add_argument(
-        "--vae", type=str, choices=["ema", "mse"], default="ema"
-    )  # Choice doesn't affect training
+    parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
     parser.add_argument("--num-channels", type=int, default=128)
     parser.add_argument("--num-res-blocks", type=int, default=2)
     parser.add_argument("--num-heads", type=int, default=4)
@@ -668,91 +567,30 @@ if __name__ == "__main__":
     parser.add_argument("--use-fp16", action="store_true", default=False)
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
-    parser.add_argument(
-        "--model-type",
-        type=str,
-        choices=["openai_unet", "song_unet", "dhariwal_unet"]
-        + list(DiT_models.keys())
-        + list(EDM2_models.keys()),
-        default="openai_unet",
-    )
-    parser.add_argument(
-        "--last-norm-type",
-        type=str,
-        default="group-norm",
-        choices=[
-            "group-norm",
-            "batch-norm",
-            "layer-norm",
-            "non-scaling-layer-norm",
-            "rms-norm",
-            "instance-norm",
-            "non-scaling-group-norm",
-            "non-scaling-instance-norm",
-        ],
-    )
-    parser.add_argument(
-        "--block-norm-type",
-        type=str,
-        default="group-norm",
-        choices=[
-            "group-norm",
-            "batch-norm",
-            "layer-norm",
-            "non-scaling-layer-norm",
-            "rms-norm",
-            "instance-norm",
-            "non-scaling-group-norm",
-            "non-scaling-instance-norm",
-        ],
-    )
-
+    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys()), default="openai_unet")
+    parser.add_argument("--last-norm-type", type=str, default="group-norm",
+        choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm",
+                 "instance-norm", "non-scaling-group-norm", "non-scaling-instance-norm"])
+    parser.add_argument("--block-norm-type", type=str, default="group-norm",
+        choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm",
+                 "instance-norm", "non-scaling-group-norm", "non-scaling-instance-norm"])
+    
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
-    parser.add_argument(
-        "--weight-schedule",
-        type=str,
-        choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"],
-        default="uniform",
-    )
-    parser.add_argument(
-        "--noise-sampler", type=str, choices=["uniform", "ict"], default="ict"
-    )
-    parser.add_argument(
-        "--loss-norm",
-        type=str,
-        choices=[
-            "l1",
-            "l2",
-            "lpips",
-            "huber",
-            "adaptive",
-            "cauchy",
-            "gm",
-            "huber_new",
-            "cauchy_new",
-            "gm_new",
-            "latent_lpips",
-        ],
-        default="huber",
-    )
+    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
+    parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
+    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "gm", "huber_new", "cauchy_new", "gm_new", "latent_lpips"], default="huber")
     parser.add_argument("--ot-hard", action="store_true", default=False)
     parser.add_argument("--c-by-loss-std", action="store_true", default=False)
     parser.add_argument("--custom-constant-c", type=float, default=0.0)
     parser.add_argument("--c-by-nfe-sigma", action="store_true", default=False)
-    parser.add_argument(
-        "--statistic-preconditioning", action="store_true", default=False
-    )
+    parser.add_argument("--statistic-preconditioning", action="store_true", default=False)
     parser.add_argument("--diff-lamb", type=float, default=5.0)
-
+    
     ###### consistency ######
-    parser.add_argument(
-        "--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed"
-    )
-    parser.add_argument(
-        "--scale-mode", type=str, choices=["progressive", "fixed"], default="fixed"
-    )
+    parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
+    parser.add_argument("--scale-mode", type=str, choices=["progressive", "fixed"], default="fixed")
     parser.add_argument("--start-ema", type=float, default=0.0)
     parser.add_argument("--start-scales", type=float, default=40)
     parser.add_argument("--end-scales", type=float, default=40)
@@ -760,13 +598,8 @@ if __name__ == "__main__":
     parser.add_argument("--l2-reweight", action="store_true", default=False)
     parser.add_argument("--use-diffloss", action="store_true", default=False)
     parser.add_argument("--ema-half-nfe", action="store_true", default=False)
-    parser.add_argument(
-        "--umt",
-        help="Uncertainty-based multi-task learning",
-        action="store_true",
-        default=False,
-    )
-
+    parser.add_argument("--umt", help="Uncertainty-based multi-task learning", action="store_true", default=False)
+    
     ###### repa ######
     parser.add_argument("--use-repa", action="store_true", default=False)
     parser.add_argument("--enc-type", type=str, default="vit_b_16")
@@ -775,13 +608,14 @@ if __name__ == "__main__":
     parser.add_argument("--repa-lamb", type=float, default=0.5)
     parser.add_argument("--z_dims", type=int, default=768)
 
+
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--no-lr-decay", action="store_true", default=False)
+    parser.add_argument("--no-lr-decay", action='store_true', default=False)
     parser.add_argument("--epochs", type=int, default=2000)
     parser.add_argument("--global-batch-size", type=int, default=256)
     parser.add_argument("--max-grad-norm", type=float, default=2.0)
-
+    
     ###### ploting & saving ######
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--ckpt-every", type=int, default=25)
@@ -789,15 +623,15 @@ if __name__ == "__main__":
     parser.add_argument("--plot-every", type=int, default=5)
     parser.add_argument("--exp", type=str, required=True)
     parser.add_argument("--results-dir", type=str, default="results")
-
+    
     ###### resume ######
-    parser.add_argument("--model-ckpt", type=str, default="")
+    parser.add_argument("--model-ckpt", type=str, default='')
     parser.add_argument("--resume", action="store_true", default=False)
-
+    
     ###### sampling ######
-    parser.add_argument("--cfg-scale", type=float, default=1.0)
+    parser.add_argument("--cfg-scale", type=float, default=1.)
     parser.add_argument("--clip-denoised", action="store_true", default=True)
-    parser.add_argument("--sampler", type=str, default="onestep")
+    parser.add_argument("--sampler", type=str, default='onestep')
     parser.add_argument("--s-churn", type=float, default=0.0)
     parser.add_argument("--s-tmin", type=float, default=0.0)
     parser.add_argument("--s-tmax", type=float, default=float("inf"))
