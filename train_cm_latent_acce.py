@@ -43,6 +43,7 @@ from models.optimal_transport import OTPlanSampler
 from repa_utils import preprocess_raw_image
 from accelerate import Accelerator
 from accelerate.utils import set_seed, ProjectConfiguration
+
 EMA_RATES = {
     "ema_0.999": 0.999,
     "ema": 0.9999,
@@ -306,6 +307,41 @@ def main(args):
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     
     train_steps = 0
+
+    ######## gradnorm ########
+    class GradNormFunction(th.autograd.Function):
+        @staticmethod
+        def forward(ctx, x, weight):
+            ctx.save_for_backward(weight)
+            return x.clone()
+
+        @staticmethod
+        def backward(ctx, grad_output):
+            weight = ctx.saved_tensors[0]
+
+            # grad_output_norm = torch.linalg.vector_norm(
+            #     grad_output, dim=list(range(1, len(grad_output.shape))), keepdim=True
+            # ).mean()
+            grad_output_norm = th.norm(grad_output).mean().item()
+            # nccl over all nodes
+            grad_output_norm = avg_scalar_over_nodes(
+                grad_output_norm, device=grad_output.device
+            )
+
+            grad_output_normalized = weight * grad_output / (grad_output_norm + 1e-8)
+
+            return grad_output_normalized, None
+
+    @torch.no_grad()
+    def avg_scalar_over_nodes(value: float, device):
+        value = torch.tensor(value, device=device)
+        value = accelerator.gather(value).mean()
+        return value.item()
+
+    def gradnorm(x, weight=1.0):
+        weight = torch.tensor(weight, device=x.device)
+        return GradNormFunction.apply(x, weight)
+    
     for epoch in range(args.epochs):
         logger.info(f"Beginning epoch {epoch}...")
         for i, out in enumerate(tqdm(loader)):
@@ -352,6 +388,7 @@ def main(args):
                                                     model_umt=model_umt,
                                                     ssl_feat=ssl_feat,
                                                     lamb_dict=lamb_dict,
+                                                    gradnorm=gradnorm,
                                                     )
                 import ipdb; ipdb.set_trace()
                 if args.l2_reweight:
