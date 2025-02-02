@@ -44,13 +44,13 @@ accelerate launch --config_file $CONFIG_FILE --main_process_port 31228 $python_f
         --c-by-loss-std \
         --plot-every 5 \
         --num-workers 16 \
-        --use-repa \
         --projector-dim 2048 \
         --enc-type dinov2-vit-b \
         --encoder-depth 4 \
         --repa-lamb 0.5 \
         --z_dims 768 \
         --ckpt-every 1 \
+        # --use-repa \
         # --diff-lamb 5 \
         # --use-bf16 \
 
