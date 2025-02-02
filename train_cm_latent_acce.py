@@ -311,11 +311,11 @@ def main(args):
         for i, out in enumerate(tqdm(loader)):
             if args.use_repa:
                 x, ssl_feat, y = out
+                ssl_feat = ssl_feat.to(device)
+                ssl_feat = [ssl_feat]
             else:
                 x, y = out
             x = x.to(device)
-            ssl_feat = ssl_feat.to(device)
-            ssl_feat = [ssl_feat]
             
             if use_normalize:
                 x = x / 0.18215
