@@ -70,7 +70,6 @@ def update_ema(ema_model, model, decay=0.9999):
         # TODO: Consider applying only to params that require_grad to avoid small numerical changes of pos_embed
         print(name)
         ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
-    import ipdb; ipdb.set_trace()
 
 def requires_grad(model, flag=True):
     """
