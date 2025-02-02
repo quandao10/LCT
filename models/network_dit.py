@@ -200,6 +200,7 @@ class DiT(nn.Module):
             if not isinstance(z_dims, list):
                 z_dims = [z_dims]
             self.encoder_depth = encoder_depth
+            print(f"\033[33mencoder depth: {self.encoder_depth}\033[0m")
             self.projectors = nn.ModuleList([
                 build_mlp(hidden_size, projector_dim, z_dim) for z_dim in z_dims
             ])
