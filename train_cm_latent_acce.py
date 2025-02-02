@@ -42,7 +42,7 @@ from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from repa_utils import preprocess_raw_image
 from accelerate import Accelerator
-from accelerate.utils import set_seed
+from accelerate.utils import set_seed, ProjectConfiguration
 EMA_RATES = {
     "ema_0.999": 0.999,
     "ema": 0.9999,
@@ -153,9 +153,22 @@ def main(args):
     """
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
 
+    accelerator_project_config = ProjectConfiguration(
+        project_dir=args.results_dir, logging_dir=args.results_dir
+    )
+
     # Setup accelerator
-    accelerator = Accelerator()
+    accelerator = Accelerator(
+        log_with=args.tracker,
+        project_config=accelerator_project_config,
+    )
     device = accelerator.device
+    if accelerator.mixed_precision == "fp16":
+        weight_dtype = torch.float16
+    elif accelerator.mixed_precision == "bf16":
+        weight_dtype = torch.bfloat16
+    else:
+        weight_dtype = torch.float32
 
     # Set random seed
     seed = args.global_seed
@@ -229,9 +242,10 @@ def main(args):
 
     # Load dataset
     dataset = get_dataset(args)
+    local_batch_size = int(args.global_batch_size // accelerator.num_processes)
     loader = DataLoader(
         dataset,
-        batch_size=args.global_batch_size,
+        batch_size=local_batch_size,
         shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True,
@@ -323,6 +337,7 @@ def main(args):
                 "diff_lamb": args.diff_lamb,
                 "repa_lamb": args.repa_lamb,
             }
+            
             losses = diffusion.consistency_losses(model,
                                                 x,
                                                 num_scales,
@@ -376,39 +391,44 @@ def main(args):
                     for g in opt.param_groups:
                         g['lr'] = args.lr
                     nan_count = 0
-            for name, ema_rate in EMA_RATES.items():
-                update_ema(emas[name], model, ema_rate)
-            if args.ict:
-                update_ema(target_model, model, 0)
-            else:
-                update_ema(target_model, model, ema_rate)
+            
+            if accelerator.sync_gradients:
+                for name, ema_rate in EMA_RATES.items():
+                    update_ema(emas[name], model, ema_rate)
+                if args.ict:
+                    update_ema(target_model, model, 0)
+                else:
+                    update_ema(target_model, model, ema_rate)
             
             # Log loss values:
-            log_steps += 1
-            train_steps += 1
-            if train_steps % args.log_every == 0:
-                # Measure training speed:
-                torch.cuda.synchronize()
-                end_time = time()
-                steps_per_sec = log_steps / (end_time - start_time)
-                # Reduce loss history over all processes:
-                avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
-                avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
-                avg_repa_loss = torch.tensor(running_repa_loss / log_steps, device=device)
-                dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
-                avg_loss = avg_loss.item() / dist.get_world_size()
-                logger.info(
-                    f"(step={log_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f} Repa Loss: {avg_repa_loss:.4f}, "
-                    f"Train Steps/Sec: {steps_per_sec:.2f}"
-                )
-                # Reset monitoring variables:
-                running_loss = 0
-                running_cm_loss = 0
-                running_diff_loss = 0
-                running_repa_loss = 0
-                log_steps = 0
-                start_time = time()
+            if accelerator.sync_gradients:
+                log_steps += 1
+                train_steps += 1
+            
+            if accelerator.is_main_process:
+                if train_steps % args.log_every == 0:
+                    # Measure training speed:
+                    torch.cuda.synchronize()
+                    end_time = time()
+                    steps_per_sec = log_steps / (end_time - start_time)
+                    # Reduce loss history over all processes:
+                    avg_loss = torch.tensor(running_loss / log_steps, device=device)
+                    avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
+                    avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
+                    avg_repa_loss = torch.tensor(running_repa_loss / log_steps, device=device)
+                    gathered_avg_loss = accelerator.gather(avg_loss)
+                    avg_loss = gathered_avg_loss.mean().item()
+                    logger.info(
+                        f"(step={log_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f} Repa Loss: {avg_repa_loss:.4f}, "
+                        f"Train Steps/Sec: {steps_per_sec:.2f}"
+                    )
+                    # Reset monitoring variables:
+                    running_loss = 0
+                    running_cm_loss = 0
+                    running_diff_loss = 0
+                    running_repa_loss = 0
+                    log_steps = 0
+                    start_time = time()
 
         if accelerator.is_main_process:
             # latest checkpoint
