@@ -159,7 +159,7 @@ def main(args):
 
     # Setup accelerator
     accelerator = Accelerator(
-        log_with=args.tracker,
+        log_with=None,
         project_config=accelerator_project_config,
     )
     device = accelerator.device
