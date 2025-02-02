@@ -527,7 +527,7 @@ def main(args):
                 del sample
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
     model.eval()  # important! This disables randomized embedding dropout
-    accelerator.wait_for_everyone()
+    # accelerator.wait_for_everyone()
     logger.info("Done!")
     accelerator.end_training()
     
