@@ -13,6 +13,7 @@ python_file="train_cm_latent_acce.py"
 accelerate launch --config_file $CONFIG_FILE --main_process_port 31228 $python_file \
         --exp baseline_repa0.5  \
         --datadir $DATASET/ \
+        --dataset latent_celeb256 \
         --results-dir results/ \
         --image-size 32 \
         --num-in-channels 4 \
