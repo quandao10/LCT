@@ -179,7 +179,9 @@ class LabelEmbedder(nn.Module):
             labels = self.token_drop(labels, force_drop_ids)
         embeddings = self.embedding_table(labels)
         return embeddings
-
+    
+    def get_in_channels(self):
+        return self.in_channels
 class LightningDiTBlock(nn.Module):
     """
     Lightning DiT Block. We add features including: 
