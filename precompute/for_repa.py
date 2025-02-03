@@ -211,6 +211,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--num_workers", type=int, default=32)
     parser.add_argument("--vae_type", type=str, default="stabilityai/sd-vae-ft-ema")
+    parser.add_argument("--SSL_model", type=str, default="dinov2-vit-b", choices=["dinov2-vit-b", "clip", "mocov3", "mae", "jepa"])
     return parser.parse_args()
 
 

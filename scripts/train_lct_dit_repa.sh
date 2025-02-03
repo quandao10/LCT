@@ -2,12 +2,19 @@ MASTER_PORT=11243
 DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
 NUM_GPUS=$1
 
+BATCH_SIZE=128
+LR=1e-3
+DEPTH=2
+REPALAMB=2.0
+DIFFLAMB=5.0
+ENCTYPE=dinov2-vit-b
+
 # CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=2 train_cm_latent.py \
 # CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
 CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
-        --exp baseline_repa2.0_diff5.0_depth2  \
+        --exp REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
         --results-dir results/ \
@@ -22,9 +29,9 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_p
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((32*2)) \
+        --global-batch-size $((BATCH_SIZE)) \
         --epochs $((1400*1)) \
-        --lr 1e-4 \
+        --lr $LR \
         --num-sampling 8 \
         --num-channels 128 \
         --num-head-channels 64 \
@@ -42,8 +49,8 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_p
         --projector-dim 2048 \
         --enc-type dinov2-vit-b \
         --encoder-depth 2 \
-        --repa-lamb 2.0 \
-        --diff-lamb 5.0 \
+        --repa-lamb $REPALAMB \
+        --diff-lamb $DIFFLAMB \
         --z_dims 768 \
         --ckpt-every 100 \
         --use-repa \
