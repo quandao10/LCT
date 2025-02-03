@@ -104,7 +104,7 @@ def create_model_and_diffusion(args):
                                              label_dim=args.num_classes,
                                              dropout=args.dropout,
                                              pretrained=args.edm2_pretrained,)
-    elif "DiT" in args.model_type:
+    elif "DiT" in args.model_type and "LightningDiT" not in args.model_type:
         model = DiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
                                             num_classes=args.num_classes,
