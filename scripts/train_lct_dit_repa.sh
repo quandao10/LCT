@@ -1,13 +1,16 @@
-MASTER_PORT=11243
+# Generate a random port number between 10000 and 20000
+MASTER_PORT=$((10000 + RANDOM % 10000))
 DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
 NUM_GPUS=$1
 
 BATCH_SIZE=128
 LR=1e-3
-DEPTH=2
+DEPTH=1
 REPALAMB=2.0
 DIFFLAMB=5.0
 ENCTYPE=dinov2-vit-b
+EPOCHS=100
+
 
 # CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=2 train_cm_latent.py \
 # CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
@@ -30,7 +33,7 @@ CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_p
         --end-scales 640 \
         --noise-sampler ict \
         --global-batch-size $((BATCH_SIZE)) \
-        --epochs $((1400*1)) \
+        --epochs $EPOCHS \
         --lr $LR \
         --num-sampling 8 \
         --num-channels 128 \
@@ -44,11 +47,11 @@ CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_p
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --plot-every 5 \
+        --plot-every 1 \
         --num-workers 16 \
         --projector-dim 2048 \
         --enc-type dinov2-vit-b \
-        --encoder-depth 2 \
+        --encoder-depth $DEPTH \
         --repa-lamb $REPALAMB \
         --diff-lamb $DIFFLAMB \
         --z_dims 768 \
