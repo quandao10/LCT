@@ -614,6 +614,7 @@ def main(args):
                 ema_sample = torch.concat(ema_sample, dim=0)
                 sample_to_save = torch.concat([sample, ema_sample], dim=0)
                 save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=8, normalize=True, value_range=(-1, 1))
+                logger.info(f"Saved sample to: {sample_dir}/image_{epoch:07d}.jpg")
                 del sample
         dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
