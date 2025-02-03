@@ -290,6 +290,7 @@ def main(args):
     )
     logger.info(f"Dataset contains {len(dataset):,} images ({args.datadir})")
     args.total_training_steps = math.ceil(len(dataset)//args.global_batch_size)*args.epochs
+    print("args.total_training_steps", args.total_training_steps)
     if rank == 0:
         config = vars(args)
         with open(f"{experiment_dir}/config.json", 'w') as out:
