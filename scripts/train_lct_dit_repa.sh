@@ -1,3 +1,4 @@
+export OMP_NUM_THREADS=1
 # Generate a random port number between 10000 and 20000
 MASTER_PORT=$((10000 + RANDOM % 10000))
 DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
