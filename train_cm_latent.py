@@ -179,6 +179,7 @@ def main(args):
     logger.info("creating the vae model")
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
+    logger.info("Model type: {}".format(args.model_type))
     model, diffusion = create_model_and_diffusion(args)
     # with open('./model.txt', 'w') as f:
     #     f.write(str(model))
@@ -290,7 +291,6 @@ def main(args):
     )
     logger.info(f"Dataset contains {len(dataset):,} images ({args.datadir})")
     args.total_training_steps = math.ceil(len(dataset)//args.global_batch_size)*args.epochs
-    print("args.total_training_steps", args.total_training_steps)
     if rank == 0:
         config = vars(args)
         with open(f"{experiment_dir}/config.json", 'w') as out:
