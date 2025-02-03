@@ -425,7 +425,8 @@ class LightningDiT(nn.Module):
         """
 
         use_checkpoint = self.use_checkpoint
-
+        if y is None:
+            y = torch.ones(x.size(0), dtype=torch.long, device=x.device) * (self.y_embedder.get_in_channels() - 1)
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         N, T, D = x.shape
         t = self.t_embedder(t)                   # (N, D)
