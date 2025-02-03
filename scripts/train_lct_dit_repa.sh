@@ -16,7 +16,7 @@ EPOCHS=100
 # CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
-CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
+CUDA_VISIBLE_DEVICES=2,3 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
         --exp REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
