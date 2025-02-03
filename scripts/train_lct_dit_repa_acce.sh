@@ -26,9 +26,9 @@ accelerate launch --config_file $CONFIG_FILE --main_process_port 31228 $python_f
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((32*2)) \
+        --global-batch-size $((128*2)) \
         --epochs $((1400*1)) \
-        --lr 1e-4 \
+        --lr 1e-3 \
         --num-sampling 8 \
         --num-channels 128 \
         --num-head-channels 64 \
