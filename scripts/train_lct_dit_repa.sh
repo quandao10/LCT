@@ -4,7 +4,7 @@ MASTER_PORT=$((10000 + RANDOM % 10000))
 DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
 NUM_GPUS=$1
 
-BATCH_SIZE=128*2
+BATCH_SIZE=128
 LR=1e-3
 DEPTH=1
 REPALAMB=2.0
