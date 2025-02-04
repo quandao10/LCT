@@ -34,7 +34,7 @@ CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master
         --target-ema-mode adaptive \
         --start-ema 0.95 \
         --scale-mode progressive \
-        --start-scales 10 \
+        --start-scales $START_SCALES \
         --end-scales 640 \
         --noise-sampler ict \
         --global-batch-size $((BATCH_SIZE)) \
