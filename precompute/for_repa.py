@@ -138,7 +138,7 @@ def main(args):
 
     print(f"\033[33mRunning VAE: {args.run_VAE}\033[0m")
     print(f"\033[33mRunning SSL: {args.run_SSL}\033[0m ({args.SSL_model})")
-    assert args.run_VAE or args.run_SSL
+    assert args.run_VAE or args.run_SSL, f"You must run at least one of VAE {args.run_VAE} or SSL {args.run_SSL}"
     
     ssl_feat_dir = None
     vae_dir = None
