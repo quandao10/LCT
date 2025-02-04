@@ -105,9 +105,10 @@ class REPADataset(Dataset):
         
         for root, dirs, files in os.walk(path):
             for img in files:
-                if is_image(img):
-                    self.img_list.append(os.path.join(root, img))
+                # if is_image(img):
+                self.img_list.append(os.path.join(root, img))
         print(f"\033[33mFound {len(self.img_list)} images\033[0m")
+        import ipdb; ipdb.set_trace()
         self.transform = transform
         self.is_ImageNet = is_ImageNet # the struture of folder is: 00000/img00000058.png
 
