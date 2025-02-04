@@ -139,6 +139,11 @@ def main(args):
     print(f"\033[33mRunning VAE: {args.run_VAE}\033[0m")
     print(f"\033[33mRunning SSL: {args.run_SSL}\033[0m ({args.SSL_model})")
     assert args.run_VAE or args.run_SSL
+    if args.run_VAE:
+        do = input("Do you want to run VAE? (y/n)")
+        if do == "n":
+            args.run_VAE = False
+
     
     ssl_feat_dir = None
     vae_dir = None
