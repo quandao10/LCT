@@ -390,7 +390,8 @@ class LightningDiT(nn.Module):
         nn.init.constant_(self.x_embedder.proj.bias, 0)
 
         # Initialize label embedding table:
-        nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
+        if not self.uncond_network:
+            nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
