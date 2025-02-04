@@ -120,10 +120,12 @@ class REPADataset(Dataset):
         return vae_image, repa_image, image_name
 
 
-def save_features(save_tuple):
+def save_features_func(save_tuple):
     image_name, ssl_feat, latent, ssl_feat_dir, vae_dir = save_tuple
-    np.save(f"{ssl_feat_dir}/{str(image_name)}.npy", ssl_feat)
-    np.save(f"{vae_dir}/{str(image_name)}.npy", latent)
+    if ssl_feat is not None:
+        np.save(f"{ssl_feat_dir}/{str(image_name)}.npy", ssl_feat)
+    if latent is not None:
+        np.save(f"{vae_dir}/{str(image_name)}.npy", latent)
 
 
 @torch.no_grad()
@@ -131,26 +133,35 @@ def main(args):
     device = "cuda:0"
     torch.cuda.set_device(device)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    os.makedirs(os.path.join(args.output_dir, "celeba_256"), exist_ok=True)
-    vae_dir = os.path.join(args.output_dir, "vae")
-    os.makedirs(vae_dir, exist_ok=True)
-    ssl_feat_dir = os.path.join(args.output_dir, "ssl_feat")
-    os.makedirs(ssl_feat_dir, exist_ok=True)
-
     print(f"\033[33mProcessing {args.image_dir}...\033[0m")
-    print(f"\033[33mVAE output dir: {vae_dir}\033[0m")
-    print(f"\033[33mSSL features output dir: {ssl_feat_dir}\033[0m")
+    os.makedirs(args.output_dir, exist_ok=True)
 
+    print(f"\033[33mRunning VAE: {args.run_VAE}\033[0m")
+    print(f"\033[33mRunning SSL: {args.run_SSL}\033[0m ({args.SSL_model})")
+
+    import ipdb; ipdb.set_trace()
+    ssl_feat_dir = None
+    vae_dir = None
+    
     # VAE
-    vae = AutoencoderKL.from_pretrained(args.vae_type).to(device)
-    vae.requires_grad_(False)
+    if args.run_VAE:
+        vae_dir = os.path.join(args.output_dir, "vae")
+        os.makedirs(vae_dir, exist_ok=True)
+        print(f"\033[33mVAE output dir: {vae_dir}\033[0m")
 
-    # DINOv2
-    encoders, encoder_types, architectures = load_encoders(args.repa_enc_type, device)
-    assert len(encoders) == 1
-    ssl_encoder = encoders[0]
-    encoder_type = encoder_types[0]
+        vae = AutoencoderKL.from_pretrained(args.vae_type).to(device)
+        vae.requires_grad_(False)
+
+    # SSL
+    if args.run_SSL:
+        ssl_feat_dir = os.path.join(args.output_dir, f"ssl_feat_{args.SSL_model}")
+        os.makedirs(ssl_feat_dir, exist_ok=True)
+        print(f"\033[33mSSL features output dir: {ssl_feat_dir}\033[0m")
+
+        encoders, encoder_types, architectures = load_encoders(args.repa_enc_type, device)
+        assert len(encoders) == 1
+        ssl_encoder = encoders[0]
+        encoder_type = encoder_types[0]
 
     # Dataset
     transform = transforms.Compose(
@@ -172,22 +183,28 @@ def main(args):
     )
 
     for i, (vae_image, repa_image, image_name) in enumerate(tqdm(loader)):
-        vae_image = vae_image.to(device)
-        repa_image = repa_image.to(device)
-
         # VAE latent
-        with torch.no_grad():
-            latent = vae.encode(vae_image).latent_dist.sample().mul_(0.18215)
-        latent = latent.detach().cpu().numpy()
-
+        if args.run_VAE:
+            vae_image = vae_image.to(device)
+            with torch.no_grad():
+                latent = vae.encode(vae_image).latent_dist.sample().mul_(0.18215)
+            latent = latent.detach().cpu().numpy()
+        else:
+            latent = [None] * len(image_name)
+        
         # SSL features
-        raw_image_ = preprocess_raw_image(repa_image, encoder_type)
-        z = ssl_encoder.forward_features(raw_image_)
-        if "mocov3" in encoder_type:
-            ssl_feat = z = z[:, 1:]
-        if "dinov2" in encoder_type:
-            ssl_feat = z["x_norm_patchtokens"]
-        ssl_feat = ssl_feat.detach().cpu().numpy()
+        if args.run_SSL:
+            repa_image = repa_image.to(device)
+
+            raw_image_ = preprocess_raw_image(repa_image, encoder_type)
+            z = ssl_encoder.forward_features(raw_image_)
+            if "mocov3" in encoder_type:
+                ssl_feat = z = z[:, 1:]
+            if "dinov2" in encoder_type:
+                ssl_feat = z["x_norm_patchtokens"]
+            ssl_feat = ssl_feat.detach().cpu().numpy()
+        else:
+            ssl_feat = [None] * len(image_name)
 
         # Prepare data for parallel saving
         save_tuples = [
@@ -196,8 +213,10 @@ def main(args):
         ]
 
         # Use process pool to save features in parallel
-        with multiprocessing.Pool(processes=min(args.num_workers, len(save_tuples))) as pool:
-            pool.map(save_features, save_tuples)
+        with multiprocessing.Pool(
+            processes=min(args.num_workers, len(save_tuples))
+        ) as pool:
+            pool.map(save_features_func, save_tuples)
 
 
 def parse_args():
@@ -211,7 +230,24 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--num_workers", type=int, default=32)
     parser.add_argument("--vae_type", type=str, default="stabilityai/sd-vae-ft-ema")
-    parser.add_argument("--SSL_model", type=str, default="dinov2-vit-b", choices=["dinov2-vit-b", "clip", "mocov3", "mae", "jepa"])
+    parser.add_argument(
+        "--SSL_model",
+        type=str,
+        default="dinov2-vit-b",
+        choices=[
+            "dinov2-vit-b",
+            "dinov2-vit-l",
+            "dinov2-vit-g",
+            "dinov1-vit-b",
+            "mocov3-vit-b",
+            "mocov3-vit-l",
+            "clip-vit-L",
+            "jepa-vit-h",
+            "mae-vit-l",
+        ],
+    )
+    parser.add_argument("--run_VAE", action="store_true", default=False)
+    parser.add_argument("--run_SSL", action="store_true", default=False)
     return parser.parse_args()
 
 

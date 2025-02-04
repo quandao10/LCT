@@ -16,8 +16,6 @@ from .random_util import get_generator
 import robust_loss_pytorch
 from elatentlpips import ELatentLPIPS
 import torch.nn.functional as F
-import torch.distributed as dist
-from accelerate import Accelerator
 
 
 def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0):
@@ -346,23 +344,13 @@ class KarrasDenoiser:
                     z_tilde_j = th.nn.functional.normalize(z_tilde_j, dim=-1) 
                     z_j = th.nn.functional.normalize(z_j, dim=-1) 
                     numerator = z_j * z_tilde_j
-                    # numerator = th.nan_to_num(numerator, nan=0.0)
+                    numerator = th.nan_to_num(numerator)
                     repa_loss += mean_flat(-(numerator).sum(dim=-1))
             repa_loss /= (len(ssl_feat) * bsz)
-
-        # def projection_loss(zs, zs_tilde):
-        #     # Normalize and concatenate all z
-        #     z_stack = torch.cat([F.normalize(z, dim=-1) for z in zs], dim=0)  # shape: (n*B, D)
-        #     # Normalize and concatenate all z_tilde
-        #     z_tilde_stack = torch.cat([F.normalize(z_t, dim=-1) for z_t in zs_tilde], dim=0)  # shape: (n*B, D)
-
-        #     # Dot product along the last dimension, then mean over all
-        #     proj_loss = - (z_stack * z_tilde_stack).sum(dim=-1).mean()
-            # return proj_loss
         
         terms = {}
-        terms["loss"] = loss
-        terms["diff_loss"] = diff_loss
+        terms["loss"] = th.nan_to_num(loss)
+        terms["diff_loss"] = th.nan_to_num(diff_loss)
         terms["t"] = t
         terms["repa_loss"] = repa_loss
 

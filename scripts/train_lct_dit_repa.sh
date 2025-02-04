@@ -5,22 +5,24 @@ DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent
 NUM_GPUS=$1
 
 BATCH_SIZE=128
-LR=1e-3
+LR=5e-4
 DEPTH=4
 REPALAMB=2.0
 DIFFLAMB=5.0
 ENCTYPE=dinov2-vit-b
-EPOCHS=100
+EPOCHS=140
 GRAD_NORM=100.0
 # MODEL_TYPE=DiT-B/2
 MODEL_TYPE=LightningDiT-B/2
+# START_SCALES=10
+START_SCALES=640
 
 # CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=2 train_cm_latent.py \
 # CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent.py \
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
 CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
-        --exp REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_TYPE}_dropy  \
+        --exp REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_TYPE}_START_SCALES${START_SCALES}  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
         --results-dir results/ \
