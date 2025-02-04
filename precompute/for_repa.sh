@@ -7,7 +7,7 @@ SSL_model="clip-vit-L" # clip-vit-L, dinov2-vit-b, dinov2-vit-l, mocov3-vit-b, m
 batch_size=128
 num_workers=64
 vae_type="stabilityai/sd-vae-ft-ema"
-run_VAE=false
-run_SSL=true
+run_VAE=False
+run_SSL=True
 
 python -m precompute.for_repa --image_dir $image_dir --dataset_name $dataset_name --output_dir $output_dir --batch_size $batch_size --num_workers $num_workers --vae_type $vae_type --run_VAE $run_VAE --run_SSL $run_SSL --SSL_model $SSL_model

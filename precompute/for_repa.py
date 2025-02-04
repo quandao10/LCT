@@ -135,6 +135,8 @@ def main(args):
 
     print(f"\033[33mProcessing {args.image_dir}...\033[0m")
     os.makedirs(args.output_dir, exist_ok=True)
+    args.run_VAE = args.run_VAE == "True"
+    args.run_SSL = args.run_SSL == "True"
 
     print(f"\033[33mRunning VAE: {args.run_VAE}\033[0m")
     print(f"\033[33mRunning SSL: {args.run_SSL}\033[0m ({args.SSL_model})")
@@ -248,8 +250,8 @@ def parse_args():
             "mae-vit-l",
         ],
     )
-    parser.add_argument("--run_VAE", type=bool)
-    parser.add_argument("--run_SSL", type=bool)
+    parser.add_argument("--run_VAE", type=str)
+    parser.add_argument("--run_SSL", type=str)
     return parser.parse_args()
 
 
