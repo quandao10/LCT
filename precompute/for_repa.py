@@ -96,17 +96,26 @@ def center_crop_arr(pil_image, image_size):
 
 
 class REPADataset(Dataset):
-    def __init__(self, path, transform):
+    def __init__(self, path, transform, is_ImageNet):
         self.path = path
-        self.img_list = [os.path.join(path, img) for img in os.listdir(path)]
+        self.img_list = []
+        for root, dirs, files in os.walk(path):
+            for img in files:
+                self.img_list.append(os.path.join(root, img))
         self.transform = transform
+        self.is_ImageNet = is_ImageNet # the struture of folder is: 00000/img00000058.png
 
     def __len__(self):
         return len(self.img_list)
 
     def __getitem__(self, idx):
         img_path = self.img_list[idx]
-        image_name = os.path.basename(img_path).split(".")[0]
+        if not self.is_ImageNet:
+            image_name = os.path.basename(img_path).split(".")[0]
+        else:
+            # keep the parent folder name and the image name
+            _ls = img_path.split("/")[-2:]
+            image_name = os.path.join(_ls[0], _ls[1])
 
         # VAE image
         vae_image = Image.open(img_path).convert("RGB")
@@ -137,6 +146,11 @@ def main(args):
     os.makedirs(args.output_dir, exist_ok=True)
     args.run_VAE = args.run_VAE == "True"
     args.run_SSL = args.run_SSL == "True"
+    args.is_ImageNet = args.is_ImageNet == "True"
+    if args.is_ImageNet:
+        final_dtype = torch.bfloat16
+    else:
+        final_dtype = torch.float32
 
     print(f"\033[33mRunning VAE: {args.run_VAE}\033[0m")
     print(f"\033[33mRunning SSL: {args.run_SSL}\033[0m ({args.SSL_model})")
@@ -178,7 +192,7 @@ def main(args):
             ),
         ]
     )
-    dataset = REPADataset(args.image_dir, transform=transform)
+    dataset = REPADataset(args.image_dir, transform=transform, is_ImageNet=args.is_ImageNet)
 
     loader = DataLoader(
         dataset,
@@ -188,13 +202,21 @@ def main(args):
         drop_last=False,
     )
 
+    if args.is_ImageNet:
+        # create all subfolders in the output dir same as args.image_dir
+        subfolders = [f.path for f in os.scandir(args.image_dir) if f.is_dir()]
+        import ipdb; ipdb.set_trace()
+        for subfolder in subfolders:
+            os.makedirs(os.path.join(args.output_dir, subfolder), exist_ok=True)
+
     for i, (vae_image, repa_image, image_name) in enumerate(tqdm(loader)):
+        import ipdb; ipdb.set_trace()
         # VAE latent
         if args.run_VAE:
             vae_image = vae_image.to(device)
             with torch.no_grad():
                 latent = vae.encode(vae_image).latent_dist.sample().mul_(0.18215)
-            latent = latent.detach().cpu().numpy()
+            latent = latent.to(final_dtype).detach().cpu().numpy()
         else:
             latent = [None] * len(image_name)
         
@@ -208,7 +230,7 @@ def main(args):
                 z = z[:, 1:]
             if "dinov2" in encoder_type:
                 z = z["x_norm_patchtokens"]
-            ssl_feat = z.detach().cpu().numpy()
+            ssl_feat = z.to(final_dtype).detach().cpu().numpy()
         else:
             ssl_feat = [None] * len(image_name)
 
@@ -252,6 +274,7 @@ def parse_args():
     )
     parser.add_argument("--run_VAE", type=str)
     parser.add_argument("--run_SSL", type=str)
+    parser.add_argument("--is_ImageNet", type=bool)
     return parser.parse_args()
 
 
