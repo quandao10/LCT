@@ -173,7 +173,7 @@ def load_encoders(enc_type, device, resolution=256):
 
         elif encoder_type == "clip":
             import clip
-            from models.clip_vit import UpdatedVisionTransformer
+            from models.repa.clip_vit import UpdatedVisionTransformer
 
             encoder_ = clip.load(f"ViT-{model_config}/14", device="cpu")[0].visual
             encoder = UpdatedVisionTransformer(encoder_).to(device)
@@ -183,7 +183,7 @@ def load_encoders(enc_type, device, resolution=256):
             encoder.eval()
 
         elif encoder_type == "mae":
-            from models.mae_vit import vit_large_patch16
+            from models.repa.mae_vit import vit_large_patch16
             import timm
 
             kwargs = dict(img_size=256)
@@ -205,7 +205,7 @@ def load_encoders(enc_type, device, resolution=256):
             )
 
         elif encoder_type == "jepa":
-            from models.jepa import vit_huge
+            from models.repa.jepa import vit_huge
 
             kwargs = dict(img_size=[224, 224], patch_size=14)
             encoder = vit_huge(**kwargs).to(device)
