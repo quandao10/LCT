@@ -163,7 +163,7 @@ def main(args):
         ssl_encoder = encoders[0]
         encoder_type = encoder_types[0]
 
-    do = input("Do you want to continue? (y/n)")
+    do = input("Are you sure? (y/n)")
     if do == "n":
         exit()
     elif do == "y":

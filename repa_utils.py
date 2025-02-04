@@ -87,6 +87,7 @@ def fix_mocov3_state_dict(state_dict):
 
 @torch.no_grad()
 def load_encoders(enc_type, device, resolution=256):
+    download_root = "/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/pretrained_models"
     assert enc_type in [
         "dinov2-vit-b",
         "dinov2-vit-l",
@@ -175,7 +176,7 @@ def load_encoders(enc_type, device, resolution=256):
             import clip
             from models.repa.clip_vit import UpdatedVisionTransformer
 
-            encoder_ = clip.load(f"ViT-{model_config}/14", device="cpu")[0].visual
+            encoder_ = clip.load(f"ViT-{model_config}/14", device="cpu", download_root=download_root)[0].visual
             encoder = UpdatedVisionTransformer(encoder_).to(device)
             # .to(device)
             encoder.embed_dim = encoder.model.transformer.width
