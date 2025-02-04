@@ -59,7 +59,7 @@ class RepaDataset(Dataset):
         """
         base_dir: /lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
         """
-        self.ssl_feat_dir = os.path.join(base_dir, "ssl_feat")
+        self.ssl_feat_dir = os.path.join(base_dir, f"ssl_feat_{enc_type}")
         self.vae_dir = os.path.join(base_dir, "vae")
 
         all_files = os.listdir(self.ssl_feat_dir)
@@ -83,7 +83,7 @@ class RepaDataset(Dataset):
         return latent, ssl_feat, label
         
 def get_repa_dataset(args):    
-    return RepaDataset(args.datadir)
+    return RepaDataset(args.datadir, args.enc_type)
 
 def get_dataset(args):
     if args.use_repa:
