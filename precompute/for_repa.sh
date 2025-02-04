@@ -10,4 +10,4 @@ vae_type="stabilityai/sd-vae-ft-ema"
 run_VAE=False
 run_SSL=True
 
-python -m precompute.for_repa --image_dir $image_dir --dataset_name $dataset_name --output_dir $output_dir --repa_enc_type $repa_enc_type --batch_size $batch_size --num_workers $num_workers --vae_type $vae_type   
+python -m precompute.for_repa --image_dir $image_dir --dataset_name $dataset_name --output_dir $output_dir --repa_enc_type $repa_enc_type --batch_size $batch_size --num_workers $num_workers --vae_type $vae_type --run_VAE $run_VAE --run_SSL $run_SSL
