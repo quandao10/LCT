@@ -643,7 +643,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-classes", type=int, default=0)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--normalize-matrix", type=str, default=None)
-    parser.add_argument("--uncond", action="store_true", default=False)
+    parser.add_argument("--uncond-network", action="store_true", default=False)
     
     ###### model ######
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
@@ -668,7 +668,6 @@ if __name__ == "__main__":
     parser.add_argument("--block-norm-type", type=str, default="group-norm",
         choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm",
                  "instance-norm", "non-scaling-group-norm", "non-scaling-instance-norm"])
-    parser.add_argument("--uncond_network", action="store_true", default=False)
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
