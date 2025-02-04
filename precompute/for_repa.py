@@ -139,14 +139,6 @@ def main(args):
     print(f"\033[33mRunning VAE: {args.run_VAE}\033[0m")
     print(f"\033[33mRunning SSL: {args.run_SSL}\033[0m ({args.SSL_model})")
     assert args.run_VAE or args.run_SSL
-    if args.run_VAE:
-        do = input("Do you want to run VAE? (y/n)")
-        if do == "n":
-            args.run_VAE = False
-        elif do == "y":
-            args.run_VAE = True
-        else:
-            raise ValueError("Invalid input")
     
     ssl_feat_dir = None
     vae_dir = None
@@ -171,6 +163,14 @@ def main(args):
         ssl_encoder = encoders[0]
         encoder_type = encoder_types[0]
 
+    do = input("Do you want to continue? (y/n)")
+    if do == "n":
+        exit()
+    elif do == "y":
+        pass
+    else:
+        raise ValueError("Invalid input")
+    
     # Dataset
     transform = transforms.Compose(
         [
