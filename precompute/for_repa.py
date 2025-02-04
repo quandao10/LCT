@@ -205,10 +205,10 @@ def main(args):
             raw_image_ = preprocess_raw_image(repa_image, encoder_type)
             z = ssl_encoder.forward_features(raw_image_)
             if "mocov3" in encoder_type:
-                ssl_feat = z = z[:, 1:]
+                z = z[:, 1:]
             if "dinov2" in encoder_type:
-                ssl_feat = z["x_norm_patchtokens"]
-            ssl_feat = ssl_feat.detach().cpu().numpy()
+                z = z["x_norm_patchtokens"]
+            ssl_feat = z.detach().cpu().numpy()
         else:
             ssl_feat = [None] * len(image_name)
 
