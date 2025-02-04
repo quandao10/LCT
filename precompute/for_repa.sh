@@ -1,3 +1,4 @@
+set -x
 
 image_dir="/lustre/scratch/client/movian/research/users/khanhdn10/datasets/celeba_256_png"
 dataset_name="celeba_256"
