@@ -254,8 +254,8 @@ def parse_args():
             "mae-vit-l",
         ],
     )
-    parser.add_argument("--run_VAE", action="store_true", default=False)
-    parser.add_argument("--run_SSL", action="store_true", default=False)
+    parser.add_argument("--run_VAE", type=bool, default=False)
+    parser.add_argument("--run_SSL", type=bool, default=False)
     return parser.parse_args()
 
 
