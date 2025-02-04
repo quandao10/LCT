@@ -143,7 +143,10 @@ def main(args):
         do = input("Do you want to run VAE? (y/n)")
         if do == "n":
             args.run_VAE = False
-
+        elif do == "y":
+            args.run_VAE = True
+        else:
+            raise ValueError("Invalid input")
     
     ssl_feat_dir = None
     vae_dir = None
