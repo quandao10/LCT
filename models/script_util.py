@@ -248,7 +248,7 @@ def create_ema_and_scales_fn(
     # Discretization curriculum improvement
     def improve_scale_fn(step):
         temp = np.floor(total_steps/(np.log2(np.floor(end_scales/start_scales))+1))
-        scales = min(start_scales*2**np.floor(step/temp), end_scales) + 1
+        scales = min(start_scales*4**np.floor(step/temp), end_scales) + 1 # BUG: 4 -> 2
         if target_ema_mode == "adaptive":
             c = -np.log(start_ema) * start_scales
             target_ema = np.exp(-c / scales)
