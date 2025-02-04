@@ -113,7 +113,7 @@ def create_model_and_diffusion(args):
                                             z_dims=args.z_dims,
                                             projector_dim=args.projector_dim,
                                             encoder_depth=args.encoder_depth,
-                                            uncond=args.uncond)
+                                            uncond_network=args.uncond_network)
     elif "LightningDiT" in args.model_type:
         model = LightningDiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
@@ -123,7 +123,7 @@ def create_model_and_diffusion(args):
                                             z_dims=args.z_dims,
                                             projector_dim=args.projector_dim,
                                             encoder_depth=args.encoder_depth,
-                                            uncond=args.uncond)
+                                            uncond_network=args.uncond_network)
     else:
         raise ValueError(f"Unsupported model type: {args.model_type}")
             

@@ -668,6 +668,7 @@ if __name__ == "__main__":
     parser.add_argument("--block-norm-type", type=str, default="group-norm",
         choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm",
                  "instance-norm", "non-scaling-group-norm", "non-scaling-instance-norm"])
+    parser.add_argument("--uncond_network", action="store_true", default=False)
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)

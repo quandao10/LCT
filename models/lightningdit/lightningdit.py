@@ -313,7 +313,7 @@ class LightningDiT(nn.Module):
         projector_dim=None,
         z_dims=None,
         encoder_depth=None,
-        uncond=False,
+        uncond_network=False,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -328,8 +328,8 @@ class LightningDiT(nn.Module):
         self.use_checkpoint = use_checkpoint
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
-        self.uncond = uncond
-        if uncond:
+        self.uncond_network = uncond_network
+        if not uncond_network:
             self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         
         num_patches = self.x_embedder.num_patches
@@ -437,11 +437,11 @@ class LightningDiT(nn.Module):
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         N, T, D = x.shape
         t = self.t_embedder(t)                   # (N, D)
-        if self.uncond:
+        if self.uncond_network:
+            c = t
+        else:
             y = self.y_embedder(y, self.training)    # (N, D)
             c = t + y                                # (N, D)
-        else:
-            c = t
 
         for idx, block in enumerate(self.blocks):
             if use_checkpoint:
