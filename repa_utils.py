@@ -114,6 +114,7 @@ def load_encoders(enc_type, device, resolution=256):
 
         architectures.append(architecture)
         encoder_types.append(encoder_type)
+        print(f"\033[33mLoading {encoder_type} {architecture} {model_config}\033[0m")
         if encoder_type == "mocov3":
             if architecture == "vit":
                 if model_config == "s":

@@ -158,18 +158,14 @@ def main(args):
         os.makedirs(ssl_feat_dir, exist_ok=True)
         print(f"\033[33mSSL features output dir: {ssl_feat_dir}\033[0m")
 
-        encoders, encoder_types, architectures = load_encoders(args.repa_enc_type, device)
+        encoders, encoder_types, architectures = load_encoders(args.SSL_model, device)
         assert len(encoders) == 1
         ssl_encoder = encoders[0]
         encoder_type = encoder_types[0]
 
     do = input("Are you sure? (y/n)")
-    if do == "n":
+    if not do == "y":
         exit()
-    elif do == "y":
-        pass
-    else:
-        raise ValueError("Invalid input")
     
     # Dataset
     transform = transforms.Compose(
@@ -234,14 +230,13 @@ def parse_args():
     )
     parser.add_argument("--dataset_name", type=str, default="latent_celeb256")
     parser.add_argument("--output_dir", type=str)
-    parser.add_argument("--repa_enc_type", type=str, default="dinov2-vit-b")
+    parser.add_argument("--SSL_model", type=str, default="dinov2-vit-b")
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--num_workers", type=int, default=32)
     parser.add_argument("--vae_type", type=str, default="stabilityai/sd-vae-ft-ema")
     parser.add_argument(
         "--SSL_model",
         type=str,
-        default="dinov2-vit-b",
         choices=[
             "dinov2-vit-b",
             "dinov2-vit-l",
