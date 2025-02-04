@@ -58,6 +58,7 @@ CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master
         --z_dims 768 \
         --ckpt-every 100 \
         --use-repa \
+        --uncond-network \
         # --normalize-matrix celeb256_stat.npy \
         # 
         # --diff-lamb 5 \
