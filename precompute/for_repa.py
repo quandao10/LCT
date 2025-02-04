@@ -94,14 +94,20 @@ def center_crop_arr(pil_image, image_size):
         arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size]
     )
 
+def is_image(file_path):
+    image_type_ls = ["png", "jpg", "jpeg"]
+    return file_path.split(".")[-1] in image_type_ls
 
 class REPADataset(Dataset):
     def __init__(self, path, transform, is_ImageNet):
         self.path = path
         self.img_list = []
+        
         for root, dirs, files in os.walk(path):
             for img in files:
-                self.img_list.append(os.path.join(root, img))
+                if is_image(img):
+                    self.img_list.append(os.path.join(root, img))
+        print(f"\033[33mFound {len(self.img_list)} images\033[0m")
         self.transform = transform
         self.is_ImageNet = is_ImageNet # the struture of folder is: 00000/img00000058.png
 
