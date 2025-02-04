@@ -55,7 +55,7 @@ class CustomDataset(Dataset):
         return features_tensor, labels_tensor
 
 class RepaDataset(Dataset):
-    def __init__(self, base_dir):
+    def __init__(self, base_dir, enc_type):
         """
         base_dir: /lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
         """
