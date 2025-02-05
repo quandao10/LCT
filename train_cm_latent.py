@@ -181,6 +181,8 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     logger.info("Model type: {}".format(args.model_type))
+    logger.info("Use sigmoid attention: {}".format(args.use_sigmoid_attention))
+    
     model, diffusion = create_model_and_diffusion(args)
     # with open('./model.txt', 'w') as f:
     #     f.write(str(model))
@@ -668,6 +670,7 @@ if __name__ == "__main__":
     parser.add_argument("--block-norm-type", type=str, default="group-norm",
         choices=["group-norm", "batch-norm", "layer-norm", "non-scaling-layer-norm", "rms-norm",
                  "instance-norm", "non-scaling-group-norm", "non-scaling-instance-norm"])
+    parser.add_argument("--use-sigmoid-attention", action="store_true", default=False)
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)

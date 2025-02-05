@@ -113,7 +113,8 @@ def create_model_and_diffusion(args):
                                             z_dims=args.z_dims,
                                             projector_dim=args.projector_dim,
                                             encoder_depth=args.encoder_depth,
-                                            uncond_network=args.uncond_network)
+                                            uncond_network=args.uncond_network,
+                                            use_sigmoid_attention=args.use_sigmoid_attention)
     elif "LightningDiT" in args.model_type:
         model = LightningDiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
@@ -123,7 +124,8 @@ def create_model_and_diffusion(args):
                                             z_dims=args.z_dims,
                                             projector_dim=args.projector_dim,
                                             encoder_depth=args.encoder_depth,
-                                            uncond_network=args.uncond_network)
+                                            uncond_network=args.uncond_network,
+                                            use_sigmoid_attention=args.use_sigmoid_attention)
     else:
         raise ValueError(f"Unsupported model type: {args.model_type}")
             
@@ -248,7 +250,7 @@ def create_ema_and_scales_fn(
     # Discretization curriculum improvement
     def improve_scale_fn(step):
         temp = np.floor(total_steps/(np.log2(np.floor(end_scales/start_scales))+1))
-        scales = min(start_scales*4**np.floor(step/temp), end_scales) + 1 # BUG: 4 -> 2
+        scales = min(start_scales*2**np.floor(step/temp), end_scales) + 1 # BUG: 4 -> 2
         if target_ema_mode == "adaptive":
             c = -np.log(start_ema) * start_scales
             target_ema = np.exp(-c / scales)
