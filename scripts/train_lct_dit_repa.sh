@@ -58,7 +58,7 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_p
         --encoder-depth $DEPTH \
         --repa-lamb $REPALAMB \
         --diff-lamb $DIFFLAMB \
-        --z_dims z_dims \
+        --z_dims $z_dims \
         --ckpt-every 100 \
         --uncond-network \
         --use-repa \
