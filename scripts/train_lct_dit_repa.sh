@@ -7,7 +7,7 @@ NUM_GPUS=$1
 BATCH_SIZE=64
 LR=1e-4
 DEPTH=4
-REPALAMB=0
+REPALAMB=0.5
 DIFFLAMB=5.0
 ENCTYPE=dinov2-vit-b
 EPOCHS=1400
@@ -22,7 +22,7 @@ START_SCALES=10
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
         # --exp REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_TYPE}_START_SCALES${START_SCALES}_scale4insteadof2  \
-CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
+CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
         --exp NEWBASELINE_REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_TYPE}_START_SCALES${START_SCALES}  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
@@ -59,8 +59,8 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_p
         --z_dims 768 \
         --ckpt-every 100 \
         --uncond-network \
+        --use-repa \
         # --use-sigmoid-attention \
-        # --use-repa \
         # --normalize-matrix celeb256_stat.npy \
         # 
         # --diff-lamb 5 \
