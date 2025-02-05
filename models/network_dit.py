@@ -215,7 +215,7 @@ class DiT(nn.Module):
         projector_dim=None,
         z_dims=None,
         encoder_depth=None,
-        uncond=False,
+        uncond_network=False,
         use_sigmoid_attention=False,
     ):
         super().__init__()
@@ -227,8 +227,8 @@ class DiT(nn.Module):
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
-        self.uncond = uncond
-        if uncond:
+        self.uncond_network = uncond_network
+        if not uncond_network:
             self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
@@ -272,7 +272,7 @@ class DiT(nn.Module):
         nn.init.constant_(self.x_embedder.proj.bias, 0)
 
         # Initialize label embedding table:
-        if self.uncond:
+        if not self.uncond_network:
             nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
@@ -312,14 +312,18 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
-        if y is None:
+        if not self.uncond_network:
             y = torch.ones(x.size(0), dtype=torch.long, device=x.device) * (self.y_embedder.get_in_channels() - 1)
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         N, T, D = x.shape
         
         t = self.t_embedder(t)                   # (N, D)
-        y = self.y_embedder(y, self.training)    # (N, D)
-        c = t + y                                # (N, D)
+        if self.uncond_network:
+            c = t
+        else:
+            y = self.y_embedder(y, self.training)    # (N, D)
+            c = t + y                                # (N, D)
+            
         for idx, block in enumerate(self.blocks):
             x = block(x, c)                      # (N, T, D)
             if is_train and self.use_repa and (idx + 1) == self.encoder_depth:
