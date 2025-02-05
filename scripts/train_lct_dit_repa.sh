@@ -22,7 +22,7 @@ START_SCALES=10
 
 # CUDA_VISIBLE_DEVICES=4,5,6,7 
         # --exp REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_TYPE}_START_SCALES${START_SCALES}_scale4insteadof2  \
-CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
+CUDA_VISIBLE_DEVICES=3 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
         --exp NEWBASELINE_REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_TYPE}_START_SCALES${START_SCALES}  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
