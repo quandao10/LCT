@@ -20,8 +20,11 @@ START_SCALES=10
 z_dims=768 # for dinov2-vit-b
 # z_dims=1024 # for clip-vit-L
 
+MODEL_NAME=$(echo "$MODEL_TYPE" | sed 's/\//_/g')
+
+        # --exp LONG_REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_NAME}_START_SCALES${START_SCALES}  \
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
-        --exp LONG_REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_TYPE}_START_SCALES${START_SCALES}  \
+        --exp debug_anhnd72  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
         --results-dir results/ \
