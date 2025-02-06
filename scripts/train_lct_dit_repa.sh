@@ -16,7 +16,7 @@ GRAD_NORM=100.0
 MODEL_TYPE=DiT-B/2
 # MODEL_TYPE=LightningDiT-B/2
 # START_SCALES=10 # 10 20 40 80 160 320 640
-START_SCALES=640
+START_SCALES=80
 z_dims=768 # for dinov2-vit-b
 # z_dims=1024 # for clip-vit-L
 
