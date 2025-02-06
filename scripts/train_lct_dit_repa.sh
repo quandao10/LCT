@@ -1,4 +1,4 @@
-export OMP_NUM_THREADS=8
+export OMP_NUM_THREADS=4
 # Generate a random port number between 10000 and 20000
 MASTER_PORT=$((10000 + RANDOM % 10000))
 DATASET=/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256
@@ -16,15 +16,14 @@ GRAD_NORM=100.0
 MODEL_TYPE=DiT-B/2
 # MODEL_TYPE=LightningDiT-B/2
 # START_SCALES=10 # 10 20 40 80 160 320 640
-START_SCALES=10
+START_SCALES=40
 z_dims=768 # for dinov2-vit-b
 # z_dims=1024 # for clip-vit-L
 
 MODEL_NAME=$(echo "$MODEL_TYPE" | sed 's/\//_/g')
 
-        # --exp LONG_REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_NAME}_START_SCALES${START_SCALES}  \
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
-        --exp debug_anhnd72  \
+        --exp LONG_REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_NAME}_START_SCALES${START_SCALES}  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
         --results-dir results/ \
