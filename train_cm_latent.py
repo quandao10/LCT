@@ -165,7 +165,7 @@ def main(args):
 
     # Setup an experiment folder:
     experiment_index = args.exp
-    experiment_dir = f"{args.results_dir}/{args.dataset}/{experiment_index}"  # Create an experiment folder 
+    experiment_dir = f"{args.results_dir}/{experiment_index}"  # Create an experiment folder 
     checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
     sample_dir = f"{experiment_dir}/samples"
     if rank == 0:
@@ -182,7 +182,7 @@ def main(args):
     # create diffusion and model
     logger.info("Model type: {}".format(args.model_type))
     logger.info("Use sigmoid attention: {}".format(args.use_sigmoid_attention))
-    
+
     model, diffusion = create_model_and_diffusion(args)
     # with open('./model.txt', 'w') as f:
     #     f.write(str(model))
