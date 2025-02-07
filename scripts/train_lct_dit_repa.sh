@@ -7,7 +7,7 @@ NUM_GPUS=$1
 BATCH_SIZE=64
 LR=1e-4
 DEPTH=4
-REPALAMB=2.0
+REPALAMB=0.0
 DIFFLAMB=5.0
 ENCTYPE=dinov2-vit-b # "clip-vit-L" # clip-vit-L, dinov2-vit-b, dinov2-vit-l, mocov3-vit-b, mocov3-vit-l, jepa-vit-h, mae-vit-l
 # ENCTYPE=clip-vit-L
@@ -16,7 +16,7 @@ GRAD_NORM=100.0
 MODEL_TYPE=DiT-B/2
 # MODEL_TYPE=LightningDiT-B/2
 # START_SCALES=10 # 10 20 40 80 160 320 640
-START_SCALES=640
+START_SCALES=80
 z_dims=768 # for dinov2-vit-b
 # z_dims=1024 # for clip-vit-L
 
@@ -60,7 +60,7 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_
         --z_dims $z_dims \
         --ckpt-every 100 \
         --uncond-network \
-        --use-repa \
+        # --use-repa \
         # --use-sigmoid-attention \
         # --normalize-matrix celeb256_stat.npy \
         # 
