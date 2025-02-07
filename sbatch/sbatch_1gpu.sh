@@ -1,8 +1,8 @@
 #!/bin/bash -lex
 # SLURM SUBMIT SCRIPT
 #SBATCH --job-name=LCT
-#SBATCH --output=/lustre/scratch/client/movian/research/users/anhnd72/projects/LCT/sbatch/slurm_anhnd72.log
-#SBATCH --error=/lustre/scratch/client/movian/research/users/anhnd72/projects/LCT/sbatch/slurm_anhnd72.err
+#SBATCH --output=/lustre/scratch/client/movian/research/users/anhnd72/projects/LCT/sbatch/slurm_vietnv.log
+#SBATCH --error=/lustre/scratch/client/movian/research/users/anhnd72/projects/LCT/sbatch/slurm_vietnv.err
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
