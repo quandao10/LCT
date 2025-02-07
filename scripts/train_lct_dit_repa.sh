@@ -22,7 +22,8 @@ z_dims=768 # for dinov2-vit-b
 
 MODEL_NAME=$(echo "$MODEL_TYPE" | sed 's/\//_/g')
 
-CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
+# CUDA_VISIBLE_DEVICES=0 
+torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS --master_port $MASTER_PORT train_cm_latent.py \
         --exp LONG_REPA${REPALAMB}_DIFF${DIFFLAMB}_DEPTH${DEPTH}_LR${LR}_BS${BATCH_SIZE}_ENCTYPE${ENCTYPE}_EPOCHS${EPOCHS}_GRADNORM${GRAD_NORM}_${MODEL_NAME}_START_SCALES${START_SCALES}  \
         --datadir $DATASET/ \
         --dataset latent_celeb256 \
