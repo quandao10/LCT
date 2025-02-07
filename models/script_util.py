@@ -7,6 +7,7 @@ from .network_karras import SongUNet, DhariwalUNet, DhariwalUMTNet
 from .network_dit import DiT_models
 from .network_edm2 import EDM2_models
 from .lightningdit.lightningdit import LightningDiT_models
+from .sana.sana_multi_scale import SanaMS_models
 NUM_CLASSES = 1000
 
 
@@ -126,6 +127,18 @@ def create_model_and_diffusion(args):
                                             encoder_depth=args.encoder_depth,
                                             uncond_network=args.uncond_network,
                                             use_sigmoid_attention=args.use_sigmoid_attention)
+    elif "SanaMS" in args.model_type:
+        model = SanaMS_models[args.model_type](input_size=args.image_size,
+                                            in_channels=args.num_in_channels,
+                                            num_classes=args.num_classes,
+                                            learn_sigma=args.learn_sigma,
+                                            # use_repa=args.use_repa,
+                                            # z_dims=args.z_dims,
+                                            # projector_dim=args.projector_dim,
+                                            # encoder_depth=args.encoder_depth,
+                                            # uncond_network=args.uncond_network,
+                                            # use_sigmoid_attention=args.use_sigmoid_attention
+                                            )
     else:
         raise ValueError(f"Unsupported model type: {args.model_type}")
             

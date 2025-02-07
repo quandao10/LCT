@@ -181,7 +181,7 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     # create diffusion and model
     logger.info("Model type: {}".format(args.model_type))
-    logger.info("Use sigmoid attention: {}".format(args.use_sigmoid_attention))
+    logger.info("Attention type: {}".format(args.attn_type))
 
     model, diffusion = create_model_and_diffusion(args)
     # with open('./model.txt', 'w') as f:
@@ -371,6 +371,12 @@ def main(args):
     def gradnorm(x, weight=1.0):
         weight = torch.tensor(weight, device=x.device)
         return GradNormFunction.apply(x, weight)
+    
+    #################
+    l2(pred, gtr)
+    l2(gradnorm(pred, weighting), gtr)
+    #################
+
     
 
     for epoch in range(init_epoch, args.epochs+1):

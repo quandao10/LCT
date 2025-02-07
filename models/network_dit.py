@@ -14,6 +14,7 @@ import torch.nn as nn
 import numpy as np
 import math
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
+from models.attentions import SigmoidAttention, LinearAttention
 
 def build_mlp(hidden_size, projector_dim, z_dim):
     return nn.Sequential(
@@ -110,55 +111,21 @@ class LabelEmbedder(nn.Module):
 #                                 Core DiT Model                                #
 #################################################################################
 
-# Define the custom sigmoid function based on the given formula
-
-
-class SigmoidAttention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0):
-        super().__init__()
-        assert dim % num_heads == 0, 'dim should be divisible by num_heads'
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = head_dim ** -0.5
-
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
-
-    def custom_sigmoid(self, x):
-        return 0.5 * (1 + torch.tanh(0.5 * x))
-
-    def forward(self, x):
-        B, N, C = x.shape
-        # Calculate bias_scalar based on the number of tokens (N)
-        self.bias_scalar = -math.log(N)
-
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.unbind(0)   # make torchscript happy (cannot use tensor as tuple)
-
-        # Compute the attention logits with the added bias scalar
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        # Apply the custom sigmoid
-        attn = self.custom_sigmoid(attn + self.bias_scalar)  
-        attn = self.attn_drop(attn)
-
-        # Compute the output
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        return x
-
-
 class DiTBlock(nn.Module):
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
-    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, use_sigmoid_attention=False, **block_kwargs):
+    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, attn_type="vanilla", **block_kwargs):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        attn_class = SigmoidAttention if use_sigmoid_attention else Attention
-        self.attn = attn_class(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
+        if "sigmoid" == attn_type:
+            self.attn = SigmoidAttention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
+        elif "linear" == attn_type:
+            # num_heads = hidden_size // 32
+            self.attn = LinearAttention(hidden_size, hidden_size, heads=num_heads, eps=1e-8, qk_norm=False)
+        elif "vanilla" == attn_type:
+            self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
+
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: nn.GELU(approximate="tanh")
