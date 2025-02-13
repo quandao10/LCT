@@ -416,7 +416,7 @@ class DiT(nn.Module):
         no_scale = False,
         linear_act=None,
         wo_norm=False,
-        attn_type=False,
+        attn_type="normal",
         num_register=0,
         final_conv=False,
     ):

@@ -2,10 +2,10 @@
 
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=1 train_cm_latent.py \
-        --exp celeb_dit_best_setting_700ep_B_relu_eps1e-4_qknorm  \
+        --exp 700ep_B_relu_eps1e-4_reproduce_reset  \
         --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset latent_celeb256 \
-        --results-dir ./results/ \
+        --results-dir /research/cbim/medical/qd66/lct_v2/ \
         --image-size 32 \
         --num-in-channels 4 \
         --num-classes 0 \
@@ -35,8 +35,8 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc
         --ot-hard \
         --c-by-loss-std \
         --linear-act relu \
-        --wo-norm \
-        --resume \
+        # --resume \
+        # --wo-norm \
         # --use-scale-residual \
         
 
