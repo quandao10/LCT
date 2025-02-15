@@ -1,8 +1,8 @@
 # # # export MASTER_PORT=10120
 
 
-CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc_per_node=1 train_cm_latent.py \
-        --exp 700ep_B_relu_eps1e-4_reproduce_reset  \
+CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10121 --nproc_per_node=1 train_cm_latent.py \
+        --exp 700ep_B_silu_eps1e-4_reproduce_reset_fp16  \
         --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -34,7 +34,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10120 --nproc
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --linear-act relu \
+        --linear-act silu \
         # --resume \
         # --wo-norm \
         # --use-scale-residual \

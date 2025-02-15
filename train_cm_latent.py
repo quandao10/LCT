@@ -42,6 +42,7 @@ import robust_loss_pytorch
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from lion_pytorch import Lion
+from soap import SOAP 
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -224,8 +225,7 @@ def main(args):
             opt = torch.optim.RAdam(list(model.parameters())+list(model_umt.parameters()), lr=args.lr, weight_decay=1e-4)
         else:
             opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
-            # opt = Lion(model.parameters(), lr=args.lr)
-            # opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=1e-4)
+            # opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=1e-4)
     # define scheduler
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
@@ -317,7 +317,7 @@ def main(args):
         
     if rank == 0:
         noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
-
+    scaler = torch.cuda.amp.GradScaler()
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
@@ -340,14 +340,15 @@ def main(args):
 
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
-            losses = diffusion.consistency_losses(model,
-                                                x,
-                                                num_scales,
-                                                target_model=target_model,
-                                                model_kwargs=model_kwargs,
-                                                noise=n,
-                                                adaptive=adaptive_loss,
-                                                model_umt=model_umt)
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                losses = diffusion.consistency_losses(model,
+                                                    x,
+                                                    num_scales,
+                                                    target_model=target_model,
+                                                    model_kwargs=model_kwargs,
+                                                    noise=n,
+                                                    adaptive=adaptive_loss,
+                                                    model_umt=model_umt)
            
             if args.l2_reweight:
                 # weight = 1.0/(norm_dim(x-n)*0.2+1e-7)
@@ -370,9 +371,13 @@ def main(args):
             
             if not torch.isnan(loss):
                 opt.zero_grad()
-                loss.backward()
+                scaler.scale(loss).backward()
+                scaler.unscale_(opt)
+                scaler.step(opt)
+                scaler.update()
                 # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                opt.step()
+                # loss.backward()
+                # opt.step()
                 running_loss += loss.item()
                 running_cm_loss += cm_loss.item()
                 running_diff_loss += diff_loss.item()

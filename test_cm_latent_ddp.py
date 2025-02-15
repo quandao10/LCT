@@ -278,6 +278,9 @@ if __name__ == "__main__":
     parser.add_argument("--wo-norm", action="store_true", default=False)
     parser.add_argument("--use-scale-residual", action="store_true", default=False)
     parser.add_argument("--linear-act", type=str, default=None)
+    parser.add_argument("--attn-type", type=str, default="normal")
+    parser.add_argument("--num-register", type=int, default=0)
+    parser.add_argument("--final-conv", action="store_true", default=False)
     
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
