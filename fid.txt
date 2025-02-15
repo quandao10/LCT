@@ -338,10 +338,18 @@ DiT-B/2 relu reproduce
 Epoch = 0000675, FID = 6.983430872790905, cfg_scale = 1.0
 Epoch = 0000700, FID = 6.808504345663636, cfg_scale = 1.0
 
-DiT B/2 relu reproduce fp16
+DiT B/2 relu fp16
 Epoch = 0000625, FID = 7.298400099915085, cfg_scale = 1.0
 Epoch = 0000650, FID = 6.994590404333792, cfg_scale = 1.0
 Epoch = 0000675, FID = 6.907569938313941, cfg_scale = 1.0
 Epoch = 0000700, FID = 6.972211897026654, cfg_scale = 1.0
 
 DiT B/2 silu fp16
+Epoch = 0000625, FID = 7.70452356880719, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.394729019653937, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.441035749139473, cfg_scale = 1.0
+Epoch = 0000700, FID = 7.557741406155969, cfg_scale = 1.0
+
+DiT B/2 gelu fp16
+
+DiT L/2 relu fp16

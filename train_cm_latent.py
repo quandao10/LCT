@@ -357,8 +357,12 @@ def main(args):
                 weight = (distances-distances.min())/(distances.max()-distances.min()) + 0.1
                 loss = (losses["loss"]*weight).mean()
             else:
-                cm_loss = losses["loss"].mean() 
-                diff_loss = losses["diff_loss"].mean()
+                if losses["diff_loss"].size(0) == 0:
+                    diff_loss = torch.tensor(0)
+                else:
+                    diff_loss = losses["diff_loss"].mean()
+                
+                cm_loss = losses["loss"].mean()
                 if args.use_diffloss:
                     if epoch <600:
                         loss = cm_loss + 5*diff_loss
@@ -369,31 +373,22 @@ def main(args):
                     diff_loss = torch.tensor(0)
             after_forward = torch.cuda.memory_allocated(device)
             
-            if not torch.isnan(loss):
-                opt.zero_grad()
-                scaler.scale(loss).backward()
-                scaler.unscale_(opt)
-                scaler.step(opt)
-                scaler.update()
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                # loss.backward()
-                # opt.step()
-                running_loss += loss.item()
-                running_cm_loss += cm_loss.item()
-                running_diff_loss += diff_loss.item()
-            else:
-                nan_count += 1
-                nan_t_list = losses["t"][torch.isnan(losses["loss"])]
-                logger.info(f"NaN time list: {nan_t_list}")
-                logger.info(f"Device: {device}. Loss is nan for {nan_count} times")
-                if nan_count  > 100:
-                    args.lr = args.lr/2
-                    args.max_grad_norm = args.max_grad_norm * 0.8
-                    logger.info(f"Reduce lr a half to new lr {args.lr}")
-                    for g in opt.param_groups:
-                        g['lr'] = args.lr
-                    nan_count = 0
-                exit()
+            # if not torch.isnan(loss):
+            opt.zero_grad()
+            scaler.scale(loss).backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+            for param in model.parameters():
+                if param.grad is not None:
+                    torch.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad) # this is interesting
+            scaler.unscale_(opt)
+            scaler.step(opt)
+            scaler.update()
+            # loss.backward()
+            # opt.step()
+            running_loss += loss.item()
+            running_cm_loss += cm_loss.item()
+            running_diff_loss += diff_loss.item()
+            
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
             ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)

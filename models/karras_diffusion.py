@@ -250,6 +250,11 @@ class KarrasDenoiser:
         # compute diff losses
         diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
         diff_loss = mean_flat((distiller - x_start)**2)[diff_indices]*diff_weights
+        
+        # if th.isnan(diff_loss).any():
+        #     print(th.isnan(mean_flat((distiller - x_start)**2)[diff_indices]).any())
+        #     print(th.isnan(diff_weights).any())
+        #     exit()
 
         # compute consistency losses
         if self.loss_norm == "l1":
