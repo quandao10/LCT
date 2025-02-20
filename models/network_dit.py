@@ -10,13 +10,18 @@
 # --------------------------------------------------------
 
 import torch
+import os
 import torch.nn as nn
 import numpy as np
 import math
-from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
+from timm.models.vision_transformer import PatchEmbed, Attention, Mlp, AttentionWoPrevNormV
 from timm.layers import GluMlp
 from functools import partial
+from typing import Optional
+import torch.nn.functional as F
 import copy
+from models.act import build_act
+from models.norm import build_norm
 try:
     import flash_attn.flash_attn_interface
     from models.diffatten import MultiheadFlashDiff
@@ -37,6 +42,197 @@ def modulate(x, shift, scale):
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
 #################################################################################
+class ConvLayer(nn.Module):
+    def __init__(
+        self,
+        in_dim: int,
+        out_dim: int,
+        kernel_size=3,
+        stride=1,
+        dilation=1,
+        groups=1,
+        padding = None,
+        use_bias=False,
+        dropout=0.0,
+        norm="bn2d",
+        act="relu",
+    ):
+        super().__init__()
+        if padding is None:
+            padding = get_same_padding(kernel_size)
+            padding *= dilation
+
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.dilation = dilation
+        self.groups = groups
+        self.padding = padding
+        self.use_bias = use_bias
+
+        self.dropout = nn.Dropout2d(dropout, inplace=False) if dropout > 0 else None
+        self.conv = nn.Conv2d(
+            in_dim,
+            out_dim,
+            kernel_size=(kernel_size, kernel_size),
+            stride=(stride, stride),
+            padding=padding,
+            dilation=(dilation, dilation),
+            groups=groups,
+            bias=use_bias,
+        )
+        self.norm = build_norm(norm, num_features=out_dim)
+        self.act = build_act(act)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.dropout is not None:
+            x = self.dropout(x)
+        x = self.conv(x)
+        if self.norm:
+            x = self.norm(x)
+        if self.act:
+            x = self.act(x)
+        return x
+
+def val2list(x: list or tuple or any, repeat_time=1) -> list:  # type: ignore
+    """Repeat `val` for `repeat_time` times and return the list or val if list/tuple."""
+    if isinstance(x, (list, tuple)):
+        return list(x)
+    return [x for _ in range(repeat_time)]
+
+def get_same_padding(kernel_size):
+    if isinstance(kernel_size, tuple):
+        return tuple([get_same_padding(ks) for ks in kernel_size])
+    else:
+        assert kernel_size % 2 > 0, f"kernel size {kernel_size} should be odd number"
+        return kernel_size // 2
+
+def val2tuple(x: list or tuple or any, min_len: int = 1, idx_repeat: int = -1) -> tuple:  # type: ignore
+    """Return tuple with min_len by repeating element at idx_repeat."""
+    # convert to list first
+    x = val2list(x)
+
+    # repeat elements if necessary
+    if len(x) > 0:
+        x[idx_repeat:idx_repeat] = [x[idx_repeat] for _ in range(min_len - len(x))]
+
+    return tuple(x)
+
+class GLUMBConv(nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: int,
+        out_feature=None,
+        kernel_size=3,
+        stride=1,
+        padding=None,
+        use_bias=False,
+        norm=(None, None, None),
+        act=("silu", "silu", None),
+        dilation=1,
+    ):
+        out_feature = out_feature or in_features
+        super().__init__()
+        use_bias = val2tuple(use_bias, 3)
+        norm = val2tuple(norm, 3)
+        act = val2tuple(act, 3)
+
+        self.glu_act = build_act(act[1], inplace=False)
+        self.inverted_conv = ConvLayer(
+            in_features,
+            hidden_features * 2,
+            1,
+            use_bias=use_bias[0],
+            norm=norm[0],
+            act=act[0],
+        )
+        self.depth_conv = ConvLayer(
+            hidden_features * 2,
+            hidden_features * 2,
+            kernel_size,
+            stride=stride,
+            groups=hidden_features * 2,
+            padding=padding,
+            use_bias=use_bias[1],
+            norm=norm[1],
+            act=None,
+            dilation=dilation,
+        )
+        self.point_conv = ConvLayer(
+            hidden_features,
+            out_feature,
+            1,
+            use_bias=use_bias[2],
+            norm=norm[2],
+            act=act[2],
+        )
+        # from IPython import embed; embed(header='debug dilate conv')
+
+    def forward(self, x: torch.Tensor, HW=None) -> torch.Tensor:
+        B, N, C = x.shape
+        if HW is None:
+            H = W = int(N**0.5)
+        else:
+            H, W = HW
+
+        x = x.reshape(B, H, W, C).permute(0, 3, 1, 2)
+        x = self.inverted_conv(x)
+        x = self.depth_conv(x)
+
+        x, gate = torch.chunk(x, 2, dim=1)
+        gate = self.glu_act(gate)
+        x = x * gate
+
+        x = self.point_conv(x)
+        x = x.reshape(B, C, N).permute(0, 2, 1)
+
+        return x
+
+class RMSNorm(torch.nn.Module):
+    def __init__(self, dim: int, scale_factor=1.0, eps: float = 1e-6):
+        """
+            Initialize the RMSNorm normalization layer.
+
+        Args:
+            dim (int): The dimension of the input tensor.
+            eps (float, optional): A small value added to the denominator for numerical stability. Default is 1e-6.
+
+        Attributes:
+            eps (float): A small value added to the denominator for numerical stability.
+            weight (nn.Parameter): Learnable scaling parameter.
+
+        """
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim) * scale_factor)
+
+    def _norm(self, x):
+        """
+        Apply the RMSNorm normalization to the input tensor.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+
+        Returns:
+            torch.Tensor: The normalized tensor.
+
+        """
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    def forward(self, x):
+        """
+        Forward pass through the RMSNorm layer.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+
+        Returns:
+            torch.Tensor: The output tensor after applying RMSNorm.
+
+        """
+        return (self.weight * self._norm(x.float())).type_as(x)
 
 class TimestepEmbedder(nn.Module):
     """
@@ -110,13 +306,101 @@ class LabelEmbedder(nn.Module):
     
     def get_in_channels(self):
         return self.in_channels
+    
+class LiteLA(Attention):
+    r"""Lightweight linear attention"""
 
+    PAD_VAL = 1
+
+    def __init__(
+        self,
+        in_dim: int,
+        out_dim: int,
+        heads: Optional[int] = None,
+        heads_ratio: float = 1.0,
+        dim=32,
+        eps=1e-15,
+        use_bias=False,
+        qk_norm=False,
+        norm_eps=1e-5,
+    ):
+        heads = heads or int(out_dim // dim * heads_ratio)
+        super().__init__(in_dim, num_heads=heads, qkv_bias=use_bias)
+
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.heads = heads
+        self.dim = out_dim // heads  # TODO: need some change
+        self.eps = eps
+
+        self.kernel_func = nn.ReLU(inplace=False)
+        if qk_norm:
+            self.q_norm = RMSNorm(in_dim, scale_factor=1.0, eps=norm_eps)
+            self.k_norm = RMSNorm(in_dim, scale_factor=1.0, eps=norm_eps)
+        else:
+            self.q_norm = nn.Identity()
+            self.k_norm = nn.Identity()
+
+    @torch.amp.autocast("cuda", enabled=os.environ.get("AUTOCAST_LINEAR_ATTN", False) == "true")
+    def attn_matmul(self, q, k, v: torch.Tensor) -> torch.Tensor:
+        # lightweight linear attention
+        q = self.kernel_func(q)  # B, h, h_d, N
+        k = self.kernel_func(k)
+
+        use_fp32_attention = getattr(self, "fp32_attention", False)  # necessary for NAN loss
+        if use_fp32_attention:
+            q, k, v = q.float(), k.float(), v.float()
+
+        v = F.pad(v, (0, 0, 0, 1), mode="constant", value=LiteLA.PAD_VAL)
+        vk = torch.matmul(v, k)
+        out = torch.matmul(vk, q)
+
+        if out.dtype in [torch.float16, torch.bfloat16]:
+            out = out.float()
+        out = out[:, :, :-1] / (out[:, :, -1:] + self.eps)
+
+        return out
+
+    def forward(self, x: torch.Tensor, mask=None, HW=None, block_id=None) -> torch.Tensor:
+        B, N, C = x.shape
+
+        qkv = self.qkv(x).reshape(B, N, 3, C)
+        q, k, v = qkv.unbind(2)  # B, N, 3, C --> B, N, C
+        dtype = q.dtype
+
+        q = self.q_norm(q).transpose(-1, -2)  # (B, N, C) -> (B, C, N)
+        k = self.k_norm(k).transpose(-1, -2)  # (B, N, C) -> (B, C, N)
+        v = v.transpose(-1, -2)
+
+        q = q.reshape(B, C // self.dim, self.dim, N)  # (B, h, h_d, N)
+        k = k.reshape(B, C // self.dim, self.dim, N).transpose(-1, -2)  # (B, h, N, h_d)
+        v = v.reshape(B, C // self.dim, self.dim, N)  # (B, h, h_d, N)
+
+        out = self.attn_matmul(q, k, v).to(dtype)
+
+        out = out.view(B, C, N).permute(0, 2, 1)  # B, N, C
+        out = self.proj(out)
+
+        if torch.get_autocast_gpu_dtype() == torch.float16:
+            out = out.clip(-65504, 65504)
+
+        return out
+
+    @property
+    def module_str(self) -> str:
+        _str = type(self).__name__ + "("
+        eps = f"{self.eps:.1E}"
+        _str += f"i={self.in_dim},o={self.out_dim},h={self.heads},d={self.dim},eps={eps}"
+        return _str
+
+    def __repr__(self):
+        return f"EPS{self.eps}-" + super().__repr__()
    
 #################################################################################
 #                                 Core DiT Model                                #
 #################################################################################
 
-class DiTBlock(nn.Module):
+class DiTBlock(nn.Module): #NOTE: we are using both post and prev norm with wo_norm = False
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
@@ -154,6 +438,99 @@ class DiTBlock(nn.Module):
         x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
         x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
         return x
+    
+    
+class DiTBlock_woPrevVNorm(nn.Module): #NOTE: we are using without prev V norm
+    """
+    A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
+    """
+    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, depth=12, mlp_ratio=4.0, **block_kwargs):
+        super().__init__()
+        self.wo_norm = wo_norm
+        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6)
+        # self.prev_norm = norm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.attn = AttentionWoPrevNormV(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, qk_norm=True, **block_kwargs)
+        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity()
+        mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
+        if linear_act == "mish":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
+        elif linear_act == "relu":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
+        elif linear_act == "silu":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
+        elif linear_act == "glu_sigmoid":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
+        elif linear_act == "glu_mish":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
+        elif linear_act == "glu_silu":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
+        elif linear_act == "glu_gelu":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
+        elif linear_act == "gelu":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
+        self.adaLN_modulation = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(hidden_size, 6 * hidden_size, bias=True)
+        )
+        
+    def forward(self, x, c):
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+        modulate_x = modulate(self.norm1(x), shift_msa, scale_msa)
+        x = x + gate_msa.unsqueeze(1) * self.attn(modulate_x, x)
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
+        return x
+    
+    
+#################################################################################
+#                                 Core DiT Model                                #
+#################################################################################
+
+class DiTBlockLinear(nn.Module): #NOTE: runing prev norm (what about post norm and both)
+    """
+    A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
+    """
+    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, depth=12, mlp_ratio=4.0, **block_kwargs):
+        super().__init__()
+        self.wo_norm = wo_norm
+        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity() 
+        self.attn = LiteLA(hidden_size, hidden_size, heads = hidden_size // 32, eps=1e-8, qk_norm=False)
+        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity()
+        mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
+        if linear_act == "mish":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
+        elif linear_act == "relu":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
+        elif linear_act == "silu":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
+        elif linear_act == "glu_sigmoid":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
+        elif linear_act == "glu_mish":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
+        elif linear_act == "glu_silu":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
+        elif linear_act == "glu_gelu":
+            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
+        elif linear_act == "gelu":
+            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
+        elif linear_act == "glumbconv":
+            self.mlp = GLUMBConv(
+                in_features=hidden_size,
+                hidden_features=int(hidden_size * mlp_ratio),
+                use_bias=(True, True, False),
+                norm=(None, None, None),
+                act=("silu", "silu", None),
+            )
+        self.adaLN_modulation = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(hidden_size, 6 * hidden_size, bias=True)
+        )
+        
+    def forward(self, x, c):
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
+        return x
+
     
 class DiTBlockFlashAttn(nn.Module):
     """
@@ -443,6 +820,10 @@ class DiT(nn.Module):
             self.attn_blk = DiTBlockFlashDiffattn
         elif attn_type == "sigmoidattn":
             self.attn_blk = DiTBlockFlashSigmoidAttn
+        elif attn_type == "linear":
+            self.attn_blk = DiTBlockLinear
+        elif attn_type == "wo_prevnormV":
+            self.attn_blk = DiTBlock_woPrevVNorm
         else:
             raise("No implementation for this")
         

@@ -305,6 +305,7 @@ Epoch = 0000625, FID = 8.579579695678206, cfg_scale = 1.0
 Epoch = 0000650, FID = 8.158218584228564, cfg_scale = 1.0
 Epoch = 0000675, FID = 8.078273968832121, cfg_scale = 1.0
 Epoch = 0000700, FID = 8.169493351057866, cfg_scale = 1.0
+
 DiT-B/2 relu eps1e-4
 Epoch = 0000575, FID = 8.095065303297076, cfg_scale = 1.0
 Epoch = 0000600, FID = 8.14949468948555, cfg_scale = 1.0
@@ -312,6 +313,7 @@ Epoch = 0000625, FID = 7.464653524136168, cfg_scale = 1.0
 Epoch = 0000650, FID = 7.234990677085847, cfg_scale = 1.0
 Epoch = 0000675, FID = 7.261505385959509, cfg_scale = 1.0
 Epoch = 0000700, FID = 7.142620273383471, cfg_scale = 1.0
+
 DiT-B/2 relu small lr
 Epoch = 0000575, FID = 8.698667086609788, cfg_scale = 1.0
 Epoch = 0000600, FID = 8.606065904302568, cfg_scale = 1.0
@@ -319,6 +321,7 @@ Epoch = 0000625, FID = 7.9116255095793235, cfg_scale = 1.0
 Epoch = 0000650, FID = 7.848866638565113, cfg_scale = 1.0
 Epoch = 0000675, FID = 7.818966364506565, cfg_scale = 1.0
 Epoch = 0000700, FID = 7.695932880821147, cfg_scale = 1.0
+
 DiT-B/2 relu
 Epoch = 0000575, FID = 8.613278609844372, cfg_scale = 1.0
 Epoch = 0000600, FID = 8.592134043951631, cfg_scale = 1.0
@@ -326,6 +329,7 @@ Epoch = 0000625, FID = 8.065686868230472, cfg_scale = 1.0
 Epoch = 0000650, FID = 7.619955050014795, cfg_scale = 1.0
 Epoch = 0000675, FID = 7.671434478700263, cfg_scale = 1.0
 Epoch = 0000700, FID = 7.748480486349877, cfg_scale = 1.0
+
 DiT-B/2 relu + unnormalized
 Epoch = 0000575, FID = 7.668108936907942, cfg_scale = 1.0
 Epoch = 0000600, FID = 7.887507564537913, cfg_scale = 1.0
@@ -351,5 +355,13 @@ Epoch = 0000675, FID = 7.441035749139473, cfg_scale = 1.0
 Epoch = 0000700, FID = 7.557741406155969, cfg_scale = 1.0
 
 DiT B/2 gelu fp16
+Epoch = 0000625, FID = 7.3709216061566565, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.3773990225685395, cfg_scale = 1.0
+Epoch = 0000675, FID = 7.239248899053393, cfg_scale = 1.0
+Epoch = 0000700, FID = 7.322871211494174, cfg_scale = 1.0
 
 DiT L/2 relu fp16
+Epoch = 0000625, FID = 6.247831522870513, cfg_scale = 1.0
+Epoch = 0000650, FID = 5.950325817409805, cfg_scale = 1.0
+Epoch = 0000675, FID = 5.832437521548229, cfg_scale = 1.0
+Epoch = 0000700, FID = 5.773543875453157, cfg_scale = 1.0

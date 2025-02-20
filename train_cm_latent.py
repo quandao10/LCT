@@ -42,7 +42,7 @@ import robust_loss_pytorch
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from lion_pytorch import Lion
-from soap import SOAP 
+from optimizer.soap import SOAP 
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -376,11 +376,12 @@ def main(args):
             # if not torch.isnan(loss):
             opt.zero_grad()
             scaler.scale(loss).backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-            for param in model.parameters():
-                if param.grad is not None:
-                    torch.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad) # this is interesting
             scaler.unscale_(opt)
+            # for param in model.parameters():
+            #     if param.grad is not None:
+            #         torch.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad) # this is interesting
+            if args.max_grad_norm > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             scaler.step(opt)
             scaler.update()
             # loss.backward()
@@ -573,7 +574,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-scale", action="store_true", default=False)
     parser.add_argument("--wo-norm", action="store_true", default=False)
     parser.add_argument("--use-scale-residual", action="store_true", default=False)
-    parser.add_argument("--linear-act", type=str, default=None)
+    parser.add_argument("--linear-act", type=str, default="silu")
     parser.add_argument("--attn-type", type=str, default="normal")
     parser.add_argument("--num-register", type=int, default=0)
     parser.add_argument("--final-conv", action="store_true", default=False)

@@ -63,7 +63,7 @@ def main(args):
     model, diffusion = create_model_and_diffusion(args)
     model.to(device=device)
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
-    ckpt = torch.load(args.ckpt)
+    ckpt = torch.load(args.ckpt, map_location=torch.device(f'cuda:{device}'))
     print("Finish loading model")
     # loading weights from ddp in single gpu
     if not args.ema:
