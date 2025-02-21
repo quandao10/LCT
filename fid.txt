@@ -365,3 +365,10 @@ Epoch = 0000625, FID = 6.247831522870513, cfg_scale = 1.0
 Epoch = 0000650, FID = 5.950325817409805, cfg_scale = 1.0
 Epoch = 0000675, FID = 5.832437521548229, cfg_scale = 1.0
 Epoch = 0000700, FID = 5.773543875453157, cfg_scale = 1.0
+
+
+DiT B/2 relu fp16 + 4 register
+Epoch = 0000625, FID = 7.191527879322422, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.058458977965103, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.80372402276879, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.727817899022796, cfg_scale = 1.0

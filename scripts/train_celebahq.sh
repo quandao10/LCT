@@ -41,8 +41,8 @@
         
 
 
-CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10124 --nproc_per_node=1 train_cm_latent.py \
-        --exp 700ep_B_relu_eps1e-4_num_register_4  \
+CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10124 --nproc_per_node=1 train_cm_latent.py \
+        --exp 700ep_B_relu_eps1e-4_num_register_8  \
         --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -70,13 +70,13 @@ CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10124 --nproc
         --model-type DiT-B/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
-        --normalize-matrix celeb256_stat.npy \
+        --normalize-matrix statistic/celeb256_stat.npy \
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
         --linear-act relu \
         --attn-type normal \
-        --num-register 4 \
+        --num-register 8 \
 #         # --resume \
 
 
