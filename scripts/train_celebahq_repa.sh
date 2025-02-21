@@ -9,8 +9,8 @@ DENOISING_TASK_RATE=0.5 # e.g., 0.25 --> definition of denoising task is the fir
 
 
 
-CUDA_VISIBLE_DEVICES=5 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent_repa.py \
-        --exp 700ep_B_relu_eps1e-4_repa \
+CUDA_VISIBLE_DEVICES=6 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10134 --nproc_per_node=1 train_cm_latent_repa.py \
+        --exp 700ep_B_relu_eps1e-4_repa_register_4 \
         --datadir /common/users/qd66/repa/latent_celeb256  \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -53,4 +53,5 @@ CUDA_VISIBLE_DEVICES=5 torchrun --nnodes=1 --nproc_per_node=1 train_cm_latent_re
         --repa-mapper repa \
         --mar-mapper-num-res-blocks 0 \
         --use-repa \
+        --num-register 4 \
         

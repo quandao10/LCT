@@ -971,9 +971,9 @@ class DiT(nn.Module):
             if self.use_repa and self.z_depth==(idx + 1):
                 # Project features using corresponding projector
                 if self.repa_mapper=="repa":    
-                    projected_feat = self.projectors(x[:, :self.x_embedder.num_patches, :].reshape(-1, D)).reshape(N, T, -1)
+                    projected_feat = self.projectors(x[:, :self.x_embedder.num_patches, :].reshape(-1, D)).reshape(N, self.x_embedder.num_patches, -1)
                 elif self.repa_mapper=="mar":
-                    projected_feat = self.projectors(x[:, :self.x_embedder.num_patches, :].reshape(-1, D), t.repeat_interleave(T, dim=0)).reshape(N, T, -1)
+                    projected_feat = self.projectors(x[:, :self.x_embedder.num_patches, :].reshape(-1, D), t.repeat_interleave(T, dim=0)).reshape(N, self.x_embedder.num_patches, -1)
         # remove register when time comes.
         if self.num_register > 0:
             x = x[:, :self.x_embedder.num_patches, :]

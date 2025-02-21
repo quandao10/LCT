@@ -23,6 +23,7 @@ import PIL.Image
 import torch
 from tqdm import tqdm
 from dataset_preprocessing.encoders import StabilityVAEEncoder
+from multiprocessing import Pool, cpu_count
 
 #----------------------------------------------------------------------------
 
@@ -257,6 +258,153 @@ def cmdline():
         raise click.ClickException('Distributed execution is not supported.')
 
 #----------------------------------------------------------------------------
+
+def process_image(args):
+    idx, image, transform_image, dataset_attrs = args
+    idx_str = f'{idx:08d}'
+    archive_fname = f'{idx_str[:5]}/img{idx_str}.png'
+
+    # Apply crop and resize
+    img = transform_image(image.img)
+    if img is None:
+        return None
+    # Error check to require uniform image attributes
+    assert img.ndim == 3
+    cur_image_attrs = {'width': img.shape[1], 'height': img.shape[0]}
+    if dataset_attrs is not None and dataset_attrs != cur_image_attrs:
+        return None
+
+    # Save the image as an uncompressed PNG
+    img = PIL.Image.fromarray(img)
+    image_bits = io.BytesIO()
+    img.save(image_bits, format='png', compress_level=0, optimize=False)
+    return {
+        'idx': idx,
+        'archive_fname': archive_fname,
+        'image_bits': image_bits.getvalue(),
+        'label': image.label,
+        'attrs': cur_image_attrs
+    }
+    
+@cmdline.command()
+@click.option('--source',     help='Input directory or archive name', metavar='PATH',   type=str, required=True)
+@click.option('--dest',       help='Output directory or archive name', metavar='PATH',  type=str, required=True)
+@click.option('--max-images', help='Maximum number of images to output', metavar='INT', type=int)
+@click.option('--transform',  help='Input crop/resize mode', metavar='MODE',            type=click.Choice(['center-crop', 'center-crop-wide', 'center-crop-dhariwal']))
+@click.option('--resolution', help='Output resolution (e.g., 512x512)', metavar='WxH',  type=parse_tuple)
+
+def convert_v2(
+    source: str,
+    dest: str,
+    max_images: Optional[int],
+    transform: Optional[str],
+    resolution: Optional[Tuple[int, int]]
+):
+    """Convert an image dataset into archive format for training.
+
+    Specifying the input images:
+
+    \b
+    --source path/                      Recursively load all images from path/
+    --source dataset.zip                Load all images from dataset.zip
+
+    Specifying the output format and path:
+
+    \b
+    --dest /path/to/dir                 Save output files under /path/to/dir
+    --dest /path/to/dataset.zip         Save output files into /path/to/dataset.zip
+
+    The output dataset format can be either an image folder or an uncompressed zip archive.
+    Zip archives makes it easier to move datasets around file servers and clusters, and may
+    offer better training performance on network file systems.
+
+    Images within the dataset archive will be stored as uncompressed PNG.
+    Uncompresed PNGs can be efficiently decoded in the training loop.
+
+    Class labels are stored in a file called 'dataset.json' that is stored at the
+    dataset root folder.  This file has the following structure:
+
+    \b
+    {
+        "labels": [
+            ["00000/img00000000.png",6],
+            ["00000/img00000001.png",9],
+            ... repeated for every image in the datase
+            ["00049/img00049999.png",1]
+        ]
+    }
+
+    If the 'dataset.json' file cannot be found, class labels are determined from
+    top-level directory names.
+
+    Image scale/crop and resolution requirements:
+
+    Output images must be square-shaped and they must all have the same power-of-two
+    dimensions.
+
+    To scale arbitrary input image size to a specific width and height, use the
+    --resolution option.  Output resolution will be either the original
+    input resolution (if resolution was not specified) or the one specified with
+    --resolution option.
+
+    The --transform=center-crop-dhariwal selects a crop/rescale mode that is intended
+    to exactly match with results obtained for ImageNet in common diffusion model literature:
+
+    \b
+    python dataset_tool.py convert --source=downloads/imagenet/ILSVRC/Data/CLS-LOC/train \\
+        --dest=datasets/img64.zip --resolution=64x64 --transform=center-crop-dhariwal
+    """
+    PIL.Image.init()
+    if dest == '':
+        raise click.ClickException('--dest output filename or directory must not be an empty string')
+
+    num_files, input_iter = open_dataset(source, max_images=max_images)
+    archive_root_dir, save_bytes, close_dest = open_dest(dest)
+    transform_image = make_transform(transform, *resolution if resolution is not None else (None, None))
+    
+    # Convert iterator to list for parallel processing
+    images = list(input_iter)
+    
+    # Process first image to get dataset attributes
+    first_result = process_image((0, images[0], transform_image, None))
+    if first_result is None:
+        raise click.ClickException('Failed to process first image')
+    dataset_attrs = first_result['attrs']
+    
+    # Validate dataset attributes
+    width = dataset_attrs['width']
+    height = dataset_attrs['height']
+    if width != height:
+        raise click.ClickException(f'Image dimensions after scale and crop are required to be square. Got {width}x{height}')
+    if width != 2 ** int(np.floor(np.log2(width))):
+        raise click.ClickException('Image width/height after scale and crop are required to be power-of-two')
+
+    # Prepare arguments for parallel processing
+    args = [(i, img, transform_image, dataset_attrs) for i, img in enumerate(images[1:], start=1)]
+    
+    # Process images in parallel
+    n_workers = cpu_count()
+    with Pool(n_workers) as pool:
+        results = [first_result]  # Include first image result
+        results.extend(filter(None, tqdm(
+            pool.imap(process_image, args),
+            total=len(args),
+            desc='Processing images'
+        )))
+
+    # Save processed images and collect labels
+    labels = []
+    for result in results:
+        save_bytes(
+            os.path.join(archive_root_dir, result['archive_fname']), 
+            result['image_bits']
+        )
+        labels.append([result['archive_fname'], result['label']] if result['label'] is not None else None)
+
+    # Save metadata
+    metadata = {'labels': labels if all(x is not None for x in labels) else None}
+    save_bytes(os.path.join(archive_root_dir, 'dataset.json'), json.dumps(metadata))
+    close_dest()
 
 @cmdline.command()
 @click.option('--source',     help='Input directory or archive name', metavar='PATH',   type=str, required=True)
