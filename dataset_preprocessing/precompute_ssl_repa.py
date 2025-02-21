@@ -16,7 +16,7 @@ import os
 from datasets_prep import get_dataset
 from tqdm import tqdm
 from diffusers.models import AutoencoderKL
-from dataset_preprocessing.repa_utils import preprocess_raw_image, load_encoders
+from repa.repa_utils import preprocess_raw_image, load_encoders
 from PIL import Image
 from torchvision.utils import save_image
 import numpy as np
@@ -208,12 +208,10 @@ def main(args):
     if args.is_ImageNet:
         # create all subfolders in the output dir same as args.image_dir
         subfolders = [f.path for f in os.scandir(args.image_dir) if f.is_dir()]
-        import ipdb; ipdb.set_trace()
         for subfolder in subfolders:
             os.makedirs(os.path.join(args.output_dir, subfolder), exist_ok=True)
 
     for i, (vae_image, repa_image, image_name) in enumerate(tqdm(loader)):
-        import ipdb; ipdb.set_trace()
         # VAE latent
         if args.run_VAE:
             vae_image = vae_image.to(device)

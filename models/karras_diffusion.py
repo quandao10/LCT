@@ -65,7 +65,10 @@ class KarrasDenoiser:
         self.p_mean = -1.1
         self.p_std = 2.0
         self.c = th.tensor(3.45)
-
+        self.use_repa = args.use_repa
+        self.repa_timesteps = args.repa_timesteps
+        
+        
     def get_snr(self, sigmas):
         return sigmas**-2
     
@@ -150,8 +153,7 @@ class KarrasDenoiser:
         teacher_model=None,
         teacher_diffusion=None,
         noise=None,
-        adaptive=None,
-        model_umt=None,
+        ssl_feat_truth=None,
     ):
         if model_kwargs is None:
             model_kwargs = {}
@@ -161,13 +163,16 @@ class KarrasDenoiser:
         dims = x_start.ndim
 
         def denoise_fn(x, t):
-            return self.denoise(model, x, t, **model_kwargs)[1]
+            model_output, denoised, ssl_feat_pred = self.denoise(
+                model, x, t, **model_kwargs
+            )
+            return denoised, ssl_feat_pred
+
 
         if target_model:
             @th.no_grad()
             def target_denoise_fn(x, t):
                 return self.denoise(target_model, x, t, **model_kwargs)[1]
-
         else:
             raise NotImplementedError("Must have a target model")
 
@@ -208,7 +213,6 @@ class KarrasDenoiser:
 
             return samples
 
-        ### Fix here. Define a categorical distribution
         if self.args.noise_sampler == "ict":
             indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0],)).to(x_start.device)
         else:
@@ -233,8 +237,8 @@ class KarrasDenoiser:
         x_t = x_start + noise * append_dims(t, dims)
 
         dropout_state = th.get_rng_state()
-        distiller = denoise_fn(x_t, t)
-
+        distiller, ssl_feat_pred = denoise_fn(x_t, t)
+                
         if teacher_model is None:
             x_t2 = euler_solver(x_t, t, t2, x_start).detach()
         else:
@@ -251,11 +255,6 @@ class KarrasDenoiser:
         diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
         diff_loss = mean_flat((distiller - x_start)**2)[diff_indices]*diff_weights
         
-        # if th.isnan(diff_loss).any():
-        #     print(th.isnan(mean_flat((distiller - x_start)**2)[diff_indices]).any())
-        #     print(th.isnan(diff_weights).any())
-        #     exit()
-
         # compute consistency losses
         if self.loss_norm == "l1":
             diffs = th.abs(distiller - distiller_target)
@@ -304,21 +303,40 @@ class KarrasDenoiser:
                 )
                 * weights
             )
-        elif adaptive is not None:
-            diffs = th.abs(distiller - distiller_target).flatten(1, -1)
-            loss = adaptive.lossfun(diffs)
         else:
             raise ValueError(f"Unknown loss norm {self.loss_norm}")
-        if model_umt is not None:
-            rescaled_t = 1000 * 0.25 * th.log(t + 1e-44)
-            logvar = model_umt(rescaled_t)
-            loss = loss / logvar.exp() + logvar
+        
+        
+        # REPA loss
+        repa_loss = th.tensor(0)
+        if self.use_repa and (ssl_feat_truth is not None):
+            bound = int(num_scales * (1 - self.args.denoising_task_rate))
+            z = th.nn.functional.normalize(ssl_feat_truth, dim=-1)
+            z_tilde = th.nn.functional.normalize(ssl_feat_pred, dim=-1)
+            numerator = z * z_tilde
+            numerator = th.nn.functional.relu(1 - self.args.repa_relu_margin - numerator.sum(dim=-1))
+            repa_loss = mean_flat(numerator)
+            
+            # REPA mask
+            if self.args.repa_timesteps == "full":
+                repa_mask = th.ones_like(indices)
+            elif self.args.repa_timesteps == "denoising":
+                repa_mask = indices >= bound 
+            elif self.args.repa_timesteps == "generation":
+                repa_mask = indices < bound
+            else:
+                raise NotImplementedError()
+
+            if repa_mask.sum() == 0:
+                repa_loss = repa_loss - repa_loss.detach() # NOTE: avoid unused param when computing repa but not backward any grad.
+            else:
+                repa_loss = repa_loss[repa_mask]
 
         terms = {}
         terms["loss"] = loss
         terms["diff_loss"] = diff_loss
+        terms["repa_loss"] = repa_loss
         terms["t"] = t
-
         return terms
 
 
@@ -328,9 +346,9 @@ class KarrasDenoiser:
             for x in self.get_scalings_for_boundary_condition(sigmas)
         ]
         rescaled_t = 1000 * 0.25 * th.log(sigmas + 1e-44)
-        model_output = model(c_in * x_t, rescaled_t, **model_kwargs)
+        model_output, ssl_feat_pred = model(c_in * x_t, rescaled_t, **model_kwargs)
         denoised = c_out * model_output + c_skip * x_t
-        return model_output, denoised
+        return model_output, denoised, ssl_feat_pred
 
 
 def karras_sample(
@@ -382,7 +400,7 @@ def karras_sample(
         sampler_args = {}
 
     def denoiser(x_t, sigma):
-        _, denoised = diffusion.denoise(model, x_t, sigma, **model_kwargs)
+        _, denoised, _ = diffusion.denoise(model, x_t, sigma, **model_kwargs)
         return denoised
 
     if sampler not in ["heun", "dpm", "multistep"] :

@@ -35,9 +35,19 @@ from models.network_karras import GroupNorm, Linear, Conv2d
 #     flash_attn_kvpacked_func,
 #     flash_attn_qkvpacked_func,
 # )
+from repa.repa_mapping import MAR_mapping
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
+def build_mlp(hidden_size, projector_dim, z_dim):
+    return nn.Sequential(
+                nn.Linear(hidden_size, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, z_dim),
+            )
 
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
@@ -796,6 +806,12 @@ class DiT(nn.Module):
         attn_type="normal",
         num_register=0,
         final_conv=False,
+        use_repa=False,
+        projector_dim=None,
+        z_depth=None,
+        z_dim=None,
+        repa_mapper=None,
+        mar_mapper_num_res_blocks=2,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -855,6 +871,28 @@ class DiT(nn.Module):
                 GroupNorm(num_channels=hidden_size//2),
                 # self.out_norm = nn.LayerNorm(normalized_shape=[hidden_size//2, input_size, input_size])
                 Conv2d(in_channels=hidden_size//2, out_channels=self.out_channels, kernel=3, **init_zero))
+            
+            
+        ############## REPA ##############
+        self.use_repa = use_repa
+        self.repa_mapper = repa_mapper
+        if self.use_repa:
+            self.z_depth = z_depth
+            print(f"\033[35mz depth mapping: {self.z_depth}\033[0m")
+            print(f"\033[35mrepa mapper: {self.repa_mapper}\033[0m")
+            print(f"\033[35mprojector dim: {projector_dim}\033[0m")
+            
+            if self.repa_mapper=="mar":
+                self.projectors = MAR_mapping(
+                        in_channels=hidden_size,  # DiT
+                        model_channels=hidden_size,
+                        out_channels=z_dim,  # SSL
+                        num_res_blocks=mar_mapper_num_res_blocks,
+                        grad_checkpointing=False,)
+            elif self.repa_mapper=="repa":
+                self.projectors = build_mlp(hidden_size, projector_dim, z_dim)
+            
+        ############## REPA ##############
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -921,17 +959,22 @@ class DiT(nn.Module):
         x = self.x_embedder(x)
         if self.num_register > 0:
             x = torch.cat([x, self.register_tokens.expand(x.shape[0], -1, -1)], dim=1)
-        x = x + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
+        x = x + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2 + num_register
+        N, T, D = x.shape #FIX: repa might need to change for register
         t = self.t_embedder(t)                   # (N, D)
         y = self.y_embedder(y, self.training)    # (N, D)
         c = t + y                                # (N, D)
-        if self.attn_type in ["flash", "diffattn"]:
-            with torch.cuda.amp.autocast(dtype=torch.bfloat16):
-                for idx, block in enumerate(self.blocks):
-                    x = block(x, c)
-        else:
-            for idx, block in enumerate(self.blocks):
-                x = block(x, c)
+        
+        projected_feat = None
+        for idx, block in enumerate(self.blocks):
+            x = block(x, c)
+            if self.use_repa and self.z_depth==(idx + 1):
+                # Project features using corresponding projector
+                if self.repa_mapper=="repa":    
+                    projected_feat = self.projectors(x[:, :self.x_embedder.num_patches, :].reshape(-1, D)).reshape(N, T, -1)
+                elif self.repa_mapper=="mar":
+                    projected_feat = self.projectors(x[:, :self.x_embedder.num_patches, :].reshape(-1, D), t.repeat_interleave(T, dim=0)).reshape(N, T, -1)
+        # remove register when time comes.
         if self.num_register > 0:
             x = x[:, :self.x_embedder.num_patches, :]
         if not self.final_conv:
@@ -942,7 +985,7 @@ class DiT(nn.Module):
             x = x.reshape(shape=(x.shape[0], h, w, -1)).permute(0, 3, 1, 2)
             x = self.final_layer(x, c)
             x = self.output(x)
-        return x
+        return x, projected_feat
 
     def forward_with_cfg(self, x, t, cfg_scale, y=None):
         """

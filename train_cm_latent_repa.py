@@ -26,7 +26,7 @@ from time import time
 import argparse
 import logging
 import os
-from datasets_prep import get_dataset
+from datasets_prep import get_repa_dataset
 from tqdm import tqdm
 from models.script_util import (
     create_model_and_diffusion,
@@ -37,12 +37,11 @@ from diffusers.models import AutoencoderKL
 from models.network_dit import DiT_models
 from models.network_udit import UDiT_models
 from models.network_edm2 import EDM2_models
-import robust_loss_pytorch
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
-from lion_pytorch import Lion
 from optimizer.soap import SOAP
 import stat
+
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -200,11 +199,10 @@ def main(args):
     target_model.train()
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
-    
-    
     opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
     # opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=1e-4)
-    # define scheduler
+    
+    
     if args.model_ckpt and os.path.exists(args.model_ckpt):
         checkpoint = torch.load(args.model_ckpt, map_location=torch.device(f'cuda:{device}'))
         epoch = init_epoch = checkpoint["epoch"]
@@ -233,7 +231,7 @@ def main(args):
     requires_grad(ema, False)
     ema.eval()
 
-    dataset = get_dataset(args)
+    dataset = get_repa_dataset(args)
     if rank == 0:
         logger.info(f"Dataset contains {args.num_classes} classes")
     sampler = DistributedSampler(
@@ -282,6 +280,7 @@ def main(args):
     running_loss = 0
     running_cm_loss = 0
     running_diff_loss = 0
+    running_repa_loss = 0
     start_time = time()
     use_label = True if "imagenet" in args.dataset else False
     use_normalize = args.normalize_matrix is not None
@@ -300,10 +299,15 @@ def main(args):
         
     scaler = torch.cuda.amp.GradScaler()
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
+    
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
-        for i, (x, y) in enumerate(tqdm(loader)):
+        for i, (x, ssl_feat_truth, y) in enumerate(tqdm(loader)):
+            if args.use_repa:
+                ssl_feat_truth = ssl_feat_truth.to(device)
+            else:
+                ssl_feat_truth = None
             x = x.to(device)
             if use_normalize:
                 x = x/0.18215
@@ -326,7 +330,8 @@ def main(args):
                                                     num_scales,
                                                     target_model=target_model,
                                                     model_kwargs=model_kwargs,
-                                                    noise=n)
+                                                    noise=n,
+                                                    ssl_feat_truth=ssl_feat_truth)
             # CALCULATE LOSS FUNC HERE
             cm_loss = losses["loss"].mean()
             # check diff loss
@@ -339,6 +344,13 @@ def main(args):
             else:
                 loss = cm_loss
                 diff_loss = torch.tensor(0)
+            # check repa loss
+            if args.use_repa:
+                repa_loss = losses["repa_loss"].mean()
+                loss += args.repa_lamb * repa_loss 
+            else:
+                repa_loss = torch.tensor(0) 
+            
             after_forward = torch.cuda.memory_allocated(device)
             
             
@@ -357,6 +369,7 @@ def main(args):
             running_loss += loss.item()
             running_cm_loss += cm_loss.item()
             running_diff_loss += diff_loss.item()
+            running_repa_loss += repa_loss.item()
             
             after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
@@ -378,19 +391,22 @@ def main(args):
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
                 avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
                 avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
+                avg_repa_loss = torch.tensor(running_repa_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f} "
+                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, Repa Loss: {avg_repa_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
                     f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
                     f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
                     f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
+                    # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
                 # Reset monitoring variables:
                 running_loss = 0
                 running_cm_loss = 0
                 running_diff_loss = 0
+                running_repa_loss = 0
                 log_steps = 0
                 start_time = time()
 
@@ -600,13 +616,11 @@ if __name__ == "__main__":
     
     ###### REPA ######
     parser.add_argument("--use-repa", action="store_true", default=False)
-    parser.add_argument("--repa-enc-info", type=str, default="dinov2-vit-b;4", help="Semicolon-separated encoder info. Format: 'encoder1;depth1;encoder2;depth2;...'")
+    parser.add_argument("--repa-enc-info", type=str, default="4:dinov2-vit-b", help="Semicolon-separated encoder info. Format: 'encoder1;depth1;encoder2;depth2;...'")
     parser.add_argument("--projector-dim", type=int, default=2048)
-    parser.add_argument("--encoder-depth", type=int, default=4)
     parser.add_argument("--repa-lamb", type=float, default=0.0)
     parser.add_argument("--z-dims", type=int, default=768)
     parser.add_argument("--repa-timesteps", type=str, default="full")
-    parser.add_argument("--repa-weight-schedule", type=str, default="none")
     parser.add_argument("--repa-relu-margin", type=float, default=0.5)
     parser.add_argument("--denoising-task-rate", type=float, default=0.25)
     parser.add_argument("--repa-mapper", type=str, default="repa")

@@ -41,8 +41,8 @@
         
 
 
-CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10124 --nproc_per_node=1 train_cm_latent.py \
-        --exp 700ep_B_relu_eps1e-4_num_register_8  \
+CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10127 --nproc_per_node=1 train_cm_latent.py \
+        --exp 700ep_B_relu_eps1e-4_refractor  \
         --datadir /research/cbim/vast/qd66/workspace/dataset/ \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -76,7 +76,7 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10124 --nproc
         --c-by-loss-std \
         --linear-act relu \
         --attn-type normal \
-        --num-register 8 \
+        # --num-register 8 \
 #         # --resume \
 
 

@@ -15,7 +15,7 @@ import argparse
 import os
 from tqdm import tqdm
 from diffusers.models import AutoencoderKL
-from dataset_preprocessing.repa_utils import preprocess_raw_image, load_encoders
+from repa.repa_utils import preprocess_raw_image, load_encoders
 from PIL import Image
 from torchvision.utils import save_image
 import numpy as np

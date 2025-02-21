@@ -1,9 +1,9 @@
 set -x
 
-image_dir="/lustre/scratch/client/movian/research/users/khanhdn10/datasets/celeba_256_png"
+image_dir="/research/cbim/vast/qd66/workspace/real_samples/celeba_256/"
 dataset_name="celeba_256"
-output_dir="/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/latent_celeb256"
-SSL_model="clip-vit-L" # clip-vit-L, dinov2-vit-b
+output_dir="/research/cbim/vast/qd66/workspace/dataset/repa/latent_celeb256/"
+SSL_model="dinov2-vit-b" # "clip-vit-L" # clip-vit-L, dinov2-vit-b
 batch_size=128
 num_workers=64
 vae_type="stabilityai/sd-vae-ft-ema"
@@ -12,7 +12,7 @@ run_SSL=True
 is_ImageNet=False
 
 
-python -m preprocessing_celeb.precompute_ssl_repa --image_dir $image_dir \
+python -m dataset_preprocessing.precompute_ssl_repa --image_dir $image_dir \
                                                 --dataset_name $dataset_name \
                                                 --output_dir $output_dir \
                                                 --batch_size $batch_size \

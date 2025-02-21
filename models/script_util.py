@@ -3,7 +3,7 @@ import argparse
 from .karras_diffusion import KarrasDenoiser
 from .unet import UNetModel
 import numpy as np
-from .network_karras import SongUNet, DhariwalUNet, DhariwalUMTNet
+from .network_karras import SongUNet, DhariwalUNet
 from .network_dit import DiT_models
 from .network_edm2 import EDM2_models
 from .network_udit import UDiT_models
@@ -103,6 +103,13 @@ def create_model_and_diffusion(args):
                                              label_dim=args.num_classes,
                                              dropout=args.dropout)
     elif "DiT" in args.model_type and not "U-DiT" in args.model_type:
+        
+        if args.use_repa:
+            depth, _, z_dim = parse_repa_enc_info_v2(args.repa_enc_info)
+        else:
+            depth = None
+            z_dim = None
+        
         model = DiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
                                             num_classes=args.num_classes,
@@ -112,7 +119,13 @@ def create_model_and_diffusion(args):
                                             wo_norm = args.wo_norm,
                                             attn_type = args.attn_type,
                                             num_register = args.num_register,
-                                            final_conv=args.final_conv)
+                                            final_conv=args.final_conv,
+                                            use_repa=args.use_repa,
+                                            z_depth=depth,
+                                            z_dim=z_dim,
+                                            projector_dim=args.projector_dim,
+                                            repa_mapper=args.repa_mapper,
+                                            mar_mapper_num_res_blocks=args.mar_mapper_num_res_blocks)
     elif "U-DiT" in args.model_type:
         model = UDiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
@@ -132,11 +145,6 @@ def create_model_and_diffusion(args):
         loss_norm=args.loss_norm
     )
     return model, diffusion
-
-
-def create_model_umt(args):
-    model_umt = DhariwalUMTNet(logvar_channels=args.num_channels)
-    return model_umt
 
 
 def create_model(
@@ -283,3 +291,41 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError("boolean value expected")
+
+
+def parse_repa_enc_info(repa_enc_info):
+    """Parse the repa encoder info string into dictionaries mapping depths to encoder types
+    and encoder types to their z dimensions.
+    
+    Args:
+        repa_enc_info (str): Format "depth1:encoder1;depth2:encoder2;..."
+        Example: "4:dinov2-vit-b;6:dinov2-vit-b" means use dinov2-vit-b at depths 4 and 6
+        
+    Returns:
+        depth_to_encoder (dict): Maps depth to encoder_type, e.g. {4: "dinov2-vit-b", 6: "dinov2-vit-b"}
+        encoder_to_z_dim (dict): Maps encoder_type to z_dim, e.g. {"dinov2-vit-b": 768}
+    """
+    # Parse encoder info into dictionary {depth: encoder_type}
+    depth_to_encoder = {}
+    for part in repa_enc_info.split(';'):
+        depth, enc_type = part.split(':')
+        depth_to_encoder[int(depth)] = enc_type
+    
+    # Define z dimensions for each encoder type
+    encoder_to_z_dim = {
+        "dinov2-vit-b": 768,
+        "clip-vit-L": 1024,
+        # Add other encoder types as needed
+    }
+    
+    return depth_to_encoder, encoder_to_z_dim
+
+def parse_repa_enc_info_v2(repa_enc_info):
+    depth, enc_type = repa_enc_info.split(':')
+    # Define z dimensions for each encoder type
+    encoder_to_z_dim = {
+        "dinov2-vit-b": 768,
+        "clip-vit-L": 1024,
+        # Add other encoder types as needed
+    }
+    return int(depth), enc_type, encoder_to_z_dim[enc_type]
