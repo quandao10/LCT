@@ -373,14 +373,26 @@ Epoch = 0000650, FID = 7.058458977965103, cfg_scale = 1.0
 Epoch = 0000675, FID = 6.80372402276879, cfg_scale = 1.0
 Epoch = 0000700, FID = 6.727817899022796, cfg_scale = 1.0
 
+DiT B/2 relu fp16 + 8 register
+Epoch = 0000625, FID = 7.189233058039804, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.8309998065605555, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.849624175935162, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.958555959883171, cfg_scale = 1.0
 
-DiT B/2 relu fp16 + 4 register + REPA
+DiT B/2 relu fp16 + 2 register
+Epoch = 0000625, FID = 6.88145291748981, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.779516417690161, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.654378302734585, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.627036357244236, cfg_scale = 1.0
 
+DiT L/2 relu fp16 + REPA
+Epoch = 0000625, FID = 6.747904344329697, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.6993746394729214, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.666708358452752, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.617028791635306, cfg_scale = 1.0
 
-
-DiT B/2 relu fp16 + 4 register + REPA (exclude register)
-
-
-
-DiT B/2 relu fp16 + REPA
-
+DiT L/2 relu fp16 + REPA + 4 register
+Epoch = 0000625, FID = 6.680389505964655, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.722534770724906, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.738071890331412, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.503895243922557, cfg_scale = 1.0

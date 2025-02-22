@@ -96,9 +96,9 @@ class ImageNet_dataset(torch.utils.data.Dataset):
     def __init__(self, base_dir, use_labels=True, repa_enc_info=None):
         # VAE
         self.base_dir = base_dir
-        self.vae_path = os.path.join(base_dir, "vae-sdvae-ft-ema")
+        self.vae_path = os.path.join(base_dir, "vae")
         self.use_labels = use_labels
-        with open(os.path.join(self.vae_path, 'imagenet25_class_to_images.json'), 'r') as f:
+        with open("/research/cbim/vast/qd66/workspace/LCT/statistic/imagenet25_class_to_images.json") as f:
             self.items = json.load(f)
         self.class_indices = list(self.items.keys())
         self.num_classes = len(self.class_indices)
@@ -117,18 +117,12 @@ class ImageNet_dataset(torch.utils.data.Dataset):
         self.repa_enc_info = repa_enc_info
     
         # Parse encoder info into dictionaries
-        depth_to_encoder, encoder_to_z_dim = parse_repa_enc_info(repa_enc_info)
-        
-        # Get unique encoder types
-        self.encoders = list(set(depth_to_encoder.values()))
+        depth, enc, z_dim = parse_repa_enc_info_v2(repa_enc_info)
         
         # Create SSL feature directories mapping {encoder_type: directory}
-        ssl_25_dir = "/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/real_imagenet_256/imagenet25"
-        self.ssl_feat_dirs = {
-            enc: os.path.join(ssl_25_dir, f"ssl_feat_{enc}") 
-            for enc in self.encoders
-        }
-        # import ipdb; ipdb.set_trace()
+        self.ssl_feat_dir = os.path.join(self.base_dir, f"ssl_feat_{enc}") 
+        
+
     def __len__(self):
         return len(self.list_of_files)
     
@@ -139,23 +133,16 @@ class ImageNet_dataset(torch.utils.data.Dataset):
         label = self.classidx_to_label[classidx]
         label = torch.tensor(int(label))
         npy_data = np.load(os.path.join(self.vae_path, npy_file))
-        mean, std = np.array_split(npy_data, indices_or_sections=2, axis=0)
-        sample = mean + np.random.randn(*mean.shape) * std
-        sample = torch.from_numpy(sample)
-        # sample = sample.float()
-
+        mean, std = np.array_split(npy_data, indices_or_sections=2, axis=0) 
+        mean, std = torch.from_numpy(mean), torch.from_numpy(std)   
+        sample = mean + torch.randn_like(mean) * std
         # SSL features
         # Load SSL features and organize by encoder type
         # img00265542.png.npy
         ssl_file = ("img" + npy_file.split("-")[-1]).replace(".npy", ".png.npy")
-        ssl_feats = {
-            enc: np.load(os.path.join(self.ssl_feat_dirs[enc], ssl_file))
-            for enc in self.encoders
-        }
-        
-        # Convert numpy arrays to tensors
-        ssl_feats = {k: torch.from_numpy(v) for k, v in ssl_feats.items()}
-        return sample, ssl_feats, label
+        ssl_feat = np.load(os.path.join(self.ssl_feat_dir, ssl_file))
+        ssl_feat = torch.from_numpy(ssl_feat)
+        return sample, ssl_feat, label
 
 def get_repa_dataset(args):   
     if args.dataset == "subset_imagenet_256":

@@ -115,7 +115,7 @@ class REPADataset(Dataset):
         self.run_SSL = run_SSL
 
         # json_path = "preprocessing_imagenet/imagenet25_class_to_images.json"
-        json_path = os.path.join(path, "/lustre/scratch/client/movian/research/users/anhnd72/datasets/LCT/real_imagenet_256/vae-sdvae-ft-ema/imagenet25_class_to_images.json")
+        json_path = "/common/users/qd66/dataset/real_imagenet_256/vae-sdvae-ft-ema-subset/imagenet25_class_to_images.json"
         self.image_dir = path
         self.class_to_images = json.load(open(json_path, "r"))
         print(f"\033[33mFound {len(self.class_to_images)} classes\033[0m")

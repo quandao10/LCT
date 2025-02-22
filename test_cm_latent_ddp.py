@@ -22,11 +22,8 @@ from models.script_util import (
 )
 from models.karras_diffusion import karras_sample
 import numpy as np
-from datasets_prep import get_dataset
-from torch.utils.data import DataLoader
-from models.nn import mean_flat, append_dims, append_zero
 from tqdm import tqdm
-from models.karras_diffusion import get_sigmas_karras
+
 
 def main(args):
     torch.backends.cuda.matmul.allow_tf32 = True  # True: fast but may lead to some small numerical differences
@@ -67,9 +64,9 @@ def main(args):
     print("Finish loading model")
     # loading weights from ddp in single gpu
     if not args.ema:
-        model.load_state_dict(ckpt["model"], strict=True)
+        model.load_state_dict(ckpt["model"], strict=False)
     else:
-        model.load_state_dict(ckpt["ema"], strict=True)
+        model.load_state_dict(ckpt["ema"], strict=False)
     model.eval()
     
     del ckpt
@@ -172,9 +169,8 @@ def main(args):
                 for j, x in enumerate(fake_image):
                     index = j * dist.get_world_size() + rank + total
                     Image.fromarray(x).save(f"{save_dir}/{index}.jpg")
-                # if rank == 0:
-                #     print("generating batch ", i)
                 total += global_batch_size
+        
         # make sure all processes have finished
         dist.barrier()
         if rank == 0:
@@ -193,59 +189,6 @@ def main(args):
         torchvision.utils.save_image(fake_image, f'{args.exp}_{args.epoch_id}{ema}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
         dist.barrier()
         dist.destroy_process_group()
-        
-    # if args.test_interval:
-    #     test_dir = "./test_x0"
-    #     os.makedirs(test_dir, exist_ok=True)
-    #     dataset = get_dataset(args)
-    #     loader = DataLoader(
-    #         dataset,
-    #         batch_size=4,
-    #         shuffle=False,
-    #         num_workers=4,
-    #         pin_memory=True,
-    #         drop_last=True
-    #     )
-    #     args.rho = 7
-    #     num_scales = 160
-    #     image, _ = next(iter(loader))
-    #     image = image.to(device)
-    #     if use_normalize:
-    #         image = image/0.18215
-    #         image = (image - mean)/std
-    #     dims = image.ndim
-    #     noise = torch.randn_like(image)
-    #     image_last = image + noise * append_dims(0.002*torch.ones((4,), device=device), dims)
-    #     print("#####################")
-    #     print(get_sigmas_karras(num_scales, args.sigma_min, args.sigma_max, args.rho))
-    #     print("#####################")
-    #     if use_normalize:
-    #         ori_image = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in image]
-    #         image_last = [vae.decode(x.unsqueeze(0)*std + mean).sample for x in image_last]
-    #     else:
-    #         ori_image = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in image]
-    #         image_last = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in image_last]
-    #     ori_image = torch.cat(ori_image)
-    #     image_last = torch.cat(image_last)
-    #     torchvision.utils.save_image(ori_image, f"{test_dir}/x0_t=original.png", normalize=True, value_range=(-1, 1))
-    #     torchvision.utils.save_image(image_last, f"{test_dir}/x0_t=last.png", normalize=True, value_range=(-1, 1))
-    #     # indices = torch.randint(0, num_scales - 1, (image.shape[0],), device=image.device)
-    #     for ind in tqdm(range(159, -1, -10)):
-    #         indices = ind*torch.ones(size=(4, ), device=device)
-    #         t = args.sigma_max ** (1 / args.rho) + indices / (num_scales - 1) * (
-    #             args.sigma_min ** (1 / args.rho) - args.sigma_max ** (1 / args.rho)
-    #         )
-    #         t = t**args.rho
-    #         x_t = image + noise * append_dims(t, dims)
-    #         model_kwargs = dict(y=None)
-    #         _, x0 = diffusion.denoise(model, x_t, t, **model_kwargs)
-    #         # x0 = x0.clamp(-1, 1)
-    #         if use_normalize:
-    #             x0 = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in x0]
-    #         else:
-    #             x0 = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in x0]
-    #         x0 = torch.cat(x0)
-    #         torchvision.utils.save_image(x0, f"{test_dir}/x0_t={ind}.png", normalize=True, value_range=(-1, 1))
 
 
 if __name__ == "__main__":
@@ -313,6 +256,18 @@ if __name__ == "__main__":
     parser.add_argument("--compute-fid", action="store_true", default=False, help="whether or not compute FID")
     parser.add_argument("--real-img-dir", default="./pytorch_fid/cifar10_train_stat.npy", help="directory to real images for FID computation")
     parser.add_argument("--output-log", type=str, default="fid.txt")
+    
+    ###### REPA ######
+    parser.add_argument("--use-repa", action="store_true", default=False)
+    parser.add_argument("--repa-enc-info", type=str, default="4:dinov2-vit-b", help="Semicolon-separated encoder info. Format: 'encoder1;depth1;encoder2;depth2;...'")
+    parser.add_argument("--projector-dim", type=int, default=2048)
+    parser.add_argument("--repa-lamb", type=float, default=0.0)
+    parser.add_argument("--z-dims", type=int, default=768)
+    parser.add_argument("--repa-timesteps", type=str, default="full")
+    parser.add_argument("--repa-relu-margin", type=float, default=0.5)
+    parser.add_argument("--denoising-task-rate", type=float, default=0.25)
+    parser.add_argument("--repa-mapper", type=str, default="repa")
+    parser.add_argument("--mar-mapper-num-res-blocks", type=int, default=2)
     
     args = parser.parse_args()
     main(args)

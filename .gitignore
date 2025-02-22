@@ -11,3 +11,4 @@ dataset/
 *.jsonl
 logs/
 notebook/
+*.json
