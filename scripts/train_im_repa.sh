@@ -1,5 +1,5 @@
-CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10138 --nproc_per_node=1 train_cm_latent_repa.py \
-        --exp im_700ep_B_relu_eps1e-4_repa_register_4 \
+CUDA_VISIBLE_DEVICES=5 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10202 --nproc_per_node=1 train_cm_latent_repa.py \
+        --exp im_700ep_B_relu_eps1e-4_repa_register_2_5repafull_separate \
         --datadir /common/users/qd66/repa/latent_imagenet256  \
         --dataset subset_imagenet_256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -34,12 +34,13 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10138 --nproc
         --linear-act relu \
         --attn-type normal \
         --projector-dim 2048 \
-        --repa-lamb 0.1 \
+        --repa-lamb 5.0 \
         --repa-enc-info 4:dinov2-vit-b \
-        --repa-relu-margin 0.4 \
-        --repa-timesteps generation \
+        --repa-relu-margin 0.0 \
+        --repa-timesteps full \
         --denoising-task-rate 0.5 \
         --repa-mapper repa \
         --mar-mapper-num-res-blocks 0 \
         --use-repa \
         --num-register 2 \
+        --separate-cond \

@@ -9,8 +9,8 @@ DENOISING_TASK_RATE=0.5 # e.g., 0.25 --> definition of denoising task is the fir
 
 
 
-CUDA_VISIBLE_DEVICES=6 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10134 --nproc_per_node=1 train_cm_latent_repa.py \
-        --exp 700ep_B_relu_eps1e-4_repa_register_4 \
+CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10130 --nproc_per_node=2 train_cm_latent_repa.py \
+        --exp 700ep_L_relu_eps1e-4_repa_register_2 \
         --datadir /common/users/qd66/repa/latent_celeb256  \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -25,7 +25,7 @@ CUDA_VISIBLE_DEVICES=6 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10134 --nproc
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((48)) \
+        --global-batch-size $((24*2)) \
         --epochs $((700*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
@@ -34,8 +34,8 @@ CUDA_VISIBLE_DEVICES=6 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10134 --nproc
         --num-res-blocks 4 \
         --resblock-updown \
         --ict \
-        --max-grad-norm 0 \
-        --model-type DiT-B/2 \
+        --max-grad-norm 100 \
+        --model-type DiT-L/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
         --normalize-matrix statistic/celeb256_stat.npy \
@@ -53,5 +53,5 @@ CUDA_VISIBLE_DEVICES=6 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10134 --nproc
         --repa-mapper repa \
         --mar-mapper-num-res-blocks 0 \
         --use-repa \
-        --num-register 4 \
+        --num-register 2 \
         

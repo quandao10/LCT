@@ -122,7 +122,7 @@ def main(args):
     fake_image = run_sampling(args.batch_size, generator)
     fake_image = torch.cat(fake_image)
     ema = "" if not args.ema else "_ema"
-    torchvision.utils.save_image(fake_image, f'{args.epoch_id}_{args.cfg_scale}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
+    torchvision.utils.save_image(fake_image, f'./debug/{args.epoch_id}_{args.cfg_scale}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
     dist.barrier()
     dist.destroy_process_group()
 
@@ -160,6 +160,7 @@ if __name__ == "__main__":
     parser.add_argument("--attn-type", type=str, default="normal")
     parser.add_argument("--num-register", type=int, default=0)
     parser.add_argument("--final-conv", action="store_true", default=False)
+    parser.add_argument("--separate-cond", action="store_true", default=False)
     
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)

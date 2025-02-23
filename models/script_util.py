@@ -123,6 +123,7 @@ def create_model_and_diffusion(args):
                                             use_repa=args.use_repa,
                                             z_depth=depth,
                                             z_dim=z_dim,
+                                            separate_cond=args.separate_cond,
                                             projector_dim=args.projector_dim,
                                             repa_mapper=args.repa_mapper,
                                             mar_mapper_num_res_blocks=args.mar_mapper_num_res_blocks)

@@ -812,6 +812,7 @@ class DiT(nn.Module):
         z_dim=None,
         repa_mapper=None,
         mar_mapper_num_res_blocks=2,
+        separate_cond = False,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -823,6 +824,7 @@ class DiT(nn.Module):
         self.attn_type = attn_type
         self.num_register = num_register
         self.final_conv = final_conv
+        self.separate_cond = separate_cond
         # init for conv
         init = dict(init_mode='kaiming_uniform', init_weight=np.sqrt(1/3), init_bias=np.sqrt(1/3))
         init_zero = dict(init_mode='kaiming_uniform', init_weight=0, init_bias=0)
@@ -849,7 +851,8 @@ class DiT(nn.Module):
         num_patches = self.x_embedder.num_patches
         
         # Will use fixed sin-cos embedding:
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + self.num_register, hidden_size), requires_grad=False)
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + self.num_register, hidden_size), requires_grad=False) if not self.separate_cond \
+            else nn.Parameter(torch.zeros(1, num_patches + self.num_register + 1, hidden_size), requires_grad=False) # additional class dim
         if self.num_register > 0:
             self.register_tokens = nn.Parameter(torch.rand((1, self.num_register, hidden_size)))
 
@@ -905,7 +908,8 @@ class DiT(nn.Module):
         self.apply(_basic_init)
 
         # Initialize (and freeze) pos_embed by sin-cos embedding:
-        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5), cls_token=(self.num_register>0), extra_tokens=self.num_register)
+        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5), cls_token=(self.num_register>0), extra_tokens=self.num_register) if not self.separate_cond \
+            else get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5), cls_token=(self.num_register>0), extra_tokens=self.num_register+1)
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
@@ -956,14 +960,19 @@ class DiT(nn.Module):
         """
         if y is None:
             y = torch.ones(x.size(0), dtype=torch.long, device=x.device) * (self.y_embedder.get_in_channels() - 1)
-        x = self.x_embedder(x)
-        if self.num_register > 0:
-            x = torch.cat([x, self.register_tokens.expand(x.shape[0], -1, -1)], dim=1)
-        x = x + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2 + num_register
-        N, T, D = x.shape #FIX: repa might need to change for register
+        x = self.x_embedder(x)                   # (N, T, D)
         t = self.t_embedder(t)                   # (N, D)
         y = self.y_embedder(y, self.training)    # (N, D)
-        c = t + y                                # (N, D)
+        if self.num_register > 0:
+            x = torch.cat([x, self.register_tokens.expand(x.shape[0], -1, -1)], dim=1) # (N, T+register, D)
+        if self.separate_cond:
+            x = torch.cat([x, y.unsqueeze(1)], dim=1) # (N, T+register+1, D)
+        x = x + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2 + num_register
+        N, T, D = x.shape #FIX: repa might need to change for register
+        if not self.separate_cond:
+            c = t + y
+        else:
+            c = t                               # (N, D)
         
         projected_feat = None
         for idx, block in enumerate(self.blocks):
@@ -975,7 +984,7 @@ class DiT(nn.Module):
                 elif self.repa_mapper=="mar":
                     projected_feat = self.projectors(x[:, :self.x_embedder.num_patches, :].reshape(-1, D), t.repeat_interleave(T, dim=0)).reshape(N, self.x_embedder.num_patches, -1)
         # remove register when time comes.
-        if self.num_register > 0:
+        if self.num_register > 0 or self.separate_cond:
             x = x[:, :self.x_embedder.num_patches, :]
         if not self.final_conv:
             x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
