@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10134 --nproc_per_node=1 train_cm_latent_repa.py \
+CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10138 --nproc_per_node=1 train_cm_latent_repa.py \
         --exp im_700ep_B_relu_eps1e-4_repa_register_4 \
         --datadir /common/users/qd66/repa/latent_imagenet256  \
         --dataset subset_imagenet_256 \
@@ -42,4 +42,4 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10134 --nproc
         --repa-mapper repa \
         --mar-mapper-num-res-blocks 0 \
         --use-repa \
-        --num-register 4 \
+        --num-register 2 \

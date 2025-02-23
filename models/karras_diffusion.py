@@ -381,8 +381,6 @@ def karras_sample(
 
     sample_fn = {
         "heun": sample_heun,
-        # "dpm": sample_dpm,
-        # "ancestral": sample_euler_ancestral,
         "onestep": sample_onestep,
         "euler": sample_euler,
         "multistep": stochastic_iterative_sampler,
