@@ -57,9 +57,11 @@ def test_scale_reweight():
     print(distances.min(), distances.max())
     print(norm_dim(x)**2)
 
-# test_erf_dist()
+def construct_constant_c(scales=[11, 21, 41, 81, 161, 321, 641], intial_c=0.0345):
+    scale_dict = {}
+    for scale in scales:
+        scale_dict[scale] = torch.tensor(math.exp(-1.15 * math.log(float(scale - 1)) - 0.85))
+    scale_dict[11] = intial_c
+    return scale_dict
 
-# test_scale_reweight()
-
-def test_ckpt():
-    pass
+print(construct_constant_c())

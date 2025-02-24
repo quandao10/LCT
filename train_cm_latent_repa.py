@@ -146,6 +146,14 @@ nfe_to_c = {
     641: 0.004
 }
 
+def construct_constant_c(scales=[11, 21, 41, 81, 161, 321, 641], intial_c=0.0345):
+    scale_dict = {}
+    for scale in scales:
+        scale_dict[scale] = torch.tensor(math.exp(-1.15 * math.log(float(scale - 1)) - 0.85))
+    scale_dict[11] = torch.tensor(intial_c)
+    return scale_dict
+
+
 def main(args):
     """
     Trains a new DiT model.
@@ -199,6 +207,7 @@ def main(args):
     target_model.train()
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
+    # model = torch.compile(model, mode="max-autotune")
     opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
     # opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=1e-4)
     
@@ -299,6 +308,7 @@ def main(args):
         
     scaler = torch.cuda.amp.GradScaler()
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
+    constant_c = construct_constant_c()
     
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
@@ -317,11 +327,17 @@ def main(args):
             n = torch.randn_like(x)
             if args.ot_hard:
                 x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
-            ema_rate, num_scales = ema_scale_fn(train_steps)
-
+                
+            if not args.stage2:
+                ema_rate, num_scales = ema_scale_fn(train_steps)
+            else:
+                ema_rate, num_scales = 0, 641
+            diffusion.c = constant_c[num_scales]
             # Change diffusion.c w.r.t predicted function by NFE (loss std)
-            if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
-                diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85))
+            # if args.start_scales==10:
+            #     if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
+            #         diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85))
+            # else:
 
             model_kwargs = dict(y=y)
             before_forward = torch.cuda.memory_allocated(device)
@@ -552,13 +568,11 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys())+list(UDiT_models.keys()), default="openai_unet")
-    parser.add_argument("--no-scale", action="store_true", default=False)
     parser.add_argument("--wo-norm", action="store_true", default=False)
-    parser.add_argument("--use-scale-residual", action="store_true", default=False)
     parser.add_argument("--linear-act", type=str, default="silu")
-    parser.add_argument("--attn-type", type=str, default="normal")
+    parser.add_argument("--norm-type", type=str, default="layer")
     parser.add_argument("--num-register", type=int, default=0)
-    parser.add_argument("--final-conv", action="store_true", default=False)
+    parser.add_argument("--use-rope", action="store_true", default=False)
     parser.add_argument("--separate-cond", action="store_true", default=False)
     
     ###### diffusion ######
@@ -579,9 +593,9 @@ if __name__ == "__main__":
     parser.add_argument("--start-scales", type=float, default=40)
     parser.add_argument("--end-scales", type=float, default=40)
     parser.add_argument("--ict", action="store_true", default=False)
-    parser.add_argument("--l2-reweight", action="store_true", default=False)
     parser.add_argument("--use-diffloss", action="store_true", default=False)
-    parser.add_argument("--ema-half-nfe", action="store_true", default=False)
+    parser.add_argument("--stage2", action="store_true", default=False)
+    
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)

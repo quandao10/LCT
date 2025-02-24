@@ -1,14 +1,3 @@
-REPALAMB=0.1 # >0 --> use REPA
-REPA_ENC_INFO="4:dinov2-vit-b" # it means: use dinov2-vit-b at 4-th layer
-PROJ_DIM=2048 # 2048
-MAPPER="repa" # repa, mar
-MAR_MAPPER_NUM_RES_BLOCKS=0 # 1 2
-REPA_TIMESTEPs="generation" # (full), denoising, generation
-REPA_RELU_MARGIN=0.4 # clamping
-DENOISING_TASK_RATE=0.5 # e.g., 0.25 --> definition of denoising task is the first 25% of the timesteps
-
-
-
 CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10130 --nproc_per_node=2 train_cm_latent_repa.py \
         --exp 700ep_L_relu_eps1e-4_repa_register_2 \
         --datadir /common/users/qd66/repa/latent_celeb256  \

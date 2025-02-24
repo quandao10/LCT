@@ -14,28 +14,13 @@ import os
 import torch.nn as nn
 import numpy as np
 import math
-from timm.models.vision_transformer import PatchEmbed, Attention, Mlp, AttentionWoPrevNormV
-from timm.layers import GluMlp
+from timm.models.vision_transformer import PatchEmbed, Attention, Mlp, RmsNorm
 from functools import partial
 from typing import Optional
 import torch.nn.functional as F
-import copy
-from models.act import build_act
-from models.norm import build_norm
-try:
-    import flash_attn.flash_attn_interface
-    from models.diffatten import MultiheadFlashDiff
-except ImportError:
-    print("No flash module")
-from einops import rearrange
-from torch.nn.functional import silu
-from models.network_karras import GroupNorm, Linear, Conv2d
-# from models.ml_sigmoid_attention.flash_sigmoid import (
-#     flash_attn_func,
-#     flash_attn_kvpacked_func,
-#     flash_attn_qkvpacked_func,
-# )
 from repa.repa_mapping import MAR_mapping
+from einops import rearrange, repeat
+from math import pi
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
@@ -48,201 +33,44 @@ def build_mlp(hidden_size, projector_dim, z_dim):
                 nn.SiLU(),
                 nn.Linear(projector_dim, z_dim),
             )
+    
+class RMSNorm(torch.nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6, elementwise_affine=False):
+        super().__init__()
+        self.eps = eps
+        # self.weight = nn.Parameter(torch.ones(dim))
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    def forward(self, x):
+        output = self._norm(x.float()).type_as(x)
+        return output #* self.weight
 
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
 #################################################################################
-class ConvLayer(nn.Module):
-    def __init__(
-        self,
-        in_dim: int,
-        out_dim: int,
-        kernel_size=3,
-        stride=1,
-        dilation=1,
-        groups=1,
-        padding = None,
-        use_bias=False,
-        dropout=0.0,
-        norm="bn2d",
-        act="relu",
-    ):
-        super().__init__()
-        if padding is None:
-            padding = get_same_padding(kernel_size)
-            padding *= dilation
-
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.dilation = dilation
-        self.groups = groups
-        self.padding = padding
-        self.use_bias = use_bias
-
-        self.dropout = nn.Dropout2d(dropout, inplace=False) if dropout > 0 else None
-        self.conv = nn.Conv2d(
-            in_dim,
-            out_dim,
-            kernel_size=(kernel_size, kernel_size),
-            stride=(stride, stride),
-            padding=padding,
-            dilation=(dilation, dilation),
-            groups=groups,
-            bias=use_bias,
-        )
-        self.norm = build_norm(norm, num_features=out_dim)
-        self.act = build_act(act)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.dropout is not None:
-            x = self.dropout(x)
-        x = self.conv(x)
-        if self.norm:
-            x = self.norm(x)
-        if self.act:
-            x = self.act(x)
-        return x
-
-def val2list(x: list or tuple or any, repeat_time=1) -> list:  # type: ignore
-    """Repeat `val` for `repeat_time` times and return the list or val if list/tuple."""
-    if isinstance(x, (list, tuple)):
-        return list(x)
-    return [x for _ in range(repeat_time)]
-
-def get_same_padding(kernel_size):
-    if isinstance(kernel_size, tuple):
-        return tuple([get_same_padding(ks) for ks in kernel_size])
-    else:
-        assert kernel_size % 2 > 0, f"kernel size {kernel_size} should be odd number"
-        return kernel_size // 2
-
-def val2tuple(x: list or tuple or any, min_len: int = 1, idx_repeat: int = -1) -> tuple:  # type: ignore
-    """Return tuple with min_len by repeating element at idx_repeat."""
-    # convert to list first
-    x = val2list(x)
-
-    # repeat elements if necessary
-    if len(x) > 0:
-        x[idx_repeat:idx_repeat] = [x[idx_repeat] for _ in range(min_len - len(x))]
-
-    return tuple(x)
-
-class GLUMBConv(nn.Module):
+class GLUFFN(nn.Module):
     def __init__(
         self,
         in_features: int,
-        hidden_features: int,
-        out_feature=None,
-        kernel_size=3,
-        stride=1,
-        padding=None,
-        use_bias=False,
-        norm=(None, None, None),
-        act=("silu", "silu", None),
-        dilation=1,
-    ):
-        out_feature = out_feature or in_features
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
+        act_layer = nn.SiLU,
+        bias: bool = True,
+    ) -> None:
         super().__init__()
-        use_bias = val2tuple(use_bias, 3)
-        norm = val2tuple(norm, 3)
-        act = val2tuple(act, 3)
-
-        self.glu_act = build_act(act[1], inplace=False)
-        self.inverted_conv = ConvLayer(
-            in_features,
-            hidden_features * 2,
-            1,
-            use_bias=use_bias[0],
-            norm=norm[0],
-            act=act[0],
-        )
-        self.depth_conv = ConvLayer(
-            hidden_features * 2,
-            hidden_features * 2,
-            kernel_size,
-            stride=stride,
-            groups=hidden_features * 2,
-            padding=padding,
-            use_bias=use_bias[1],
-            norm=norm[1],
-            act=None,
-            dilation=dilation,
-        )
-        self.point_conv = ConvLayer(
-            hidden_features,
-            out_feature,
-            1,
-            use_bias=use_bias[2],
-            norm=norm[2],
-            act=act[2],
-        )
-        # from IPython import embed; embed(header='debug dilate conv')
-
-    def forward(self, x: torch.Tensor, HW=None) -> torch.Tensor:
-        B, N, C = x.shape
-        if HW is None:
-            H = W = int(N**0.5)
-        else:
-            H, W = HW
-
-        x = x.reshape(B, H, W, C).permute(0, 3, 1, 2)
-        x = self.inverted_conv(x)
-        x = self.depth_conv(x)
-
-        x, gate = torch.chunk(x, 2, dim=1)
-        gate = self.glu_act(gate)
-        x = x * gate
-
-        x = self.point_conv(x)
-        x = x.reshape(B, C, N).permute(0, 2, 1)
-
-        return x
-
-class RMSNorm(torch.nn.Module):
-    def __init__(self, dim: int, scale_factor=1.0, eps: float = 1e-6):
-        """
-            Initialize the RMSNorm normalization layer.
-
-        Args:
-            dim (int): The dimension of the input tensor.
-            eps (float, optional): A small value added to the denominator for numerical stability. Default is 1e-6.
-
-        Attributes:
-            eps (float): A small value added to the denominator for numerical stability.
-            weight (nn.Parameter): Learnable scaling parameter.
-
-        """
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim) * scale_factor)
-
-    def _norm(self, x):
-        """
-        Apply the RMSNorm normalization to the input tensor.
-
-        Args:
-            x (torch.Tensor): The input tensor.
-
-        Returns:
-            torch.Tensor: The normalized tensor.
-
-        """
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.act_layer = act_layer()
+        self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
+        self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
 
     def forward(self, x):
-        """
-        Forward pass through the RMSNorm layer.
-
-        Args:
-            x (torch.Tensor): The input tensor.
-
-        Returns:
-            torch.Tensor: The output tensor after applying RMSNorm.
-
-        """
-        return (self.weight * self._norm(x.float())).type_as(x)
+        x12 = self.w12(x)
+        x1, x2 = x12.chunk(2, dim=-1)
+        hidden = self.act_layer(x1) * x2
+        return self.w3(hidden)
 
 class TimestepEmbedder(nn.Module):
     """
@@ -316,95 +144,6 @@ class LabelEmbedder(nn.Module):
     
     def get_in_channels(self):
         return self.in_channels
-    
-class LiteLA(Attention):
-    r"""Lightweight linear attention"""
-
-    PAD_VAL = 1
-
-    def __init__(
-        self,
-        in_dim: int,
-        out_dim: int,
-        heads: Optional[int] = None,
-        heads_ratio: float = 1.0,
-        dim=32,
-        eps=1e-15,
-        use_bias=False,
-        qk_norm=False,
-        norm_eps=1e-5,
-    ):
-        heads = heads or int(out_dim // dim * heads_ratio)
-        super().__init__(in_dim, num_heads=heads, qkv_bias=use_bias)
-
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-        self.heads = heads
-        self.dim = out_dim // heads 
-        self.eps = eps
-
-        self.kernel_func = nn.ReLU(inplace=False)
-        if qk_norm:
-            self.q_norm = RMSNorm(in_dim, scale_factor=1.0, eps=norm_eps)
-            self.k_norm = RMSNorm(in_dim, scale_factor=1.0, eps=norm_eps)
-        else:
-            self.q_norm = nn.Identity()
-            self.k_norm = nn.Identity()
-
-    @torch.amp.autocast("cuda", enabled=os.environ.get("AUTOCAST_LINEAR_ATTN", False) == "true")
-    def attn_matmul(self, q, k, v: torch.Tensor) -> torch.Tensor:
-        # lightweight linear attention
-        q = self.kernel_func(q)  # B, h, h_d, N
-        k = self.kernel_func(k)
-
-        use_fp32_attention = getattr(self, "fp32_attention", False)  # necessary for NAN loss
-        if use_fp32_attention:
-            q, k, v = q.float(), k.float(), v.float()
-
-        v = F.pad(v, (0, 0, 0, 1), mode="constant", value=LiteLA.PAD_VAL)
-        vk = torch.matmul(v, k)
-        out = torch.matmul(vk, q)
-
-        if out.dtype in [torch.float16, torch.bfloat16]:
-            out = out.float()
-        out = out[:, :, :-1] / (out[:, :, -1:] + self.eps)
-
-        return out
-
-    def forward(self, x: torch.Tensor, mask=None, HW=None, block_id=None) -> torch.Tensor:
-        B, N, C = x.shape
-
-        qkv = self.qkv(x).reshape(B, N, 3, C)
-        q, k, v = qkv.unbind(2)  # B, N, 3, C --> B, N, C
-        dtype = q.dtype
-
-        q = self.q_norm(q).transpose(-1, -2)  # (B, N, C) -> (B, C, N)
-        k = self.k_norm(k).transpose(-1, -2)  # (B, N, C) -> (B, C, N)
-        v = v.transpose(-1, -2)
-
-        q = q.reshape(B, C // self.dim, self.dim, N)  # (B, h, h_d, N)
-        k = k.reshape(B, C // self.dim, self.dim, N).transpose(-1, -2)  # (B, h, N, h_d)
-        v = v.reshape(B, C // self.dim, self.dim, N)  # (B, h, h_d, N)
-
-        out = self.attn_matmul(q, k, v).to(dtype)
-
-        out = out.view(B, C, N).permute(0, 2, 1)  # B, N, C
-        out = self.proj(out)
-
-        if torch.get_autocast_gpu_dtype() == torch.float16:
-            out = out.clip(-65504, 65504)
-
-        return out
-
-    @property
-    def module_str(self) -> str:
-        _str = type(self).__name__ + "("
-        eps = f"{self.eps:.1E}"
-        _str += f"i={self.in_dim},o={self.out_dim},h={self.heads},d={self.dim},eps={eps}"
-        return _str
-
-    def __repr__(self):
-        return f"EPS{self.eps}-" + super().__repr__()
    
 #################################################################################
 #                                 Core DiT Model                                #
@@ -428,65 +167,18 @@ class DiTBlock(nn.Module): #NOTE: we are using both post and prev norm with wo_n
             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
         elif linear_act == "silu":
             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
-        elif linear_act == "glu_sigmoid":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
-        elif linear_act == "glu_mish":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
-        elif linear_act == "glu_silu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
-        elif linear_act == "glu_gelu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
         elif linear_act == "gelu":
             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
+        elif linear_act == "gate_relu":
+            self.mlp = GLUFFN(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU)
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
             nn.Linear(hidden_size, 6 * hidden_size, bias=True)
         )
         
-    def forward(self, x, c):
+    def forward(self, x, c, feat_rope=None):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
-        return x
-    
-    
-class DiTBlock_woPrevVNorm(nn.Module): #NOTE: we are using without prev V norm
-    """
-    A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
-    """
-    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, depth=12, mlp_ratio=4.0, **block_kwargs):
-        super().__init__()
-        self.wo_norm = wo_norm
-        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6)
-        # self.prev_norm = norm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.attn = AttentionWoPrevNormV(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, qk_norm=True, **block_kwargs)
-        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity()
-        mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
-        if linear_act == "mish":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
-        elif linear_act == "relu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
-        elif linear_act == "silu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
-        elif linear_act == "glu_sigmoid":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
-        elif linear_act == "glu_mish":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
-        elif linear_act == "glu_silu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
-        elif linear_act == "glu_gelu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
-        elif linear_act == "gelu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 6 * hidden_size, bias=True)
-        )
-        
-    def forward(self, x, c):
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        modulate_x = modulate(self.norm1(x), shift_msa, scale_msa)
-        x = x + gate_msa.unsqueeze(1) * self.attn(modulate_x, x)
+        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), feat_rope=feat_rope)
         x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
         return x
     
@@ -494,221 +186,6 @@ class DiTBlock_woPrevVNorm(nn.Module): #NOTE: we are using without prev V norm
 #################################################################################
 #                                 Core DiT Model                                #
 #################################################################################
-
-class DiTBlockLinear(nn.Module): #NOTE: runing prev norm (what about post norm and both)
-    """
-    A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
-    """
-    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, depth=12, mlp_ratio=4.0, **block_kwargs):
-        super().__init__()
-        self.wo_norm = wo_norm
-        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity() 
-        self.attn = LiteLA(hidden_size, hidden_size, heads = hidden_size // 32, eps=1e-8, qk_norm=False)
-        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity()
-        mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
-        if linear_act == "mish":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
-        elif linear_act == "relu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
-        elif linear_act == "silu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
-        elif linear_act == "glu_sigmoid":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
-        elif linear_act == "glu_mish":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
-        elif linear_act == "glu_silu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
-        elif linear_act == "glu_gelu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
-        elif linear_act == "gelu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
-        elif linear_act == "glumbconv":
-            self.mlp = GLUMBConv(
-                in_features=hidden_size,
-                hidden_features=int(hidden_size * mlp_ratio),
-                use_bias=(True, True, False),
-                norm=(None, None, None),
-                act=("silu", "silu", None),
-            )
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 6 * hidden_size, bias=True)
-        )
-        
-    def forward(self, x, c):
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
-        return x
-
-    
-class DiTBlockFlashAttn(nn.Module):
-    """
-    A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
-    """
-    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, depth=12, mlp_ratio=4.0, **block_kwargs):
-        super().__init__()
-        self.wo_norm = wo_norm
-        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity() 
-        self.num_heads = num_heads
-        self.attn_qkv = nn.Linear(hidden_size, 3 * hidden_size, bias=False)
-        self.attn_out = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.q_norm = norm(hidden_size) if wo_norm else nn.Identity()
-        self.k_norm = norm(hidden_size) if wo_norm else nn.Identity()
-        # self.prev_norm = norm(hidden_size) if wo_norm else nn.Identity()
-        
-        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) #if not wo_norm else nn.Identity()
-        mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
-        if linear_act == "mish":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
-        elif linear_act == "relu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
-        elif linear_act == "silu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
-        elif linear_act == "glu_sigmoid":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
-        elif linear_act == "glu_mish":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
-        elif linear_act == "glu_silu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
-        elif linear_act == "glu_gelu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
-        elif linear_act == "gelu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 6 * hidden_size, bias=True),
-        )
-
-    def _attn(self, x):
-        # x = self.prev_norm(x)
-        qkv = self.attn_qkv(x)
-        q,k,v = qkv.chunk(3, dim=2)
-        q, k = self.q_norm(q), self.k_norm(k)
-        qkv = torch.cat([q, k, v], dim=2).to(dtype=qkv.dtype)
-        qkv = rearrange(qkv,
-                        'b s (three h d) -> (b s) three h d',
-                        three=3,
-                        h=self.num_heads)
-        batch_size, seq_len = x.size(0), x.size(1)
-        cu_seqlens = torch.arange(
-            0, (batch_size + 1) * seq_len, step=seq_len,
-            dtype=torch.int32, device=qkv.device)
-        x = flash_attn.flash_attn_interface.flash_attn_varlen_qkvpacked_func(qkv, cu_seqlens, seq_len, 0., causal=False)
-        x = rearrange(x, '(b s) h d -> b s (h d)', b=batch_size)
-        return self.attn_out(x)
-
-    def forward(self, x, c):
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        attn = self._attn(modulate(self.norm1(x), shift_msa, scale_msa))
-        x = x + gate_msa.unsqueeze(1) * attn
-        mlp = self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
-        x = x + gate_mlp.unsqueeze(1) * mlp
-        return x
-    
-# class DiTBlockFlashSigmoidAttn(nn.Module):
-#     """
-#     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
-#     """
-#     def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, depth=12, mlp_ratio=4.0, **block_kwargs):
-#         super().__init__()
-#         self.wo_norm = wo_norm
-#         self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity() 
-#         self.num_heads = num_heads
-#         self.attn_qkv = nn.Linear(hidden_size, 3 * hidden_size, bias=False)
-#         self.attn_out = nn.Linear(hidden_size, hidden_size, bias=False)
-#         self.q_norm = norm(hidden_size) if wo_norm else nn.Identity()
-#         self.k_norm = norm(hidden_size) if wo_norm else nn.Identity()
-#         # self.prev_norm = norm(hidden_size) if wo_norm else nn.Identity()
-        
-#         self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) #if not wo_norm else nn.Identity()
-#         mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
-#         if linear_act == "mish":
-#             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
-#         elif linear_act == "relu":
-#             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
-#         elif linear_act == "silu":
-#             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
-#         elif linear_act == "glu_sigmoid":
-#             self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
-#         elif linear_act == "glu_mish":
-#             self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
-#         elif linear_act == "glu_silu":
-#             self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
-#         elif linear_act == "glu_gelu":
-#             self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
-#         elif linear_act == "gelu":
-#             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
-#         self.adaLN_modulation = nn.Sequential(
-#             nn.SiLU(),
-#             nn.Linear(hidden_size, 6 * hidden_size, bias=True),
-#         )
-
-#     def _attn(self, x):
-#         # x = self.prev_norm(x)
-#         qkv = self.attn_qkv(x)
-#         q,k,v = qkv.chunk(3, dim=2)
-#         q, k = self.q_norm(q), self.k_norm(k)
-#         qkv = torch.cat([q, k, v], dim=2).to(dtype=qkv.dtype)
-#         qkv = rearrange(qkv,
-#                         'b s (three h d) -> (b s) three h d',
-#                         three=3,
-#                         h=self.num_heads)
-#         batch_size, seq_len = x.size(0), x.size(1)
-#         cu_seqlens = torch.arange(
-#             0, (batch_size + 1) * seq_len, step=seq_len,
-#             dtype=torch.int32, device=qkv.device)
-#         x = flash_attn_qkvpacked_func(qkv, 0., causal=False)
-#         x = rearrange(x, '(b s) h d -> b s (h d)', b=batch_size)
-#         return self.attn_out(x)
-
-#     def forward(self, x, c):
-#         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-#         attn = self._attn(modulate(self.norm1(x), shift_msa, scale_msa))
-#         x = x + gate_msa.unsqueeze(1) * attn
-#         mlp = self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
-#         x = x + gate_mlp.unsqueeze(1) * mlp
-#         return x
-
-class DiTBlockFlashDiffattn(nn.Module):
-    """
-    A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
-    """
-    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, depth=12, mlp_ratio=4.0, **block_kwargs):
-        super().__init__()
-        self.wo_norm = wo_norm
-        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity() 
-        self.num_heads = num_heads
-        self.attn = MultiheadFlashDiff(embed_dim=hidden_size, depth=depth, num_heads=num_heads, norm_layer=norm)
-        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) #if not wo_norm else nn.Identity()
-        mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
-        if linear_act == "mish":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
-        elif linear_act == "relu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU, drop=0)   
-        elif linear_act == "silu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0)   
-        elif linear_act == "glu_sigmoid":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Sigmoid, gate_last=False)
-        elif linear_act == "glu_mish":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.Mish, gate_last=False)
-        elif linear_act == "glu_silu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=nn.SiLU, gate_last=False)
-        elif linear_act == "glu_gelu":
-            self.mlp = GluMlp(in_features=hidden_size, hidden_features=mlp_hidden_dim*2, act_layer=partial(nn.GELU, "tanh"), gate_last=False)
-        elif linear_act == "gelu":
-            self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 6 * hidden_size, bias=True),
-        )
-
-    def forward(self, x, c):
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
-        return x
-
 class FinalLayer(nn.Module):
     """
     The final layer of DiT.
@@ -729,61 +206,6 @@ class FinalLayer(nn.Module):
         x = self.linear(x)
         return x
 
-#----------------------------------------------------------------------------
-# NonScalingLayer normalization.
-
-class NonScalingLayerNorm(nn.LayerNorm):
-    def reset_parameters(self) -> None:
-        if self.elementwise_affine:
-            torch.nn.init.ones_(self.weight)
-            self.weight.requires_grad = False
-            if self.bias is not None:
-                torch.nn.init.zeros_(self.bias)
-                
-#----------------------------------------------------------------------------
-# Resblock patch embedding.
-class FinalConvLayer(torch.nn.Module):
-    def __init__(self,
-        in_channels, out_channels, emb_channels, up=False, down=False, dropout=0, skip_scale=1, eps=1e-5,
-        resample_filter=[1,1], resample_proj=False, adaptive_scale=True, init=dict(), init_zero=dict(init_weight=0),
-    ):
-        super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.emb_channels = emb_channels
-        self.dropout = dropout
-        self.skip_scale = skip_scale
-        self.adaptive_scale = adaptive_scale
-
-        self.norm0 = GroupNorm(num_channels=in_channels, eps=eps)
-        self.conv0 = Conv2d(in_channels=in_channels, out_channels=out_channels, kernel=3, up=up, down=down, resample_filter=resample_filter, **init)
-        self.affine = Linear(in_features=emb_channels, out_features=out_channels*(2 if adaptive_scale else 1), **init)
-        self.norm1 = GroupNorm(num_channels=out_channels, eps=eps)
-        self.conv1 = Conv2d(in_channels=out_channels, out_channels=out_channels, kernel=3, **init_zero)
-
-        self.skip = None
-        if out_channels != in_channels or up or down:
-            kernel = 1 if resample_proj or out_channels!= in_channels else 0
-            self.skip = Conv2d(in_channels=in_channels, out_channels=out_channels, kernel=kernel, up=up, down=down, resample_filter=resample_filter, **init)
-
-    def forward(self, x, emb):
-        orig = x
-        x = self.conv0(silu(self.norm0(x)))
-        params = self.affine(emb).unsqueeze(2).unsqueeze(3).to(x.dtype)
-        if self.adaptive_scale:
-            scale, shift = params.chunk(chunks=2, dim=1)
-            x = silu(torch.addcmul(shift, self.norm1(x), scale + 1))
-        else:
-            x = silu(self.norm1(x.add_(params)))
-        x = self.conv1(torch.nn.functional.dropout(x, p=self.dropout, training=self.training))
-        x = x.add_(self.skip(orig) if self.skip is not None else orig)
-        x = x * self.skip_scale
-        return x 
-
-#----------------------------------------------------------------------------
-# Resblock final layer and unpatchify
-
-
 class DiT(nn.Module):
     """
     Diffusion model with a Transformer backbone.
@@ -800,12 +222,10 @@ class DiT(nn.Module):
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
-        no_scale = False,
+        norm_type = "layer",
         linear_act=None,
         wo_norm=False,
-        attn_type="normal",
         num_register=0,
-        final_conv=False,
         use_repa=False,
         projector_dim=None,
         z_depth=None,
@@ -813,6 +233,7 @@ class DiT(nn.Module):
         repa_mapper=None,
         mar_mapper_num_res_blocks=2,
         separate_cond = False,
+        use_rope = False,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -821,30 +242,27 @@ class DiT(nn.Module):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.depth = depth
-        self.attn_type = attn_type
         self.num_register = num_register
-        self.final_conv = final_conv
         self.separate_cond = separate_cond
-        # init for conv
-        init = dict(init_mode='kaiming_uniform', init_weight=np.sqrt(1/3), init_bias=np.sqrt(1/3))
-        init_zero = dict(init_mode='kaiming_uniform', init_weight=0, init_bias=0)
-
-        self.norm = NonScalingLayerNorm if no_scale else nn.LayerNorm
-        if attn_type == "normal":
-            self.attn_blk = DiTBlock 
-        elif attn_type == "flash":
-            self.attn_blk = DiTBlockFlashAttn
-        elif attn_type == "diffattn":
-            self.attn_blk = DiTBlockFlashDiffattn
-        # elif attn_type == "sigmoidattn":
-        #     self.attn_blk = DiTBlockFlashSigmoidAttn
-        elif attn_type == "linear":
-            self.attn_blk = DiTBlockLinear
-        elif attn_type == "wo_prevnormV":
-            self.attn_blk = DiTBlock_woPrevVNorm
-        else:
-            raise("No implementation for this")
+        self.use_rope = use_rope
         
+        # use rotary position encoding, borrow from EVA
+        if self.use_rope:
+            half_head_dim = hidden_size // num_heads // 2
+            hw_seq_len = input_size // patch_size
+            self.feat_rope = VisionRotaryEmbeddingFast(
+                dim=half_head_dim,
+                pt_seq_len=hw_seq_len,
+            )
+        else:
+            self.feat_rope = None
+
+        if norm_type == "layer":
+            self.norm = nn.LayerNorm
+        else:
+            self.norm = RMSNorm
+            
+        self.attn_blk = DiTBlock
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
@@ -866,15 +284,7 @@ class DiT(nn.Module):
                      depth=self.depth) \
                 for _ in range(depth)
         ])
-        if not self.final_conv:
-            self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels, norm=self.norm, wo_norm=wo_norm)
-        else:
-            self.final_layer = FinalConvLayer(hidden_size, hidden_size//2, hidden_size, up=True, init=init, init_zero=init_zero)
-            self.output = nn.Sequential(
-                GroupNorm(num_channels=hidden_size//2),
-                # self.out_norm = nn.LayerNorm(normalized_shape=[hidden_size//2, input_size, input_size])
-                Conv2d(in_channels=hidden_size//2, out_channels=self.out_channels, kernel=3, **init_zero))
-            
+        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels, norm=self.norm, wo_norm=wo_norm)
             
         ############## REPA ##############
         self.use_repa = use_repa
@@ -930,11 +340,10 @@ class DiT(nn.Module):
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
         # Zero-out output layers:
-        if not self.final_conv:
-            nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
-            nn.init.constant_(self.final_layer.adaLN_modulation[-1].bias, 0)
-            nn.init.constant_(self.final_layer.linear.weight, 0)
-            nn.init.constant_(self.final_layer.linear.bias, 0)
+        nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
+        nn.init.constant_(self.final_layer.adaLN_modulation[-1].bias, 0)
+        nn.init.constant_(self.final_layer.linear.weight, 0)
+        nn.init.constant_(self.final_layer.linear.bias, 0)
 
     def unpatchify(self, x):
         """
@@ -976,7 +385,7 @@ class DiT(nn.Module):
         
         projected_feat = None
         for idx, block in enumerate(self.blocks):
-            x = block(x, c)
+            x = block(x, c, feat_rope=self.feat_rope)
             if self.use_repa and self.z_depth==(idx + 1):
                 # Project features using corresponding projector
                 if self.repa_mapper=="repa":    
@@ -986,14 +395,9 @@ class DiT(nn.Module):
         # remove register when time comes.
         if self.num_register > 0 or self.separate_cond:
             x = x[:, :self.x_embedder.num_patches, :]
-        if not self.final_conv:
-            x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
-            x = self.unpatchify(x)                   # (N, out_channels, H, W)
-        else:
-            h = w = int(x.shape[1] ** 0.5)
-            x = x.reshape(shape=(x.shape[0], h, w, -1)).permute(0, 3, 1, 2)
-            x = self.final_layer(x, c)
-            x = self.output(x)
+        
+        x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
+        x = self.unpatchify(x)                   # (N, out_channels, H, W)
         return x, projected_feat
 
     def forward_with_cfg(self, x, t, cfg_scale=1.0, y=None):
@@ -1007,8 +411,8 @@ class DiT(nn.Module):
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
         # This can be done by uncommenting the following line and commenting-out the line following that.
-        eps, rest = model_out[:, :self.in_channels], model_out[:, self.in_channels:]
-        # eps, rest = model_out[:, :3], model_out[:, 3:]
+        # eps, rest = model_out[:, :self.in_channels], model_out[:, self.in_channels:]
+        eps, rest = model_out[:, :3], model_out[:, 3:]
         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
@@ -1068,6 +472,74 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
     emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
     return emb
+
+def broadcat(tensors, dim = -1):
+    num_tensors = len(tensors)
+    shape_lens = set(list(map(lambda t: len(t.shape), tensors)))
+    assert len(shape_lens) == 1, 'tensors must all have the same number of dimensions'
+    shape_len = list(shape_lens)[0]
+    dim = (dim + shape_len) if dim < 0 else dim
+    dims = list(zip(*map(lambda t: list(t.shape), tensors)))
+    expandable_dims = [(i, val) for i, val in enumerate(dims) if i != dim]
+    assert all([*map(lambda t: len(set(t[1])) <= 2, expandable_dims)]), 'invalid dimensions for broadcastable concatentation'
+    max_dims = list(map(lambda t: (t[0], max(t[1])), expandable_dims))
+    expanded_dims = list(map(lambda t: (t[0], (t[1],) * num_tensors), max_dims))
+    expanded_dims.insert(dim, (dim, dims[dim]))
+    expandable_shapes = list(zip(*map(lambda t: t[1], expanded_dims)))
+    tensors = list(map(lambda t: t[0].expand(*t[1]), zip(tensors, expandable_shapes)))
+    return torch.cat(tensors, dim = dim)
+
+def rotate_half(x):
+    x = rearrange(x, '... (d r) -> ... d r', r = 2)
+    x1, x2 = x.unbind(dim = -1)
+    x = torch.stack((-x2, x1), dim = -1)
+    return rearrange(x, '... d r -> ... (d r)')
+
+class VisionRotaryEmbeddingFast(nn.Module):
+    def __init__(
+        self,
+        dim,
+        pt_seq_len=16,
+        ft_seq_len=None,
+        custom_freqs = None,
+        freqs_for = 'lang',
+        theta = 10000,
+        max_freq = 10,
+        num_freqs = 1,
+    ):
+        super().__init__()
+        if custom_freqs:
+            freqs = custom_freqs
+        elif freqs_for == 'lang':
+            freqs = 1. / (theta ** (torch.arange(0, dim, 2)[:(dim // 2)].float() / dim))
+        elif freqs_for == 'pixel':
+            freqs = torch.linspace(1., max_freq / 2, dim // 2) * pi
+        elif freqs_for == 'constant':
+            freqs = torch.ones(num_freqs).float()
+        else:
+            raise ValueError(f'unknown modality {freqs_for}')
+
+        if ft_seq_len is None: ft_seq_len = pt_seq_len
+        t = torch.arange(ft_seq_len) / ft_seq_len * pt_seq_len
+        self.pt_seq_len = pt_seq_len
+
+        freqs = torch.einsum('..., f -> ... f', t, freqs)
+        freqs = repeat(freqs, '... n -> ... (n r)', r = 2)
+        freqs = broadcat((freqs[:, None, :], freqs[None, :, :]), dim = -1)
+
+        freqs_cos = freqs.cos().view(-1, freqs.shape[-1])
+        freqs_sin = freqs.sin().view(-1, freqs.shape[-1])
+
+        self.register_buffer("freqs_cos", freqs_cos)
+        self.register_buffer("freqs_sin", freqs_sin)
+
+        # print('======== shape of rope freq', self.freqs_cos.shape, '========')
+
+    def forward(self, t):
+        t_, rest = t[:, :, :self.pt_seq_len**2, :], t[:, :, self.pt_seq_len**2:, :]
+        t_ = t_ * self.freqs_cos + rotate_half(t_) * self.freqs_sin
+        out = torch.cat([t_, rest], dim=2)
+        return out
 
 
 #################################################################################

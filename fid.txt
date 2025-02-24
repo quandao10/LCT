@@ -385,13 +385,13 @@ Epoch = 0000650, FID = 6.779516417690161, cfg_scale = 1.0
 Epoch = 0000675, FID = 6.654378302734585, cfg_scale = 1.0
 Epoch = 0000700, FID = 6.627036357244236, cfg_scale = 1.0
 
-DiT L/2 relu fp16 + REPA
+DiT B/2 relu fp16 + REPA
 Epoch = 0000625, FID = 6.747904344329697, cfg_scale = 1.0
 Epoch = 0000650, FID = 6.6993746394729214, cfg_scale = 1.0
 Epoch = 0000675, FID = 6.666708358452752, cfg_scale = 1.0
 Epoch = 0000700, FID = 6.617028791635306, cfg_scale = 1.0
 
-DiT L/2 relu fp16 + REPA + 4 register
+DiT B/2 relu fp16 + REPA + 4 register
 Epoch = 0000625, FID = 6.680389505964655, cfg_scale = 1.0
 Epoch = 0000650, FID = 6.722534770724906, cfg_scale = 1.0
 Epoch = 0000675, FID = 6.738071890331412, cfg_scale = 1.0
