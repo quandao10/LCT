@@ -40,7 +40,6 @@ from models.network_edm2 import EDM2_models
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from optimizer.soap import SOAP
-import stat
 
 #################################################################################
 #                             Training Helper Functions                         #
@@ -55,7 +54,6 @@ def update_ema(ema_model, model, decay=0.9999):
     model_params = OrderedDict(model.named_parameters())
 
     for name, param in model_params.items():
-        # TODO: Consider applying only to params that require_grad to avoid small numerical changes of pos_embed
         ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
 
 
@@ -153,6 +151,12 @@ def construct_constant_c(scales=[11, 21, 41, 81, 161, 321, 641], intial_c=0.0345
     scale_dict[11] = torch.tensor(intial_c)
     return scale_dict
 
+def construct_constant_c_v2(scales=[9, 17, 33, 65, 129, 257, 513], intial_c=0.0345):
+    scale_dict = {}
+    for scale in scales:
+        scale_dict[scale] = torch.tensor(math.exp(-1.15 * math.log(float(scale - 1)) - 0.85))
+    scale_dict[9] = torch.tensor(intial_c)
+    return scale_dict
 
 def main(args):
     """
@@ -207,7 +211,7 @@ def main(args):
     target_model.train()
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
-    # model = torch.compile(model, mode="max-autotune")
+    # model = torch.compile(model, mode="default")
     opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
     # opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=1e-4)
     
@@ -308,7 +312,10 @@ def main(args):
         
     scaler = torch.cuda.amp.GradScaler()
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
-    constant_c = construct_constant_c()
+    if args.end_scales == 640:
+        constant_c = construct_constant_c()
+    elif args.end_scales == 512:
+        constant_c = construct_constant_c_v2()
     
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
@@ -331,16 +338,11 @@ def main(args):
             if not args.stage2:
                 ema_rate, num_scales = ema_scale_fn(train_steps)
             else:
-                ema_rate, num_scales = 0, 641
+                ema_rate, num_scales = 0, args.end_scales+1
             diffusion.c = constant_c[num_scales]
-            # Change diffusion.c w.r.t predicted function by NFE (loss std)
-            # if args.start_scales==10:
-            #     if args.c_by_loss_std and (num_scales > (args.start_scales + 1)): # From the second NFE scale
-            #         diffusion.c = torch.tensor(math.exp(-1.15 * math.log(float(num_scales - 1)) - 0.85))
-            # else:
 
             model_kwargs = dict(y=y)
-            before_forward = torch.cuda.memory_allocated(device)
+            # before_forward = torch.cuda.memory_allocated(device)
             with torch.autocast(device_type="cuda", dtype=torch.float16):
                 losses = diffusion.consistency_losses(model,
                                                     x,
@@ -368,7 +370,7 @@ def main(args):
             else:
                 repa_loss = torch.tensor(0) 
             
-            after_forward = torch.cuda.memory_allocated(device)
+            # after_forward = torch.cuda.memory_allocated(device)
             
             
             opt.zero_grad()
@@ -381,16 +383,13 @@ def main(args):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             scaler.step(opt)
             scaler.update()
-            # loss.backward()
-            # opt.step()
             running_loss += loss.item()
             running_cm_loss += cm_loss.item()
             running_diff_loss += diff_loss.item()
             running_repa_loss += repa_loss.item()
             
-            after_backward = torch.cuda.memory_allocated(device)
+            # after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
-            ##### ema rate for teacher should be 0 (iCT) because our bs is small, we might not need set ema = 0 (more unstable)
             if args.ict:
                 update_ema(target_model, model.module, 0)
             else:
@@ -414,9 +413,9 @@ def main(args):
                 logger.info(
                     f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, Repa Loss: {avg_repa_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
-                    f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
-                    f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
-                    f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
+                    # f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
+                    # f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
+                    # f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
                     # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
                 # Reset monitoring variables:
@@ -574,6 +573,9 @@ if __name__ == "__main__":
     parser.add_argument("--num-register", type=int, default=0)
     parser.add_argument("--use-rope", action="store_true", default=False)
     parser.add_argument("--separate-cond", action="store_true", default=False)
+    parser.add_argument("--use-freq-cond", action="store_true", default=False)
+    parser.add_argument("--cond-type", type=str, default="adain", choices=["adain", "norm_adain", "sum", "prod", "norm_both", "both"])
+    
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
@@ -608,7 +610,7 @@ if __name__ == "__main__":
     ###### ploting & saving ######
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--ckpt-every", type=int, default=25)
-    parser.add_argument("--save-content-every", type=int, default=5)
+    parser.add_argument("--save-content-every", type=int, default=25)
     parser.add_argument("--plot-every", type=int, default=5)
     parser.add_argument("--exp", type=str, required=True)
     parser.add_argument("--results-dir", type=str, default="results")

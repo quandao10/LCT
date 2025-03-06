@@ -22,8 +22,7 @@ from repa.repa_mapping import MAR_mapping
 from einops import rearrange, repeat
 from math import pi
 
-def modulate(x, shift, scale):
-    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
 
 def build_mlp(hidden_size, projector_dim, z_dim):
     return nn.Sequential(
@@ -38,18 +37,53 @@ class RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6, elementwise_affine=False):
         super().__init__()
         self.eps = eps
-        # self.weight = nn.Parameter(torch.ones(dim))
+        self.weight = nn.Parameter(torch.ones(dim))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
         output = self._norm(x.float()).type_as(x)
-        return output #* self.weight
+        return output * self.weight
+    
+class GroupRMSNorm(torch.nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6, group=1):
+        super().__init__()
+        assert dim % group == 0, "dimension should be divisable the number of groups"
+        self.eps = eps
+        self.group = group
+        self.dim = dim
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def _norm(self, x):
+        size = x.size()
+        x = x.reshape(*size[:-1], self.group, self.dim//self.group)
+        norm_term = torch.rsqrt(x.pow(2).mean(-1, keepdim=True)+self.eps)
+        x  = x * norm_term
+        return x.reshape(*size)
+
+    def forward(self, x):
+        output = self._norm(x.float()).type_as(x)
+        return output * self.weight
+    
+def modulate(x, shift, scale):
+    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+    
 
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
 #################################################################################
+class GaussianFourierFeatureTransform(torch.nn.Module):
+    def __init__(self, input_size, half_hidden_size, scale=10):
+        super().__init__()
+        self.half_hidden_size = half_hidden_size
+        self._B = torch.randn((input_size, half_hidden_size), requires_grad=False) * scale
+
+    def forward(self, x):
+        x = x @ self._B.to(x.device)
+        x = 2 * pi * x
+        return torch.cat([torch.sin(x), torch.cos(x)], dim=1)
+
 class GLUFFN(nn.Module):
     def __init__(
         self,
@@ -67,6 +101,36 @@ class GLUFFN(nn.Module):
         self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
 
     def forward(self, x):
+        x12 = self.w12(x)
+        x1, x2 = x12.chunk(2, dim=-1)
+        hidden = self.act_layer(x1) * x2
+        return self.w3(hidden)
+    
+class GLUFFN_Fourier(nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
+        patch = None,
+        act_layer = nn.SiLU,
+        bias: bool = True,
+    ) -> None:
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.act_layer = act_layer()
+        self.p = patch
+        self.fft = nn.Parameter(torch.ones((in_features, self.p, self.p // 2 + 1)))
+        self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
+        self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
+
+    def forward(self, x): # [B, L, D]
+        B, L, D = x.shape
+        x = x.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+        x_fft = torch.fft.rfft2(x)
+        x_fft = x_fft * self.fft
+        x = torch.fft.irfft2(x_fft, s=(self.p, self.p)).reshape(B, D, L).permute(0,2,1)
         x12 = self.w12(x)
         x1, x2 = x12.chunk(2, dim=-1)
         hidden = self.act_layer(x1) * x2
@@ -153,13 +217,14 @@ class DiTBlock(nn.Module): #NOTE: we are using both post and prev norm with wo_n
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
-    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, depth=12, mlp_ratio=4.0, **block_kwargs):
+    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, cond_type="adain", patch=16, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
         self.wo_norm = wo_norm
-        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity() 
+        self.cond_type= cond_type
+        self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, qk_norm=True, **block_kwargs) \
             if not wo_norm else Attention(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, **block_kwargs)
-        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6) if not wo_norm else nn.Identity()
+        self.norm2 = norm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio) ##### note for GluMLP they use half of mlp hidden dim, should consider double them
         if linear_act == "mish":
             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.Mish, drop=0)
@@ -171,15 +236,47 @@ class DiTBlock(nn.Module): #NOTE: we are using both post and prev norm with wo_n
             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
         elif linear_act == "gate_relu":
             self.mlp = GLUFFN(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU)
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 6 * hidden_size, bias=True)
-        )
+        elif linear_act == "gate_fourier_relu":
+            self.mlp = GLUFFN_Fourier(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch)
+        
+        if "adain" in self.cond_type:
+            self.adaLN_modulation = nn.Sequential(
+                nn.SiLU(),
+                nn.Linear(hidden_size, 6 * hidden_size, bias=True),
+                GroupRMSNorm(6 * hidden_size, group=6) if ("norm" in self.cond_type) else nn.Identity()
+            )
+        elif self.cond_type == "prod":
+            self.linear_cond = nn.Linear(hidden_size, hidden_size, bias=True)
+        elif self.cond_type == "sum":
+            self.linear_cond = nn.Linear(hidden_size, hidden_size, bias=True)
+        elif "both" in self.cond_type:
+            self.adaLN_modulation = nn.Sequential(
+                nn.SiLU(),
+                nn.Linear(hidden_size, 6 * hidden_size, bias=True),
+                GroupRMSNorm(6 * hidden_size, group=6) if ("norm" in self.cond_type) else nn.Identity()
+            )
+            self.linear_cond = nn.Linear(hidden_size, hidden_size, bias=True)
         
     def forward(self, x, c, feat_rope=None):
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), feat_rope=feat_rope)
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
+        if "adain" in self.cond_type:
+            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+            x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), feat_rope=feat_rope)
+            x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
+        elif self.cond_type == "prod":
+            c = self.linear_cond(c) + 1
+            x = nn.SiLU()(x*c.unsqueeze(1))
+            x = x + self.attn(self.norm1(x), feat_rope=feat_rope)
+            x = x + self.mlp(self.norm2(x))
+        elif self.cond_type == "sum":
+            c = self.linear_cond(c)
+            x = nn.SiLU()(x + c.unsqueeze(1))
+            x = x + self.attn(self.norm1(x), feat_rope=feat_rope)
+            x = x + self.mlp(self.norm2(x))
+        elif "both" in self.cond_type:
+            c = self.linear_cond(c)
+            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+            x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), feat_rope=feat_rope)
+            x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
         return x
     
     
@@ -234,6 +331,8 @@ class DiT(nn.Module):
         mar_mapper_num_res_blocks=2,
         separate_cond = False,
         use_rope = False,
+        use_freq_cond = False,
+        cond_type="adain",
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -245,6 +344,12 @@ class DiT(nn.Module):
         self.num_register = num_register
         self.separate_cond = separate_cond
         self.use_rope = use_rope
+        self.use_freq_cond = use_freq_cond
+        self.cond_type = cond_type
+        
+        # use freq condition
+        if self.use_freq_cond:
+            self.y_fred_embedder = GaussianFourierFeatureTransform(input_size=128, half_hidden_size=hidden_size//2)
         
         # use rotary position encoding, borrow from EVA
         if self.use_rope:
@@ -265,7 +370,10 @@ class DiT(nn.Module):
         self.attn_blk = DiTBlock
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
-        self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+        if self.use_freq_cond:
+            self.y_embedder = LabelEmbedder(num_classes, 128, class_dropout_prob)
+        else:
+            self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         num_patches = self.x_embedder.num_patches
         
         # Will use fixed sin-cos embedding:
@@ -281,7 +389,8 @@ class DiT(nn.Module):
                      norm=self.norm, 
                      linear_act=linear_act, 
                      wo_norm=wo_norm, 
-                     depth=self.depth) \
+                     patch=int(input_size/patch_size),
+                     cond_type=cond_type) \
                 for _ in range(depth)
         ])
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels, norm=self.norm, wo_norm=wo_norm)
@@ -335,13 +444,14 @@ class DiT(nn.Module):
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
 
         # Zero-out adaLN modulation layers in DiT blocks:
-        for block in self.blocks:
-            nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
-            nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
+        if "adain" in self.cond_type or "both" in self.cond_type:
+            for block in self.blocks:
+                nn.init.constant_(block.adaLN_modulation[1].weight, 0)
+                nn.init.constant_(block.adaLN_modulation[1].bias, 0)
 
         # Zero-out output layers:
-        nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
-        nn.init.constant_(self.final_layer.adaLN_modulation[-1].bias, 0)
+        nn.init.constant_(self.final_layer.adaLN_modulation[1].weight, 0)
+        nn.init.constant_(self.final_layer.adaLN_modulation[1].bias, 0)
         nn.init.constant_(self.final_layer.linear.weight, 0)
         nn.init.constant_(self.final_layer.linear.bias, 0)
 
@@ -372,16 +482,18 @@ class DiT(nn.Module):
         x = self.x_embedder(x)                   # (N, T, D)
         t = self.t_embedder(t)                   # (N, D)
         y = self.y_embedder(y, self.training)    # (N, D)
+        if self.use_freq_cond:
+            y = self.y_fred_embedder(y)
         if self.num_register > 0:
             x = torch.cat([x, self.register_tokens.expand(x.shape[0], -1, -1)], dim=1) # (N, T+register, D)
         if self.separate_cond:
             x = torch.cat([x, y.unsqueeze(1)], dim=1) # (N, T+register+1, D)
         x = x + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2 + num_register
-        N, T, D = x.shape #FIX: repa might need to change for register
-        if not self.separate_cond:
-            c = t + y
+        N, T, D = x.shape
+        if self.separate_cond:
+            c = t
         else:
-            c = t                               # (N, D)
+            c = t + y                               # (N, D)
         
         projected_feat = None
         for idx, block in enumerate(self.blocks):

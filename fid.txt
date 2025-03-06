@@ -396,3 +396,33 @@ Epoch = 0000625, FID = 6.680389505964655, cfg_scale = 1.0
 Epoch = 0000650, FID = 6.722534770724906, cfg_scale = 1.0
 Epoch = 0000675, FID = 6.738071890331412, cfg_scale = 1.0
 Epoch = 0000700, FID = 6.503895243922557, cfg_scale = 1.0
+
+DiT L/2 relu fp16 + REPA + 2 register
+Epoch = 0000625, FID = 6.473361009619936, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.339761493162001, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.29816720532574, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.550633721973213, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.336842273586456, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.181544744867438, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.11009196794609, cfg_scale = 1.0
+Epoch = 0000725, FID = 5.992540336917671, cfg_scale = 1.0
+Epoch = 0000730, FID = 6.022553973790906, cfg_scale = 1.0
+Epoch = 0000735, FID = 6.140986393856878, cfg_scale = 1.0
+Epoch = 0000740, FID = 6.193243764980224, cfg_scale = 1.0
+Epoch = 0000745, FID = 6.105620925968054, cfg_scale = 1.0
+
+
+DiT B/2 lightning relu fp16 + REPA
+Epoch = 0000600, FID = 7.297609503706241, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.7913489863335315, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.692716650424956, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.863686875655048, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.772680708859468, cfg_scale = 1.0
+
+
+DiT B/2 lightning fourier gate mlp relu fp16 + REPA
+Epoch = 0000600, FID = 7.145024444968612, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.61004409665108, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.2641246402249635, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.507307086233141, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.941275355757682, cfg_scale = 1.0

@@ -64,4 +64,41 @@ def construct_constant_c(scales=[11, 21, 41, 81, 161, 321, 641], intial_c=0.0345
     scale_dict[11] = intial_c
     return scale_dict
 
-print(construct_constant_c())
+# print(construct_constant_c())
+# from argparse import Namespace
+# from diffusers.models import AutoencoderKL
+# import torchvision
+# args = Namespace(**{"dataset": "subset_imagenet_256", "repa_enc_info": "4:dinov2-vit-b", "datadir": "/common/users/qd66/repa/latent_imagenet256"})
+# from datasets_prep import get_repa_dataset
+# data = get_repa_dataset(args)
+# vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to("cuda")
+# image, _, label = data[4000]
+# image = vae.decode(image.unsqueeze(0).to("cuda")).sample
+# torchvision.utils.save_image(image, "./debug/test.jpg", normalize=True)
+# print(label)
+# print(data.label_to_classidx)
+import torch.nn as nn
+
+
+class GroupRMSNorm(torch.nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6, group=1):
+        super().__init__()
+        assert dim % group == 0, "dimension should be divisable the number of groups"
+        self.eps = eps
+        self.group = group
+        self.dim = dim
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def _norm(self, x):
+        size = x.size()
+        x = x.reshape(*size[:-1], self.group, self.dim//self.group)
+        norm_term = torch.rsqrt(x.pow(2).mean(-1, keepdim=True)+self.eps)
+        x  = x * norm_term
+        return x.reshape(*size)
+
+    def forward(self, x):
+        output = self._norm(x.float()).type_as(x)
+        return output * self.weight
+    
+# x = torch.randn((2, 2, 256))
+# x = GroupRMSNorm(256, group=2)(x)

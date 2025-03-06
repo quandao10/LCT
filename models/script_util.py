@@ -120,6 +120,8 @@ def create_model_and_diffusion(args):
                                             wo_norm = args.wo_norm,
                                             num_register = args.num_register,
                                             use_repa=args.use_repa,
+                                            use_freq_cond = args.use_freq_cond,
+                                            cond_type = args.cond_type,
                                             z_depth=depth,
                                             z_dim=z_dim,
                                             separate_cond=args.separate_cond,

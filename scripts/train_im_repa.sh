@@ -47,8 +47,8 @@
 
 
 
-CUDA_VISIBLE_DEVICES=3,4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10200 --nproc_per_node=2 train_cm_latent_repa.py \
-        --exp im_700ep_lightningDiT_repa_register_2 \
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10226 --nproc_per_node=2 train_cm_latent_repa.py \
+        --exp im_1400ep_lightningDiT_repa_register_0_B_fourier_gate_relu_adain_affinenorm \
         --datadir /common/users/qd66/repa/latent_imagenet256  \
         --dataset subset_imagenet_256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -63,8 +63,8 @@ CUDA_VISIBLE_DEVICES=3,4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10200 --npr
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((48)) \
-        --epochs $((700*1)) \
+        --global-batch-size $((96)) \
+        --epochs $((1400*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
         --num-channels 128 \
@@ -73,23 +73,26 @@ CUDA_VISIBLE_DEVICES=3,4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10200 --npr
         --resblock-updown \
         --ict \
         --max-grad-norm 100 \
-        --model-type DiT-XL/2 \
+        --model-type DiT-B/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
         --normalize-matrix statistic/stats_25.npy \
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --linear-act relu \
+        --linear-act gate_fourier_relu \
         --norm-type rms \
         --projector-dim 2048 \
         --repa-lamb 0.5 \
-        --repa-enc-info 8:dinov2-vit-b \
+        --repa-enc-info 4:dinov2-vit-b \
         --repa-relu-margin 0.4 \
         --repa-timesteps full \
         --denoising-task-rate 0.5 \
         --repa-mapper repa \
         --mar-mapper-num-res-blocks 0 \
-        --use-repa \
-        --num-register 2 \
+        --num-register 0 \
         --use-rope \
+        --use-repa \
+        --cond-type adain \
+        # --use-freq-cond \
+        # --resume

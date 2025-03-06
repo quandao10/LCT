@@ -1,5 +1,5 @@
-CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10130 --nproc_per_node=2 train_cm_latent_repa.py \
-        --exp 700ep_L_relu_eps1e-4_repa_register_2 \
+CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10139 --nproc_per_node=1 train_cm_latent_repa.py \
+        --exp 700ep_B_repa_gate_fourier_relu_adain_8_512 \
         --datadir /common/users/qd66/repa/latent_celeb256  \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -11,8 +11,8 @@ CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10130 --npr
         --target-ema-mode adaptive \
         --start-ema 0.95 \
         --scale-mode progressive \
-        --start-scales 10 \
-        --end-scales 640 \
+        --start-scales 8 \
+        --end-scales 512 \
         --noise-sampler ict \
         --global-batch-size $((24*2)) \
         --epochs $((700*1)) \
@@ -24,15 +24,15 @@ CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10130 --npr
         --resblock-updown \
         --ict \
         --max-grad-norm 100 \
-        --model-type DiT-L/2 \
+        --model-type DiT-B/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
         --normalize-matrix statistic/celeb256_stat.npy \
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --linear-act relu \
-        --attn-type normal \
+        --linear-act gate_fourier_relu \
+        --norm-type rms \
         --projector-dim 2048 \
         --repa-lamb 0.1 \
         --repa-enc-info 4:dinov2-vit-b \
@@ -42,5 +42,8 @@ CUDA_VISIBLE_DEVICES=1,2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10130 --npr
         --repa-mapper repa \
         --mar-mapper-num-res-blocks 0 \
         --use-repa \
-        --num-register 2 \
+        --num-register 0 \
+        --cond-type adain \
+        --ckpt-every 25 \
+        # --model-ckpt /research/cbim/medical/qd66/lct_v2/latent_celeb256/700ep_L_relu_eps1e-4_repa_register_2_resume600/checkpoints/0000725.pt \
         

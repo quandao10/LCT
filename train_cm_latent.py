@@ -341,7 +341,19 @@ def main(args):
                 diff_loss = torch.tensor(0)
             after_forward = torch.cuda.memory_allocated(device)
             
-            
+            if torch.isnan(loss):
+                content = {
+                    "epoch": epoch + 1,
+                    "train_steps": train_steps,
+                    "args": args,
+                    "model": model.module.state_dict(),
+                    "opt": opt.state_dict(),
+                    "ema": ema.state_dict(),
+                    "target": target_model.state_dict(),
+                }
+                torch.save(content, os.path.join(checkpoint_dir, "content_nan.pth"))
+                exit(0)
+    
             opt.zero_grad()
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
@@ -535,14 +547,12 @@ if __name__ == "__main__":
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
     parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys())+list(UDiT_models.keys()), default="openai_unet")
-    parser.add_argument("--no-scale", action="store_true", default=False)
     parser.add_argument("--wo-norm", action="store_true", default=False)
-    parser.add_argument("--use-scale-residual", action="store_true", default=False)
     parser.add_argument("--linear-act", type=str, default="silu")
-    parser.add_argument("--attn-type", type=str, default="normal")
+    parser.add_argument("--norm-type", type=str, default="layer")
     parser.add_argument("--num-register", type=int, default=0)
-    parser.add_argument("--final-conv", action="store_true", default=False)
     parser.add_argument("--separate-cond", action="store_true", default=False)
+    parser.add_argument("--use-rope", action="store_true", default=False)
     
     
     ###### diffusion ######
@@ -565,7 +575,6 @@ if __name__ == "__main__":
     parser.add_argument("--ict", action="store_true", default=False)
     parser.add_argument("--l2-reweight", action="store_true", default=False)
     parser.add_argument("--use-diffloss", action="store_true", default=False)
-    parser.add_argument("--ema-half-nfe", action="store_true", default=False)
     
     ###### training ######
     parser.add_argument("--lr", type=float, default=1e-4)
