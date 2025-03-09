@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from repa.repa_mapping import MAR_mapping
 from einops import rearrange, repeat
 from math import pi
+from models.wavelet_layer import DWT_2D, IDWT_2D
 
 
 
@@ -115,26 +116,94 @@ class GLUFFN_Fourier(nn.Module):
         patch = None,
         act_layer = nn.SiLU,
         bias: bool = True,
+        post = False,
     ) -> None:
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
+        self.post = post
         self.act_layer = act_layer()
         self.p = patch
-        self.fft = nn.Parameter(torch.ones((in_features, self.p, self.p // 2 + 1)))
+        self.fft = nn.Parameter(torch.cat([torch.ones((in_features, self.p, self.p // 2 + 1, 1)), \
+            torch.zeros((in_features, self.p, self.p // 2 + 1, 1))], dim=-1))
+        # self.fft = nn.Parameter(torch.ones((in_features, self.p, self.p // 2 + 1)))
         self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
         self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
 
     def forward(self, x): # [B, L, D]
         B, L, D = x.shape
-        x = x.permute(0, 2, 1).reshape(B, D, self.p, self.p)
-        x_fft = torch.fft.rfft2(x)
-        x_fft = x_fft * self.fft
-        x = torch.fft.irfft2(x_fft, s=(self.p, self.p)).reshape(B, D, L).permute(0,2,1)
+        if not self.post:
+            x = x.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            x_fft = torch.fft.rfft2(x, norm="ortho")
+            # x_fft = torch.fft.rfft2(x)
+            x_fft = x_fft * torch.view_as_complex(self.fft)
+            # x_fft = x_fft * self.fft
+            x = torch.fft.irfft2(x_fft, s=(self.p, self.p), norm="ortho").reshape(B, D, L).permute(0,2,1)
+            # x = torch.fft.irfft2(x_fft, s=(self.p, self.p)).reshape(B, D, L).permute(0,2,1)
         x12 = self.w12(x)
         x1, x2 = x12.chunk(2, dim=-1)
         hidden = self.act_layer(x1) * x2
-        return self.w3(hidden)
+        x = self.w3(hidden)
+        if self.post:
+            x = x.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            x_fft = torch.fft.rfft2(x, norm="ortho")
+            # x_fft = torch.fft.rfft2(x)
+            x_fft = x_fft * torch.view_as_complex(self.fft)
+            # x_fft = x_fft * self.fft
+            x = torch.fft.irfft2(x_fft, s=(self.p, self.p), norm="ortho").reshape(B, D, L).permute(0,2,1)
+            # x = torch.fft.irfft2(x_fft, s=(self.p, self.p)).reshape(B, D, L).permute(0,2,1)
+        return x
+
+
+class GLUFFN_Wavelet(nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
+        patch = None,
+        act_layer = nn.SiLU,
+        bias: bool = True,
+        post = False,
+    ) -> None:
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.post = post
+        self.act_layer = act_layer()
+        self.p = patch
+        self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
+        self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
+        self.dwt = DWT_2D(wave="haar")
+        self.idwt = IDWT_2D(wave="haar")
+        self.wavelet_mapper = nn.Sequential(
+            nn.Conv2d(in_features, in_features, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=in_features, out_channels=in_features*4, kernel_size=2, stride=2),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x): # [B, L, D]
+        B, L, D = x.shape
+        if not self.post:
+            x = x.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            gate = self.wavelet_mapper(x)
+            subbands = self.dwt(x)  # xll, xlh, xhl, xhh where each has shape of [b, 4c, h/2, w/2]
+            subbands = subbands*gate
+            out = self.idwt(subbands)
+            x = out.reshape(B, D, L).permute(0, 2, 1)
+        x12 = self.w12(x)
+        x1, x2 = x12.chunk(2, dim=-1)
+        hidden = self.act_layer(x1) * x2
+        x = self.w3(hidden)
+        if self.post:
+            x = x.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            gate = self.wavelet_mapper(x)
+            subbands = self.dwt(x)  # xll, xlh, xhl, xhh where each has shape of [b, 4c, h/2, w/2]
+            subbands = subbands*gate
+            x = self.idwt(subbands)
+            x = x.reshape(B, D, L).permute(0, 2, 1)
+        return x
 
 class TimestepEmbedder(nn.Module):
     """
@@ -238,6 +307,14 @@ class DiTBlock(nn.Module): #NOTE: we are using both post and prev norm with wo_n
             self.mlp = GLUFFN(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU)
         elif linear_act == "gate_fourier_relu":
             self.mlp = GLUFFN_Fourier(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch)
+        elif linear_act == "gate_pfourier_relu":
+            self.mlp = GLUFFN_Fourier(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=True)
+        elif linear_act == "gate_wavelet_relu":
+            self.mlp = GLUFFN_Wavelet(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=False)
+        elif linear_act == "gate_pwavelet_relu":
+            self.mlp = GLUFFN_Wavelet(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=True)
+        else:
+            raise Exception("Not implementated in this code, dumbass")
         
         if "adain" in self.cond_type:
             self.adaLN_modulation = nn.Sequential(

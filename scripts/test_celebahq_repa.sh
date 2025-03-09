@@ -3,7 +3,7 @@ export MASTER_PORT=10132
 for epoch in 600 625 650 675 700
 do
         CUDA_VISIBLE_DEVICES=0,5,6,7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=4 test_cm_latent_ddp.py \
-                --ckpt /research/cbim/medical/qd66/lct_v2/latent_celeb256/700ep_B_repa_gate_fourier_relu/checkpoints/0000${epoch}.pt \
+                --ckpt /research/cbim/medical/qd66/lct_v2/latent_celeb256/700ep_B_repa_gate_wavelet_relu_adain_8_512/checkpoints/0000${epoch}.pt \
                 --seed 42 \
                 --dataset latent_celeb256 \
                 --image-size 32 \
@@ -24,7 +24,7 @@ do
                 --real-img-dir ../real_samples/celeba_256/ \
                 --compute-fid \
                 --ema \
-                --linear-act gate_fourier_relu \
+                --linear-act gate_wavelet_relu \
                 --num-register 0 \
                 --norm-type rms \
                 --cond-type adain \

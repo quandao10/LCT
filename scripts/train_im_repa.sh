@@ -47,8 +47,8 @@
 
 
 
-CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10226 --nproc_per_node=2 train_cm_latent_repa.py \
-        --exp im_1400ep_lightningDiT_repa_register_0_B_fourier_gate_relu_adain_affinenorm \
+CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10228 --nproc_per_node=2 train_cm_latent_repa.py \
+        --exp im_700ep_lightningDiT_repa_register_0_B_wavelet_gate_relu \
         --datadir /common/users/qd66/repa/latent_imagenet256  \
         --dataset subset_imagenet_256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -63,8 +63,8 @@ CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10226 --npr
         --start-scales 10 \
         --end-scales 640 \
         --noise-sampler ict \
-        --global-batch-size $((96)) \
-        --epochs $((1400*1)) \
+        --global-batch-size $((48)) \
+        --epochs $((700*1)) \
         --lr 1e-4 \
         --num-sampling 8 \
         --num-channels 128 \
@@ -80,7 +80,7 @@ CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10226 --npr
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --linear-act gate_fourier_relu \
+        --linear-act gate_wavelet_relu \
         --norm-type rms \
         --projector-dim 2048 \
         --repa-lamb 0.5 \

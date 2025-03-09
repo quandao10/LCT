@@ -1,5 +1,5 @@
-CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10139 --nproc_per_node=1 train_cm_latent_repa.py \
-        --exp 700ep_B_repa_gate_fourier_relu_adain_8_512 \
+CUDA_VISIBLE_DEVICES=7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10148 --nproc_per_node=1 train_cm_latent_repa.py \
+        --exp 700ep_B_repa_gate_wavelet_relu_adain_8_512 \
         --datadir /common/users/qd66/repa/latent_celeb256  \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -31,7 +31,7 @@ CUDA_VISIBLE_DEVICES=2 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10139 --nproc
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --linear-act gate_fourier_relu \
+        --linear-act gate_wavelet_relu \
         --norm-type rms \
         --projector-dim 2048 \
         --repa-lamb 0.1 \
