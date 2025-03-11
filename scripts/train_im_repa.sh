@@ -47,9 +47,9 @@
 
 
 
-CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10228 --nproc_per_node=2 train_cm_latent_repa.py \
-        --exp im_700ep_lightningDiT_repa_register_0_B_wavelet_gate_relu \
-        --datadir /common/users/qd66/repa/latent_imagenet256  \
+CUDA_VISIBLE_DEVICES=6,7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10212 --nproc_per_node=2 train_cm_latent_repa.py \
+        --exp eq_im_700ep_lightningDiT_repa_register_0_B_premlp \
+        --datadir ~/workspace/dataset/repa/latent_imagenet256  \
         --dataset subset_imagenet_256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
         --image-size 32 \
@@ -76,11 +76,11 @@ CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10228 --npr
         --model-type DiT-B/2 \
         --channel-mult 1,2,3,4 \
         --attention-resolutions 16,8 \
-        --normalize-matrix statistic/stats_25.npy \
+        --normalize-matrix statistic/stats_25_.npy \
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --linear-act gate_wavelet_relu \
+        --linear-act gate_relu \
         --norm-type rms \
         --projector-dim 2048 \
         --repa-lamb 0.5 \
@@ -93,6 +93,5 @@ CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10228 --npr
         --num-register 0 \
         --use-rope \
         --use-repa \
-        --cond-type adain \
-        # --use-freq-cond \
-        # --resume
+        --freq-type prev_mlp \
+        --resume

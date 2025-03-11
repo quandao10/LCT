@@ -286,10 +286,11 @@ class DiTBlock(nn.Module): #NOTE: we are using both post and prev norm with wo_n
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
-    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, cond_type="adain", patch=16, mlp_ratio=4.0, **block_kwargs):
+    def __init__(self, hidden_size, num_heads, norm, wo_norm, linear_act, freq_type="prev_mlp", patch=16, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
         self.wo_norm = wo_norm
-        self.cond_type= cond_type
+        self.freq_type = freq_type
+        self.p = patch
         self.norm1 = norm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, qk_norm=True, **block_kwargs) \
             if not wo_norm else Attention(hidden_size, num_heads=num_heads, qkv_bias=True, norm_layer=norm, **block_kwargs)
@@ -305,55 +306,89 @@ class DiTBlock(nn.Module): #NOTE: we are using both post and prev norm with wo_n
             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
         elif linear_act == "gate_relu":
             self.mlp = GLUFFN(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU)
-        elif linear_act == "gate_fourier_relu":
-            self.mlp = GLUFFN_Fourier(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch)
-        elif linear_act == "gate_pfourier_relu":
-            self.mlp = GLUFFN_Fourier(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=True)
-        elif linear_act == "gate_wavelet_relu":
-            self.mlp = GLUFFN_Wavelet(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=False)
-        elif linear_act == "gate_pwavelet_relu":
-            self.mlp = GLUFFN_Wavelet(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=True)
+        # elif linear_act == "gate_fourier_relu":
+        #     self.mlp = GLUFFN_Fourier(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch)
+        # elif linear_act == "gate_pfourier_relu":
+        #     self.mlp = GLUFFN_Fourier(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=True)
+        # elif linear_act == "gate_wavelet_relu":
+        #     self.mlp = GLUFFN_Wavelet(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=False)
+        # elif linear_act == "gate_pwavelet_relu":
+        #     self.mlp = GLUFFN_Wavelet(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=True)
         else:
             raise Exception("Not implementated in this code, dumbass")
         
-        if "adain" in self.cond_type:
-            self.adaLN_modulation = nn.Sequential(
-                nn.SiLU(),
-                nn.Linear(hidden_size, 6 * hidden_size, bias=True),
-                GroupRMSNorm(6 * hidden_size, group=6) if ("norm" in self.cond_type) else nn.Identity()
-            )
-        elif self.cond_type == "prod":
-            self.linear_cond = nn.Linear(hidden_size, hidden_size, bias=True)
-        elif self.cond_type == "sum":
-            self.linear_cond = nn.Linear(hidden_size, hidden_size, bias=True)
-        elif "both" in self.cond_type:
-            self.adaLN_modulation = nn.Sequential(
-                nn.SiLU(),
-                nn.Linear(hidden_size, 6 * hidden_size, bias=True),
-                GroupRMSNorm(6 * hidden_size, group=6) if ("norm" in self.cond_type) else nn.Identity()
-            )
-            self.linear_cond = nn.Linear(hidden_size, hidden_size, bias=True)
+        if "prev_mlp" in self.freq_type:
+            self.prev_mlp = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
+                torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
+            print("prev_mlp")
+        if "post_mlp" in self.freq_type:
+            self.post_mlp = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
+                torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
+            print("post_mlp")
+        if "prev_norm_mlp" in self.freq_type:
+            self.prev_norm_mlp = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
+                torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
+            print("prev_norm_mlp")
+        if "prev_norm_attn" in self.freq_type:
+            self.prev_norm_attn = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
+                torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
+            print("prev_norm_attn")
+        if "prev_attn" in self.freq_type:
+            self.prev_attn = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
+                torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
+            print("prev_attn")
+        if "post_attn" in self.freq_type:
+            self.post_attn = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
+                torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
+            print("post_attn")
+        
+        self.adaLN_modulation = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(hidden_size, 6 * hidden_size, bias=True),
+            # GroupRMSNorm(6 * hidden_size, group=6) if ("norm" in self.cond_type) else nn.Identity()
+        )
         
     def forward(self, x, c, feat_rope=None):
-        if "adain" in self.cond_type:
-            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-            x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), feat_rope=feat_rope)
-            x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
-        elif self.cond_type == "prod":
-            c = self.linear_cond(c) + 1
-            x = nn.SiLU()(x*c.unsqueeze(1))
-            x = x + self.attn(self.norm1(x), feat_rope=feat_rope)
-            x = x + self.mlp(self.norm2(x))
-        elif self.cond_type == "sum":
-            c = self.linear_cond(c)
-            x = nn.SiLU()(x + c.unsqueeze(1))
-            x = x + self.attn(self.norm1(x), feat_rope=feat_rope)
-            x = x + self.mlp(self.norm2(x))
-        elif "both" in self.cond_type:
-            c = self.linear_cond(c)
-            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-            x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), feat_rope=feat_rope)
-            x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
+        B, L, D = x.size()
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+        # attention
+        if "prev_norm_attn" in self.freq_type:
+            x = x.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            x_fft = torch.fft.rfft2(x, norm="ortho")
+            x_fft = x_fft * torch.view_as_complex(self.prev_norm_attn)
+            x = torch.fft.irfft2(x_fft, s=(self.p, self.p), norm="ortho").reshape(B, D, L).permute(0,2,1)
+        temp = modulate(self.norm1(x), shift_msa, scale_msa)
+        if "prev_attn" in self.freq_type:
+            temp = temp.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            temp_fft = torch.fft.rfft2(temp, norm="ortho")
+            temp_fft = temp_fft * torch.view_as_complex(self.prev_attn)
+            temp = torch.fft.irfft2(temp_fft, s=(self.p, self.p), norm="ortho").reshape(B, D, L).permute(0,2,1)
+        temp = self.attn(temp, feat_rope=feat_rope)
+        if "post_attn" in self.freq_type:
+            temp = temp.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            temp_fft = torch.fft.rfft2(temp, norm="ortho")
+            temp_fft = temp_fft * torch.view_as_complex(self.post_attn)
+            temp = torch.fft.irfft2(temp_fft, s=(self.p, self.p), norm="ortho").reshape(B, D, L).permute(0,2,1)
+        x = x + gate_msa.unsqueeze(1) * temp
+        # gate mlp or mlp
+        if "prev_norm_mlp" in self.freq_type:
+            x = x.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            x_fft = torch.fft.rfft2(x, norm="ortho")
+            x_fft = x_fft * torch.view_as_complex(self.prev_norm_mlp)
+            x = torch.fft.irfft2(x_fft, s=(self.p, self.p), norm="ortho").reshape(B, D, L).permute(0,2,1)
+        temp = modulate(self.norm2(x), shift_mlp, scale_mlp)
+        if "prev_mlp" in self.freq_type:
+            temp = temp.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            temp_fft = torch.fft.rfft2(temp, norm="ortho")
+            temp_fft = temp_fft * torch.view_as_complex(self.prev_mlp)
+            temp = torch.fft.irfft2(temp_fft, s=(self.p, self.p), norm="ortho").reshape(B, D, L).permute(0,2,1)
+        temp = self.mlp(temp)
+        if "post_mlp" in self.freq_type:
+            temp = temp.permute(0, 2, 1).reshape(B, D, self.p, self.p)
+            temp_fft = torch.fft.rfft2(temp, norm="ortho")
+            temp_fft = temp_fft * torch.view_as_complex(self.post_mlp)
+            temp = torch.fft.irfft2(temp_fft, s=(self.p, self.p), norm="ortho").reshape(B, D, L).permute(0,2,1)
+        x = x + gate_mlp.unsqueeze(1) * temp
         return x
     
     
@@ -409,7 +444,7 @@ class DiT(nn.Module):
         separate_cond = False,
         use_rope = False,
         use_freq_cond = False,
-        cond_type="adain",
+        freq_type="prev_mlp",
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -422,7 +457,7 @@ class DiT(nn.Module):
         self.separate_cond = separate_cond
         self.use_rope = use_rope
         self.use_freq_cond = use_freq_cond
-        self.cond_type = cond_type
+        self.freq_type = freq_type
         
         # use freq condition
         if self.use_freq_cond:
@@ -467,7 +502,7 @@ class DiT(nn.Module):
                      linear_act=linear_act, 
                      wo_norm=wo_norm, 
                      patch=int(input_size/patch_size),
-                     cond_type=cond_type) \
+                     freq_type=freq_type) \
                 for _ in range(depth)
         ])
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels, norm=self.norm, wo_norm=wo_norm)
@@ -521,10 +556,10 @@ class DiT(nn.Module):
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
 
         # Zero-out adaLN modulation layers in DiT blocks:
-        if "adain" in self.cond_type or "both" in self.cond_type:
-            for block in self.blocks:
-                nn.init.constant_(block.adaLN_modulation[1].weight, 0)
-                nn.init.constant_(block.adaLN_modulation[1].bias, 0)
+        # if "adain" in self.cond_type or "both" in self.cond_type:
+        for block in self.blocks:
+            nn.init.constant_(block.adaLN_modulation[1].weight, 0)
+            nn.init.constant_(block.adaLN_modulation[1].bias, 0)
 
         # Zero-out output layers:
         nn.init.constant_(self.final_layer.adaLN_modulation[1].weight, 0)

@@ -2,7 +2,7 @@ export MASTER_PORT=10700
 
 # for epoch in 625 650 675 700
 # do
-CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 test_cm_cond.py \
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=1 test_cm_cond.py \
         --ckpt /research/cbim/medical/qd66/lct_v2/subset_imagenet_256/im_700ep_XL_relu_eps1e-4_repa_register_2/checkpoints/0000475.pt \
         --seed 0 \
         --dataset latent_imagenet256 \

@@ -190,7 +190,9 @@ def main(args):
         logger = create_logger(None)
     # create vae model
     logger.info("creating the vae model")
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    vae = AutoencoderKL.from_pretrained(f"zelaki/eq-vae").to(device)
+    
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
     if args.custom_constant_c > 0.0:
@@ -574,7 +576,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-rope", action="store_true", default=False)
     parser.add_argument("--separate-cond", action="store_true", default=False)
     parser.add_argument("--use-freq-cond", action="store_true", default=False)
-    parser.add_argument("--cond-type", type=str, default="adain", choices=["adain", "norm_adain", "sum", "prod", "norm_both", "both"])
+    parser.add_argument("--freq-type", type=str, default="prev_mlp")
     
     
     ###### diffusion ######

@@ -455,5 +455,7 @@ Epoch = 0000650, FID = 6.418758453394503, cfg_scale = 1.0
 Epoch = 0000675, FID = 6.460015479345969, cfg_scale = 1.0
 Epoch = 0000700, FID = 6.116955310140781, cfg_scale = 1.0
 
-
-DiT B/2 lightning wavelet gate mlp relu fp16 + REPA + 8-512 scale + ortho + fix
+DiT B/2 lightning wavelet gate mlp relu fp16 + REPA + 8-512 scale
+Epoch = 0000600, FID = 7.603609654339095, cfg_scale = 1.0
+Epoch = 0000625, FID = 7.010261051246346, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.793412007689881, cfg_scale = 1.0

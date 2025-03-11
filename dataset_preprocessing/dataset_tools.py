@@ -103,6 +103,37 @@ def open_image_folder(source_dir, *, max_images: Optional[int]) -> tuple[int, It
 
 #----------------------------------------------------------------------------
 
+def open_image_folder_with_json(source_dir, meta_data, *, max_images: Optional[int],) -> tuple[int, Iterator[ImageEntry]]:
+    input_images = []
+    labels = dict()
+    with open(meta_data, 'r') as f:
+        items = json.load(f)
+    for label, list_img in items.items():
+        for img in list_img:
+            input_images.append(os.path.join(source_dir, img))
+            labels[img] = label
+
+    input_images = sorted([f for f in input_images if is_image_ext(f)])
+
+    arch_fnames = {fname: os.path.relpath(fname, source_dir).replace('\\', '/') for fname in input_images}
+    max_idx = maybe_min(len(input_images), max_images)
+
+    # No labels available => determine from top-level directory names.
+    if len(labels) == 0:
+        toplevel_names = {arch_fname: arch_fname.split('/')[0] if '/' in arch_fname else '' for arch_fname in arch_fnames.values()}
+        toplevel_indices = {toplevel_name: idx for idx, toplevel_name in enumerate(sorted(set(toplevel_names.values())))}
+        if len(toplevel_indices) > 1:
+            labels = {arch_fname: toplevel_indices[toplevel_name] for arch_fname, toplevel_name in toplevel_names.items()}
+    def iterate_images():
+        for idx, fname in enumerate(input_images):
+            img = np.array(PIL.Image.open(fname).convert('RGB'))
+            yield ImageEntry(img=img, label=labels.get(arch_fnames[fname]), name=arch_fnames[fname])
+            if idx >= max_idx - 1:
+                break
+    return max_idx, iterate_images()
+
+#----------------------------------------------------------------------------
+
 def open_image_zip(source, *, max_images: Optional[int]) -> tuple[int, Iterator[ImageEntry]]:
     with zipfile.ZipFile(source, mode='r') as z:
         input_images = [str(f) for f in sorted(z.namelist()) if is_image_ext(f)]
@@ -548,6 +579,46 @@ def encode(
         img_tensor = torch.tensor(image.img).to('cuda').permute(2, 0, 1).unsqueeze(0)
         mean_std = vae.encode_pixels(img_tensor)[0].cpu()
         idx_str = f'{idx:08d}'
+        archive_fname = f'{idx_str[:5]}/img-mean-std-{idx_str}.npy'
+
+        f = io.BytesIO()
+        np.save(f, mean_std)
+        save_bytes(os.path.join(archive_root_dir, archive_fname), f.getvalue())
+        labels.append([archive_fname, image.label] if image.label is not None else None)
+
+    metadata = {'labels': labels if all(x is not None for x in labels) else None}
+    save_bytes(os.path.join(archive_root_dir, 'dataset.json'), json.dumps(metadata))
+    close_dest()
+    
+@cmdline.command()
+@click.option('--model-url',  help='VAE encoder model', metavar='URL',                  type=str, default='stabilityai/sd-vae-ft-mse', show_default=True)
+@click.option('--source',     help='Input directory or archive name', metavar='PATH',   type=str, required=True)
+@click.option('--dest',       help='Output directory or archive name', metavar='PATH',  type=str, required=True)
+@click.option('--max-images', help='Maximum number of images to output', metavar='INT', type=int)
+@click.option('--meta-data',       help='Json of subset', metavar='PATH',  type=str)
+
+def encodewithjson(
+    model_url: str,
+    source: str,
+    dest: str,
+    meta_data: str,
+    max_images: Optional[int],
+):
+    """Encode pixel data to VAE latents."""
+    PIL.Image.init()
+    if dest == '':
+        raise click.ClickException('--dest output filename or directory must not be an empty string')
+
+    vae = StabilityVAEEncoder(vae_name=model_url, batch_size=1)
+    num_files, input_iter = open_image_folder_with_json(source, meta_data, max_images=max_images)
+    archive_root_dir, save_bytes, close_dest = open_dest(dest)
+    labels = []
+
+    for idx, image in tqdm(enumerate(input_iter), total=num_files):
+        img_tensor = torch.tensor(image.img).to('cuda').permute(2, 0, 1).unsqueeze(0)
+        mean_std = vae.encode_pixels(img_tensor)[0].cpu()
+        # idx_str = f'{idx:08d}'
+        idx_str = image.name.split('/')[1].split('.')[0].replace('img', '')
         archive_fname = f'{idx_str[:5]}/img-mean-std-{idx_str}.npy'
 
         f = io.BytesIO()
