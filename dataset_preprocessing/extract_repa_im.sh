@@ -1,4 +1,4 @@
-image_dir="/common/users/qd66/dataset/real_imagenet_256/images_1/"
+image_dir="/common/users/qd66/dataset/real_imagenet_256/images/"
 dataset_name="real_imagenet_256"
 output_dir="/common/users/qd66/repa/"
 SSL_model="dinov2-vit-b" # clip-vit-L, dinov2-vit-b, dinov2-vit-l, mocov3-vit-b, mocov3-vit-l, jepa-vit-h, mae-vit-l

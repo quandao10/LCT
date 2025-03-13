@@ -224,7 +224,7 @@ if __name__ == "__main__":
     parser.add_argument("--separate-cond", action="store_true", default=False)
     parser.add_argument("--use-rope", action="store_true", default=False)
     parser.add_argument("--use-freq-cond", action="store_true", default=False)
-    parser.add_argument("--cond-type", type=str, default="adain", choices=["adain", "norm_adain", "sum", "prod", "norm_both", "both"])
+    parser.add_argument("--freq-type", type=str, default="none")
     
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)

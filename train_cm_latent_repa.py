@@ -190,8 +190,10 @@ def main(args):
         logger = create_logger(None)
     # create vae model
     logger.info("creating the vae model")
-    # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
-    vae = AutoencoderKL.from_pretrained(f"zelaki/eq-vae").to(device)
+    if args.vae == "vae":
+        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    elif args.vae == "eq_vae":
+        vae = AutoencoderKL.from_pretrained(f"zelaki/eq-vae").to(device)
     
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
@@ -553,7 +555,7 @@ if __name__ == "__main__":
     parser.add_argument("--normalize-matrix", type=str, default=None)
     
     ###### model ######
-    parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
+    parser.add_argument("--vae", type=str, choices=["vae", "eq_vae"], default="vae")  # Choice doesn't affect training
     parser.add_argument("--num-channels", type=int, default=128)
     parser.add_argument("--num-res-blocks", type=int, default=2)
     parser.add_argument("--num-heads", type=int, default=4)

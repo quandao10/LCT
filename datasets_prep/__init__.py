@@ -92,12 +92,11 @@ class RepaDataset(Dataset):
 
 
 
-class ImageNet_dataset(torch.utils.data.Dataset):
-    def __init__(self, base_dir, use_labels=True, repa_enc_info=None):
+class ImageNet_subdataset(torch.utils.data.Dataset):
+    def __init__(self, base_dir, repa_enc_info=None):
         # VAE
         self.base_dir = base_dir
         self.vae_path = os.path.join(base_dir, "vae_")
-        self.use_labels = use_labels
         with open("/research/cbim/vast/qd66/workspace/LCT/statistic/imagenet25_class_to_images.json") as f:
             self.items = json.load(f)
         self.class_indices = list(self.items.keys())
@@ -143,10 +142,48 @@ class ImageNet_dataset(torch.utils.data.Dataset):
         ssl_feat = np.load(os.path.join(self.ssl_feat_dir, ssl_file))
         ssl_feat = torch.from_numpy(ssl_feat)
         return sample, ssl_feat, label
+    
+class ImageNet_dataset(torch.utils.data.Dataset):
+    def __init__(self, base_dir, vae_type="vae", repa_enc_info=None):
+        # VAE
+        self.base_dir = base_dir
+        self.vae_path = os.path.join(base_dir, vae_type)
+        self.meta_file = os.path.join(self.vae_path, "dataset.json")
+        with open(self.meta_file, 'r') as file:
+            self.meta_data = json.load(file)["labels"]
+        self.use_repa = repa_enc_info is not None
+        
+        if repa_enc_info is not None:
+            depth, enc, z_dim = parse_repa_enc_info_v2(repa_enc_info)
+            self.ssl_feat_dir = os.path.join(self.base_dir, f"ssl_feat_{enc}")
+            self.repa_enc_info = repa_enc_info
+            
+
+    def __len__(self):
+        return len(self.meta_data)
+    
+    def __getitem__(self, index):
+        # VAE latent and label
+        vae_file, label = self.meta_data[index]
+        label = torch.tensor(int(label))
+        vae_data = np.load(os.path.join(self.vae_path, vae_file))
+        mean, std = np.array_split(vae_data, indices_or_sections=2, axis=0) 
+        mean, std = torch.from_numpy(mean), torch.from_numpy(std)   
+        sample = mean + torch.randn_like(mean) * std
+        # SSL features
+        ssl_feat = torch.ones_like(sample)
+        if self.use_repa:
+            ssl_file = ("img" + vae_file.split("-")[-1]).replace(".npy", ".png.npy")
+            ssl_feat = np.load(os.path.join(self.ssl_feat_dir, ssl_file))
+            ssl_feat = torch.from_numpy(ssl_feat)
+        return sample, ssl_feat, label
 
 def get_repa_dataset(args):   
     if args.dataset == "subset_imagenet_256":
-        dataset = ImageNet_dataset(args.datadir, use_labels=True, repa_enc_info=args.repa_enc_info)
+        dataset = ImageNet_subdataset("/common/users/qd66/repa/latent_sub_imagenet256/", repa_enc_info=args.repa_enc_info)
+        return dataset
+    elif args.dataset == "imagenet_256":
+        dataset = ImageNet_dataset("/common/users/qd66/repa/latent_imagenet256/", vae_type=args.vae, repa_enc_info=args.repa_enc_info if args.use_repa else None)
         return dataset
     else:
         return RepaDataset(args.datadir, args.repa_enc_info)

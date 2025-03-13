@@ -7,13 +7,14 @@ resolution=256
 if [ $MODE -eq 1 ]; then
     # # 1. Convert raw ImageNet data to a ZIP archive at 256x256 resolution
     python -m dataset_preprocessing.dataset_tools convert \
-        --source=/research/cbim/archive/Datasets/ImageNet/ILSVRC2012_train/data \
-        --dest=/common/users/qd66/dataset/real_imagenet_${resolution}/images_1 \
+        --source=/research/cbim/archive/Datasets/imagenet/ILSVRC2012_train/data \
+        --dest=/common/users/qd66/dataset/real_imagenet_${resolution}/images \
         --resolution=${resolution}x${resolution} --transform=center-crop-dhariwal
 
 elif [ $MODE -eq 2 ]; then
     # 2. Convert the pixel data to VAE latents
     python -m dataset_preprocessing.dataset_tools encode \
+        --model-url=zelaki/eq-vae \
         --source=/common/users/qd66/dataset/real_imagenet_${resolution}/images_1 \
         --dest=/common/users/qd66/dataset/real_imagenet_${resolution}/vae-sdvae-ft-ema
 elif [ $MODE -eq 3 ]; then

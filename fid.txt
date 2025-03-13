@@ -459,3 +459,49 @@ DiT B/2 lightning wavelet gate mlp relu fp16 + REPA + 8-512 scale
 Epoch = 0000600, FID = 7.603609654339095, cfg_scale = 1.0
 Epoch = 0000625, FID = 7.010261051246346, cfg_scale = 1.0
 Epoch = 0000650, FID = 6.793412007689881, cfg_scale = 1.0
+
+DiT B/2 lightning prenormmlp relu fp16 + REPA + 8-512 scale
+Epoch = 0000600, FID = 7.446209835631578, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.807829806764744, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.596984106435968, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.70463586105933, cfg_scale = 1.0
+
+DiT B/2 lightning preattn relu fp16 + REPA + 8-512 scale
+Epoch = 0000600, FID = 7.273914193774516, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.6314959953561186, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.631922714997614, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.5350971410188095, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.545819469242815, cfg_scale = 1.0
+
+DiT B/2 lightning postattn relu fp16 + REPA + 8-512 scale
+Epoch = 0000600, FID = 7.5015248383712105, cfg_scale = 1.0
+Epoch = 0000625, FID = 7.247423710845766, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.958657691565094, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.90793592154472, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.97197738013017, cfg_scale = 1.0
+
+DiT B/2 lightning prenormattn relu fp16 + REPA + 8-512 scale
+Epoch = 0000600, FID = 7.259998169929332, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.534144525383482, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.439593148015746, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.451767114097009, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.510585596209182, cfg_scale = 1.0
+
+DiT B/2 lightning premlp no gate relu fp16 + REPA + 8-512 scale
+Epoch = 0000600, FID = 6.912612198797177, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.59796869748277, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.440381918121631, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.292433692408935, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.599916319272921, cfg_scale = 1.0
+
+DiT B/2 lightning premlp no gate relu fp16 + REPA + 8-512 scale + rope
+Epoch = 0000600, FID = 6.939191713092725, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.109343452755553, cfg_scale = 1.0
+Epoch = 0000650, FID = 5.872809657425165, cfg_scale = 1.0
+Epoch = 0000675, FID = 5.834948690942326, cfg_scale = 1.0
+Epoch = 0000700, FID = 5.798357511348399, cfg_scale = 1.0
+
+DiT B/2 lightning premlpattn gate relu fp16 + REPA + 8-512 scale
+Epoch = 0000600, FID = 7.266578915504226, cfg_scale = 1.0
+Epoch = 0000625, FID = 6.703682835010369, cfg_scale = 1.0
+Epoch = 0000650, FID = 6.568190471234402, cfg_scale = 1.0
