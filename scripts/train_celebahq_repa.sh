@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10200 --nproc_per_node=1 train_cm_latent_repa.py \
-        --exp 700ep_B_repa_prevmlpnormattn_8_512_rope \
+        --exp 700ep_B_repa_prevmlp_8_512_rope \
         --datadir ~/workspace/dataset/repa/latent_celeb256  \
         --dataset latent_celeb256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
@@ -31,7 +31,7 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10200 --nproc
         --use-diffloss \
         --ot-hard \
         --c-by-loss-std \
-        --linear-act gate_relu \
+        --linear-act relu \
         --norm-type rms \
         --projector-dim 2048 \
         --repa-lamb 0.1 \
@@ -43,9 +43,9 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10200 --nproc
         --mar-mapper-num-res-blocks 0 \
         --use-repa \
         --num-register 0 \
-        --freq-type prev_mlp,prev_norm_attn \
+        --freq-type prev_mlp \
         --ckpt-every 25 \
-        # --use-rope \
+        --use-rope \
         # --resume
         # --model-ckpt /research/cbim/medical/qd66/lct_v2/latent_celeb256/700ep_L_relu_eps1e-4_repa_register_2_resume600/checkpoints/0000725.pt \
         
