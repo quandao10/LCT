@@ -93,10 +93,11 @@ class RepaDataset(Dataset):
 
 
 class ImageNet_subdataset(torch.utils.data.Dataset):
-    def __init__(self, base_dir, repa_enc_info=None):
+    def __init__(self, base_dir, vae_type, repa_enc_info=None):
         # VAE
         self.base_dir = base_dir
-        self.vae_path = os.path.join(base_dir, "vae_")
+        self.vae_path = os.path.join(base_dir, "vae_" if vae_type == "eq_vae" else "vae")
+        print(self.vae_path)
         with open("/research/cbim/vast/qd66/workspace/LCT/statistic/imagenet25_class_to_images.json") as f:
             self.items = json.load(f)
         self.class_indices = list(self.items.keys())
@@ -180,10 +181,11 @@ class ImageNet_dataset(torch.utils.data.Dataset):
 
 def get_repa_dataset(args):   
     if args.dataset == "subset_imagenet_256":
-        dataset = ImageNet_subdataset("/common/users/qd66/repa/latent_sub_imagenet256/", repa_enc_info=args.repa_enc_info)
+        dataset = ImageNet_subdataset("/common/users/qd66/repa/latent_sub_imagenet256/", vae_type=args.vae, repa_enc_info=args.repa_enc_info)
         return dataset
     elif args.dataset == "imagenet_256":
-        dataset = ImageNet_dataset("/common/users/qd66/repa/latent_imagenet256/", vae_type=args.vae, repa_enc_info=args.repa_enc_info if args.use_repa else None)
+        dataset = ImageNet_dataset("/research/cbim/vast/qd66/workspace/dataset/repa/latent_imagenet256/", 
+                                   vae_type=args.vae, repa_enc_info=args.repa_enc_info if args.use_repa else None)
         return dataset
     else:
         return RepaDataset(args.datadir, args.repa_enc_info)

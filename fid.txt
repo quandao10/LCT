@@ -505,3 +505,14 @@ DiT B/2 lightning premlpattn gate relu fp16 + REPA + 8-512 scale
 Epoch = 0000600, FID = 7.266578915504226, cfg_scale = 1.0
 Epoch = 0000625, FID = 6.703682835010369, cfg_scale = 1.0
 Epoch = 0000650, FID = 6.568190471234402, cfg_scale = 1.0
+Epoch = 0000675, FID = 6.233727037594235, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.299523401271188, cfg_scale = 1.0
+
+DiT B/2 Imagenet
+Epoch = 0000700, FID = 52.881708660364154, cfg_scale = 1.0
+Epoch = 0000700, FID = 47.074399164969805, cfg_scale = 1.25
+Epoch = 0000700, FID = 44.67882211597947, cfg_scale = 1.5
+Epoch = 0000600, FID = 46.12679169899894, cfg_scale = 1.5
+Epoch = 0000625, FID = 45.46112392509593, cfg_scale = 1.5
+Epoch = 0000650, FID = 45.309330259015326, cfg_scale = 1.5
+Epoch = 0000675, FID = 46.64985192162203, cfg_scale = 1.5

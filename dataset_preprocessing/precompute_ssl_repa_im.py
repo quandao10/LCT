@@ -96,7 +96,7 @@ def is_image(file_path):
     image_type_ls = ["png", "jpg", "jpeg"]
     return file_path.split(".")[-1] in image_type_ls
 
-class REPADataset(Dataset):
+class REPASubDataset(Dataset):
     def __init__(self, path, transform, is_ImageNet, run_VAE, run_SSL):
         """
         self.path = path
@@ -156,6 +156,43 @@ class REPADataset(Dataset):
             repa_image = torch.zeros(1,)
 
         return vae_image, repa_image, img_name
+    
+class REPADataset(Dataset):
+    def __init__(self, path, transform, is_ImageNet):
+        self.path = path
+        self.img_list = []
+        
+        for root, dirs, files in os.walk(path):
+            for img in files:
+                if is_image(img):
+                    self.img_list.append(os.path.join(root, img))
+        print(f"\033[33mFound {len(self.img_list)} images\033[0m")
+        
+        self.transform = transform
+        self.is_ImageNet = is_ImageNet # the struture of folder is: 00000/img00000058.png
+
+    def __len__(self):
+        return len(self.img_list)
+
+    def __getitem__(self, idx):
+        img_path = self.img_list[idx]
+        if not self.is_ImageNet:
+            image_name = os.path.basename(img_path).split(".")[0]
+        else:
+            # keep the parent folder name and the image name
+            # _ls = img_path.split("/")[-2:]
+            image_name = img_path.split("/")[-1]
+
+        # VAE image
+        vae_image = Image.open(img_path).convert("RGB")
+        vae_image = self.transform(vae_image)
+
+        # REPA image
+        repa_image = np.array(PIL.Image.open(img_path))
+        repa_image = repa_image.reshape(*repa_image.shape[:2], -1).transpose(2, 0, 1)
+        repa_image = torch.from_numpy(repa_image).float()
+
+        return vae_image, repa_image, image_name
 
 
 def save_features_func(save_tuple):
@@ -225,7 +262,7 @@ def main(args):
             ),
         ]
     )
-    dataset = REPADataset(args.image_dir, transform=transform, is_ImageNet=args.is_ImageNet, run_VAE=args.run_VAE, run_SSL=args.run_SSL)
+    dataset = REPADataset(args.image_dir, transform=transform, is_ImageNet=args.is_ImageNet)
 
     loader = DataLoader(
         dataset,
@@ -236,16 +273,16 @@ def main(args):
     )
     
 
-    if args.is_ImageNet:
-        # create all subfolders in the output dir same as args.image_dir
-        # subfolders = [f.path for f in os.scandir(args.image_dir) if f.is_dir()]
-        subfolders = dataset.subfolders
-        print(f"\033[33mFound {len(subfolders)} subfolders\033[0m")
-        print(f"\033[33m{subfolders[:10]}\033[0m")
+    # if args.is_ImageNet:
+    #     # create all subfolders in the output dir same as args.image_dir
+    #     # subfolders = [f.path for f in os.scandir(args.image_dir) if f.is_dir()]
+    #     subfolders = dataset.subfolders
+    #     print(f"\033[33mFound {len(subfolders)} subfolders\033[0m")
+    #     print(f"\033[33m{subfolders[:10]}\033[0m")
         
-        for subfolder in subfolders:
-            os.makedirs(os.path.join(ssl_feat_dir, subfolder), exist_ok=True)
-            # os.makedirs(os.path.join(vae_dir, subfolder), exist_ok=True)
+    #     for subfolder in subfolders:
+    #         os.makedirs(os.path.join(ssl_feat_dir, subfolder), exist_ok=True)
+    #         # os.makedirs(os.path.join(vae_dir, subfolder), exist_ok=True)
 
     for i, (vae_image, repa_image, image_name) in enumerate(tqdm(loader)):
         # VAE latent

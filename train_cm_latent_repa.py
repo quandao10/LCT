@@ -32,7 +32,7 @@ from models.script_util import (
     create_model_and_diffusion,
     create_ema_and_scales_fn,
 )
-from models.karras_diffusion import karras_sample
+from models.karras_diffusion import karras_sample, flow_sample
 from diffusers.models import AutoencoderKL
 from models.network_dit import DiT_models
 from models.network_udit import UDiT_models
@@ -40,6 +40,7 @@ from models.network_edm2 import EDM2_models
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from optimizer.soap import SOAP
+TORCHDYNAMO_VERBOSE=1
 
 #################################################################################
 #                             Training Helper Functions                         #
@@ -54,6 +55,8 @@ def update_ema(ema_model, model, decay=0.9999):
     model_params = OrderedDict(model.named_parameters())
 
     for name, param in model_params.items():
+        # if name not in ema_params:
+        #     name = name.replace("_orig_mod.", "")
         ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
 
 
@@ -215,7 +218,8 @@ def main(args):
     target_model.train()
     
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
-    # model = torch.compile(model, mode="default")
+    if args.compile:
+        model = torch.compile(model, mode="default")
     opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
     # opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=1e-4)
     
@@ -311,8 +315,12 @@ def main(args):
             std = torch.tensor(data["std"]).to(device)
         
     if rank == 0:
-        noise = torch.randn((args.num_sampling, args.num_in_channels, args.image_size, args.image_size), device=device)*args.sigma_max
-        y_infer = torch.arange(args.num_sampling, device=device)
+        noise = torch.randn(args.num_sampling, 4, args.image_size, args.image_size).to(device)*args.sigma_max if args.fwd == "ve" else \
+            torch.randn(args.num_sampling, 4, args.image_size, args.image_size).to(device)
+        if args.num_classes < 1000:
+            y_infer = torch.arange(args.num_sampling, device=device)
+        else:
+            y_infer = torch.tensor([207, 360, 387, 974, 88, 979, 417, 279], device=device)
         
     scaler = torch.cuda.amp.GradScaler()
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
@@ -475,50 +483,71 @@ def main(args):
             with torch.no_grad():
                 if use_label:
                     model_kwargs["y"] = y_infer
-                sample = karras_sample(
-                    diffusion,
-                    generator,
-                    model,
-                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                    steps=args.steps,
-                    model_kwargs=model_kwargs,
-                    device=device,
-                    clip_denoised=args.clip_denoised,
-                    sampler=args.sampler,
-                    sigma_min=args.sigma_min,
-                    sigma_max=args.sigma_max,
-                    s_churn=args.s_churn,
-                    s_tmin=args.s_tmin,
-                    s_tmax=args.s_tmax,
-                    s_noise=args.s_noise,
-                    noise=noise,
-                    ts=ts,
-                )
+                if args.fwd == "ve":
+                    sample = karras_sample(diffusion,
+                                           generator,
+                                           model,
+                                           (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                                           steps=args.steps,
+                                           model_kwargs=model_kwargs,
+                                           device=device,
+                                           clip_denoised=args.clip_denoised,
+                                           sampler=args.sampler,
+                                           sigma_min=args.sigma_min,
+                                           sigma_max=args.sigma_max,
+                                           s_churn=args.s_churn,
+                                           s_tmin=args.s_tmin,
+                                           s_tmax=args.s_tmax,
+                                           s_noise=args.s_noise,
+                                           noise=noise,
+                                           ts=ts)
+                elif args.fwd == "flow":
+                    sample = flow_sample(diffusion,
+                                         generator,
+                                         model,
+                                         (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                                         steps=args.steps,
+                                         model_kwargs=model_kwargs,
+                                         device=device,
+                                         sampler=args.sampler,
+                                         noise=noise,
+                                         ts=ts,)
                 if use_normalize:
                     sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
                 else:
                     sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
             with torch.no_grad():
-                ema_sample = karras_sample(
-                    diffusion,
-                    generator,
-                    ema,
-                    (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                    steps=args.steps,
-                    model_kwargs=model_kwargs,
-                    device=device,
-                    clip_denoised=args.clip_denoised,
-                    sampler=args.sampler,
-                    sigma_min=args.sigma_min,
-                    sigma_max=args.sigma_max,
-                    s_churn=args.s_churn,
-                    s_tmin=args.s_tmin,
-                    s_tmax=args.s_tmax,
-                    s_noise=args.s_noise,
-                    noise=noise,
-                    ts=ts,
-                )
+                if args.fwd == "ve":
+                    ema_sample = karras_sample(
+                                        diffusion,
+                                        generator,
+                                        ema,
+                                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                                        steps=args.steps,
+                                        model_kwargs=model_kwargs,
+                                        device=device,
+                                        clip_denoised=args.clip_denoised,
+                                        sampler=args.sampler,
+                                        sigma_min=args.sigma_min,
+                                        sigma_max=args.sigma_max,
+                                        s_churn=args.s_churn,
+                                        s_tmin=args.s_tmin,
+                                        s_tmax=args.s_tmax,
+                                        s_noise=args.s_noise,
+                                        noise=noise,
+                                        ts=ts,)
+                elif args.fwd == "flow":
+                    ema_sample = flow_sample(diffusion,
+                                         generator,
+                                         ema,
+                                         (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                                         steps=args.steps,
+                                         model_kwargs=model_kwargs,
+                                         device=device,
+                                         sampler=args.sampler,
+                                         noise=noise,
+                                         ts=ts,)
                 if use_normalize:
                     ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
                 else:
@@ -584,13 +613,15 @@ if __name__ == "__main__":
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
-    parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
+    parser.add_argument("--fwd", type=str, default="ve", choices=["vp", "ve", "flow", "cosin"])
+    parser.add_argument("--weight-schedule", type=str, default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "gm", "huber_new", "cauchy_new", "gm_new"], default="huber")
     parser.add_argument("--ot-hard", action="store_true", default=False)
     parser.add_argument("--c-by-loss-std", action="store_true", default=False)
     parser.add_argument("--custom-constant-c", type=float, default=0.0)
     parser.add_argument("--diff-lamb", type=float, default=5.0)
+    parser.add_argument("--c-type", type=str, choices=["trig", "edm"], default="edm")
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
@@ -609,12 +640,13 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=2000)
     parser.add_argument("--global-batch-size", type=int, default=256)
     parser.add_argument("--max-grad-norm", type=float, default=0)
+    parser.add_argument("--compile", action='store_true', default=False)
     
     
     ###### ploting & saving ######
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--ckpt-every", type=int, default=25)
-    parser.add_argument("--save-content-every", type=int, default=25)
+    parser.add_argument("--save-content-every", type=int, default=5)
     parser.add_argument("--plot-every", type=int, default=5)
     parser.add_argument("--exp", type=str, required=True)
     parser.add_argument("--results-dir", type=str, default="results")

@@ -1,6 +1,6 @@
 import argparse
 
-from .karras_diffusion import KarrasDenoiser
+from .karras_diffusion import KarrasDenoiser, FlowDenoiser
 from .unet import UNetModel
 import numpy as np
 from .network_karras import SongUNet, DhariwalUNet
@@ -138,14 +138,15 @@ def create_model_and_diffusion(args):
         print("No network as define")
         exit(0)
             
-    diffusion = KarrasDenoiser(
-        args=args,
-        sigma_data=0.5,
-        sigma_max=args.sigma_max,
-        sigma_min=args.sigma_min,
-        weight_schedule=args.weight_schedule,
-        loss_norm=args.loss_norm
-    )
+    if args.fwd == "ve":
+        diffusion = KarrasDenoiser(
+            args=args,
+            sigma_data=0.5,
+            weight_schedule=args.weight_schedule,
+            loss_norm=args.loss_norm
+        )
+    elif args.fwd == "flow":
+        diffusion = FlowDenoiser(args, sigma_data=0.5)
     return model, diffusion
 
 

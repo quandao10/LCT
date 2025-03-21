@@ -59,7 +59,10 @@ def main(args):
 
     model, diffusion = create_model_and_diffusion(args)
     model.to(device=device)
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    if args.vae == "vae":
+        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+    elif args.vae == "eq_vae":
+        vae = AutoencoderKL.from_pretrained(f"zelaki/eq-vae").to(device)
     ckpt = torch.load(args.ckpt, map_location=torch.device(f'cuda:{device}'))
     print("Finish loading model")
     # loading weights from ddp in single gpu
@@ -92,7 +95,8 @@ def main(args):
         std = data["std"].to(device)
 
     def run_sampling(num_samples, generator):
-        noise = generator.randn(num_samples, 4, args.image_size, args.image_size).to(device)*args.sigma_max
+        noise = generator.randn(num_samples, 4, args.image_size, args.image_size).to(device)*args.sigma_max if args.fwd == "ve" else \
+            generator.randn(num_samples, 4, args.image_size, args.image_size).to(device)
         if not use_label:
             model_kwargs = dict(y=None)
         else:
@@ -115,7 +119,7 @@ def main(args):
             fake_sample = karras_sample(
                         diffusion,
                         generator,
-                        model,
+                        model.forward if (args.cfg_scale<=1.0) else model.forward_with_cfg,
                         (args.batch_size, args.num_in_channels, args.image_size, args.image_size),
                         steps=args.steps,
                         model_kwargs=model_kwargs,
@@ -201,7 +205,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=64, help="sample generating batch size")
     
     ###### model ######
-    parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
+    parser.add_argument("--vae", type=str, choices=["vae", "eq_vae"], default="vae")  # Choice doesn't affect training
     parser.add_argument("--num-channels", type=int, default=128)
     parser.add_argument("--num-res-blocks", type=int, default=2)
     parser.add_argument("--num-heads", type=int, default=4)

@@ -158,9 +158,10 @@ if __name__ == "__main__":
     parser.add_argument("--linear-act", type=str, default=None)
     parser.add_argument("--norm-type", type=str, default="layer")
     parser.add_argument("--num-register", type=int, default=0)
-    parser.add_argument("--final-conv", action="store_true", default=False)
     parser.add_argument("--separate-cond", action="store_true", default=False)
     parser.add_argument("--use-rope", action="store_true", default=False)
+    parser.add_argument("--use-freq-cond", action="store_true", default=False)
+    parser.add_argument("--freq-type", type=str, default="none")
     
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)

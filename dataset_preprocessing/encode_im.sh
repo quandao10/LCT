@@ -15,13 +15,13 @@ elif [ $MODE -eq 2 ]; then
     # 2. Convert the pixel data to VAE latents
     python -m dataset_preprocessing.dataset_tools encode \
         --model-url=zelaki/eq-vae \
-        --source=/common/users/qd66/dataset/real_imagenet_${resolution}/images_1 \
-        --dest=/common/users/qd66/dataset/real_imagenet_${resolution}/vae-sdvae-ft-ema
+        --source=/common/users/qd66/dataset/real_imagenet_${resolution}/images \
+        --dest=/research/cbim/vast/qd66/workspace/dataset/repa/latent_imagenet256/eq_vae/
 elif [ $MODE -eq 3 ]; then
     # 3. Convert the pixel data to VAE latents with json
     python preprocessing_imagenet/dataset_tools.py encodewithjson \
         --model-url=zelaki/eq-vae \
-        --source=/common/users/qd66/dataset/real_imagenet_${resolution}/images_1 \
+        --source=/common/users/qd66/dataset/real_imagenet_${resolution}/images \
         --dest=/common/users/qd66/dataset/real_imagenet_${resolution}/vae-eqvae-ft-ema-subset \
         --meta-data=statistic/imagenet25_class_to_images.json
 fi

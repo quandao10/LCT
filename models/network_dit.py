@@ -760,10 +760,10 @@ class VisionRotaryEmbeddingFast(nn.Module):
         # print('======== shape of rope freq', self.freqs_cos.shape, '========')
 
     def forward(self, t):
-        t_, rest = t[:, :, :self.pt_seq_len**2, :], t[:, :, self.pt_seq_len**2:, :]
-        t_ = t_ * self.freqs_cos + rotate_half(t_) * self.freqs_sin
-        out = torch.cat([t_, rest], dim=2)
-        return out
+        # t_, rest = t[:, :, :self.pt_seq_len**2, :], t[:, :, self.pt_seq_len**2:, :]
+        t = t * self.freqs_cos + rotate_half(t) * self.freqs_sin
+        # out = torch.cat([t_, rest], dim=2)
+        return t
 
 
 #################################################################################
