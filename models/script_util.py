@@ -1,5 +1,4 @@
 import argparse
-
 from .karras_diffusion import KarrasDenoiser, FlowDenoiser
 from .unet import UNetModel
 import numpy as np
@@ -139,14 +138,9 @@ def create_model_and_diffusion(args):
         exit(0)
             
     if args.fwd == "ve":
-        diffusion = KarrasDenoiser(
-            args=args,
-            sigma_data=0.5,
-            weight_schedule=args.weight_schedule,
-            loss_norm=args.loss_norm
-        )
+        diffusion = KarrasDenoiser(args=args, sigma_data=args.sigma_data)
     elif args.fwd == "flow":
-        diffusion = FlowDenoiser(args, sigma_data=0.5)
+        diffusion = FlowDenoiser(args, sigma_data=args.sigma_data)
     return model, diffusion
 
 

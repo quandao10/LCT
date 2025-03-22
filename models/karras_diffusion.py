@@ -1,21 +1,17 @@
 """
 Based on: https://github.com/crowsonkb/k-diffusion
 """
-import random
-
 import numpy as np
 import torch as th
-import torch.nn as nn
 import torch.nn.functional as F
-from piq import LPIPS
-from torchvision.transforms import RandomCrop
 from . import dist_util
+from torchvision.transforms import RandomCrop
 import math
 from .nn import mean_flat, append_dims, append_zero
 from .random_util import get_generator
-from scipy.stats import norm
+import robust_loss_pytorch
 
-def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0, cout=None):
+def get_weightings(weight_schedule, snrs, sigma_data, next_t=-1e-4, t=0):
     if weight_schedule == "snr":
         weightings = snrs
     elif weight_schedule == "snr+1":
@@ -28,9 +24,9 @@ def get_weightings(weight_schedule, snrs, sigma_data, t2=-1e-4, t=0, cout=None):
         weightings = th.ones_like(snrs)
     ### ICT weighting
     elif weight_schedule == "ict":
-        weightings = 1/(t-t2)
+        weightings = 1/(t-next_t)
     elif weight_schedule == "ict_trunc":
-        weightings = 1/(t-t2) * th.clamp(snrs, max=5.0, min=1.0)
+        weightings = 1/(t-next_t) * th.clamp(snrs, max=5.0, min=1.0)
     else:
         raise NotImplementedError()
     return weightings
@@ -60,12 +56,12 @@ class FlowDenoiser:
         if self.c_type == "trig":
             c_skip = th.ones_like(t)
             c_out = -t*self.sigma_data
-            c_in = 1 / (self.sigma_data * (t**2 + (1-t)**2)**0.5)
+            c_in = 1 /(self.sigma_data * (t**2 + (1-t)**2)**0.5)
         elif self.c_type == "edm":
-            temp = self.sigma_data**2 * (1-t)**2 + t**2
-            c_skip = (self.sigma_data**2 * (1-t))/temp
-            c_out = (self.sigma_data * t)/th.sqrt(temp)
-            c_in = 1/th.sqrt(temp)
+            temp = (1-t)**2 + t**2
+            c_skip = (1-t)/temp
+            c_out = -(self.sigma_data * t)/th.sqrt(temp)
+            c_in = 1/(self.sigma_data*th.sqrt(temp))
         return c_skip, c_out, c_in
     
     def consistency_losses(
@@ -81,7 +77,9 @@ class FlowDenoiser:
         if model_kwargs is None:
             model_kwargs = {}
         if noise is None:
-            noise = th.randn_like(x_start)
+            noise = th.randn_like(x_start) * self.sigma_data
+        else:
+            noise = noise * self.sigma_data
 
         dims = x_start.ndim
 
@@ -120,9 +118,9 @@ class FlowDenoiser:
         # weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t1, t, cout) # ICT: weighting 1/(t2-t)
         
         # compute diff losses
-        diff_weights = weights[diff_indices]
         if self.c_type == "edm":
-            diff_loss = mean_flat((distiller - x_start)**2)[diff_indices]*diff_weights
+            # vt = (noise - x_start)/append_dims(th.sqrt(t**2 + (1-t)**2), dims)
+            diff_loss = mean_flat((distiller - x_start)**2)[diff_indices] * th.clamp(snrs[diff_indices], min=1.0, max=5.0)
         elif self.c_type == "trig":
             # similar with above but more stable I think
             vt = noise - x_start
@@ -236,7 +234,7 @@ def flow_sample(
     noise=None,
     ts=None,):
     if noise is None:
-        x_T = generator.randn(*shape, device=device)
+        x_T = generator.randn(*shape, device=device) * 0.5
     else:
         x_T = noise
 
@@ -302,21 +300,17 @@ class KarrasDenoiser:
         rho=7.0,
     ):
         self.args = args
-        self.forward_scheduler = args.forward_scheduler
         self.sigma_data = sigma_data
         self.sigma_max = args.sigma_max
         self.sigma_min = args.sigma_min
         self.weight_schedule = args.weight_schedule
         self.loss_norm = args.loss_norm
-        if self.loss_norm == "lpips":
-            self.lpips_loss = LPIPS(replace_pooling=True, reduction="none")
         self.rho = rho
         self.p_mean = -1.1
         self.p_std = 2.0
         self.c = th.tensor(3.45)
         self.use_repa = args.use_repa
         self.repa_timesteps = args.repa_timesteps
-        
         
     def get_snr(self, sigmas):
         return sigmas**-2
@@ -333,37 +327,37 @@ class KarrasDenoiser:
         c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
         return c_skip, c_out, c_in
 
-    def diffusion_losses(self, model, x_start, num_scales, model_kwargs=None, noise=None):
-        if model_kwargs is None:
-            model_kwargs = {}
-        if noise is None:
-            noise = th.randn_like(x_start)
+    # def diffusion_losses(self, model, x_start, num_scales, model_kwargs=None, noise=None):
+    #     if model_kwargs is None:
+    #         model_kwargs = {}
+    #     if noise is None:
+    #         noise = th.randn_like(x_start)
 
-        terms = {}
-        indices = th.randint(0, num_scales, (x_start.shape[0],), device=x_start.device)
-        # indices = th.randint(int(num_scales*0.00), num_scales, (x_start.shape[0],), device=x_start.device)
-        t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
-            self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
-        )
-        t = t**self.rho
+    #     terms = {}
+    #     indices = th.randint(0, num_scales, (x_start.shape[0],), device=x_start.device)
+    #     # indices = th.randint(int(num_scales*0.00), num_scales, (x_start.shape[0],), device=x_start.device)
+    #     t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
+    #         self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
+    #     )
+    #     t = t**self.rho
 
-        dims = x_start.ndim
-        x_t = x_start + noise * append_dims(t, dims)
-        model_output, denoised = self.denoise(model, x_t, t, **model_kwargs)
+    #     dims = x_start.ndim
+    #     x_t = x_start + noise * append_dims(t, dims)
+    #     model_output, denoised = self.denoise(model, x_t, t, **model_kwargs)
 
-        snrs = self.get_snr(t)
-        weights = append_dims(
-            get_weightings("karras", snrs, self.sigma_data), dims
-        )
-        terms["xs_mse"] = mean_flat((denoised - x_start) ** 2)
-        terms["mse"] = mean_flat(weights * (denoised - x_start) ** 2)
-        terms["cauchy"] = (th.log(0.5*mean_flat((denoised - x_start) ** 2)+self.c**2) - 2*th.log(self.c)) * weights
+    #     snrs = self.get_snr(t)
+    #     weights = append_dims(
+    #         get_weightings("karras", snrs, self.sigma_data), dims
+    #     )
+    #     terms["xs_mse"] = mean_flat((denoised - x_start) ** 2)
+    #     terms["mse"] = mean_flat(weights * (denoised - x_start) ** 2)
+    #     terms["cauchy"] = (th.log(0.5*mean_flat((denoised - x_start) ** 2)+self.c**2) - 2*th.log(self.c)) * weights
 
-        if "vb" in terms:
-            terms["loss"] = terms["mse"] + terms["vb"]
-        else:
-            terms["loss"] = terms["mse"]
-        return terms
+    #     if "vb" in terms:
+    #         terms["loss"] = terms["mse"] + terms["vb"]
+    #     else:
+    #         terms["loss"] = terms["mse"]
+    #     return terms
     
     def icm_dist(self, num_scales):
         indices = th.Tensor(range(num_scales))
@@ -383,8 +377,6 @@ class KarrasDenoiser:
         num_scales,
         model_kwargs=None,
         target_model=None,
-        teacher_model=None,
-        teacher_diffusion=None,
         noise=None,
         ssl_feat_truth=None,
     ):
@@ -401,50 +393,9 @@ class KarrasDenoiser:
             )
             return denoised, ssl_feat_pred
 
-
-        if target_model:
-            @th.no_grad()
-            def target_denoise_fn(x, t):
-                return self.denoise(target_model, x, t, **model_kwargs)[1]
-        else:
-            raise NotImplementedError("Must have a target model")
-
-        if teacher_model:
-            @th.no_grad()
-            def teacher_denoise_fn(x, t):
-                return teacher_diffusion.denoise(teacher_model, x, t, **model_kwargs)[1]
-
         @th.no_grad()
-        def heun_solver(samples, t, next_t, x0):
-            x = samples
-            if teacher_model is None:
-                denoiser = x0
-            else:
-                denoiser = teacher_denoise_fn(x, t)
-
-            d = (x - denoiser) / append_dims(t, dims)
-            samples = x + d * append_dims(next_t - t, dims)
-            if teacher_model is None:
-                denoiser = x0
-            else:
-                denoiser = teacher_denoise_fn(samples, next_t)
-
-            next_d = (samples - denoiser) / append_dims(next_t, dims)
-            samples = x + (d + next_d) * append_dims((next_t - t) / 2, dims)
-
-            return samples
-
-        @th.no_grad()
-        def euler_solver(samples, t, next_t, x0):
-            x = samples
-            if teacher_model is None:
-                denoiser = x0
-            else:
-                denoiser = teacher_denoise_fn(x, t)
-            d = (x - denoiser) / append_dims(t, dims)
-            samples = x + d * append_dims(next_t - t, dims)
-
-            return samples
+        def target_denoise_fn(x, t):
+            return self.denoise(target_model, x, t, **model_kwargs)[1]
 
         if self.args.noise_sampler == "ict":
             indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0],)).to(x_start.device)
@@ -457,35 +408,26 @@ class KarrasDenoiser:
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
         )
-        t = t**self.rho
-
-        t2 = self.sigma_max ** (1 / self.rho) + (indices + 1) / (num_scales - 1) * (
+        next_t = self.sigma_max ** (1 / self.rho) + (indices + 1) / (num_scales - 1) * (
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
         )
-        t2 = t2**self.rho
+        t = t**self.rho
+        next_t = next_t**self.rho
         
-        # t2 < t, indices > indices + 1
-
+        # next_t < t, indices > indices + 1
+        
+        # model prediction
         x_t = x_start + noise * append_dims(t, dims)
-
-        dropout_state = th.get_rng_state()
+        x_next_t = x_start + noise * append_dims(next_t, dims).detach()
         distiller, ssl_feat_pred = denoise_fn(x_t, t)
-                
-        if teacher_model is None:
-            x_t2 = euler_solver(x_t, t, t2, x_start).detach()
-        else:
-            x_t2 = heun_solver(x_t, t, t2, x_start).detach()
-
-        th.set_rng_state(dropout_state)
-        distiller_target = target_denoise_fn(x_t2, t2)
-        distiller_target = distiller_target.detach()
-
-        snrs = self.get_snr(t)
-        _, cout, _ = self.get_scalings_for_boundary_condition(t)
-        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t2, t, cout) # ICT: weighting 1/(t2-t)
+        distiller_target = target_denoise_fn(x_next_t, next_t).detach()
         
-        # compute diff losses
+        # setup weight
+        snrs = self.get_snr(t)
+        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, next_t, t) # ICT: weighting 1/(t_next-t)
         diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
+        
+        # compte diffusion loss
         diff_loss = mean_flat((distiller - x_start)**2)[diff_indices]*diff_weights
         
         # compute consistency losses
@@ -495,50 +437,17 @@ class KarrasDenoiser:
         elif self.loss_norm == "huber":
             diffs = (distiller - distiller_target) ** 2
             loss = (th.sqrt(mean_flat(diffs)+self.c**2)-self.c) * weights
-        elif self.loss_norm == "huber_new":
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(th.sqrt(diffs+self.c**2)-self.c) * weights
         elif self.loss_norm == "cauchy":
             diffs = (distiller - distiller_target) ** 2
             loss = (th.log(0.5*mean_flat(diffs)+self.c**2) - 2*th.log(self.c)) * weights
-        elif self.loss_norm == "cauchy_new":
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(th.log(0.5*diffs+self.c**2) - 2*th.log(self.c)) * weights
         elif self.loss_norm == "gm":
             diffs = (distiller - distiller_target) ** 2
             loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2) * weights
-        elif self.loss_norm == "gm_new":
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(2 * diffs / (diffs + 4 * self.c**2)) * weights
         elif self.loss_norm == "l2":
             diffs = (distiller - distiller_target) ** 2
             loss = mean_flat(diffs) * weights
-        elif self.loss_norm == "l2-32":
-            distiller = F.interpolate(distiller, size=32, mode="bilinear")
-            distiller_target = F.interpolate(
-                distiller_target,
-                size=32,
-                mode="bilinear",
-            )
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(diffs) * weights
-        elif self.loss_norm == "lpips":
-            if x_start.shape[-1] < 256:
-                distiller = F.interpolate(distiller, size=224, mode="bilinear")
-                distiller_target = F.interpolate(
-                    distiller_target, size=224, mode="bilinear"
-                )
-
-            loss = (
-                self.lpips_loss(
-                    (distiller + 1) / 2.0,
-                    (distiller_target + 1) / 2.0,
-                )
-                * weights
-            )
         else:
             raise ValueError(f"Unknown loss norm {self.loss_norm}")
-        
         
         # REPA loss
         repa_loss = th.tensor(0)
@@ -590,7 +499,6 @@ def karras_sample(
     model,
     shape,
     steps,
-    clip_denoised=False,
     progress=False,
     callback=None,
     model_kwargs=None,
@@ -653,15 +561,6 @@ def karras_sample(
             callback=callback,
             **sampler_args,
         )
-    
-    # def sample_euler(
-    # denoiser,
-    # generator,
-    # x,
-    # sigmas,
-    # progress=True,
-    # callback=None,)
-
     return x_0
 
 

@@ -204,7 +204,6 @@ def main(args):
         diffusion.c = torch.tensor(args.custom_constant_c)
     else:
         diffusion.c = torch.tensor(0.00054*math.sqrt(args.num_in_channels*args.image_size**2))
-    # diffusion.c = torch.tensor(0.00345)
     logger.info("c in huber loss is {}".format(diffusion.c.item()))
     # create ema for training model
     logger.info("creating the ema model")
@@ -220,8 +219,10 @@ def main(args):
     model = DDP(model.to(device), device_ids=[rank], find_unused_parameters=False)
     if args.compile:
         model = torch.compile(model, mode="default")
-    opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
-    # opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=1e-4)
+    if args.opt == "radam":
+        opt = torch.optim.RAdam(model.parameters(), lr=args.lr, weight_decay=1e-4, eps=1e-4)
+    elif args.opt == "soap":
+        opt = SOAP(model.parameters(), lr=args.lr, betas=(.95, .95), weight_decay=.01, precondition_frequency=10, eps=1e-4)
     
     
     if args.model_ckpt and os.path.exists(args.model_ckpt):
@@ -315,8 +316,8 @@ def main(args):
             std = torch.tensor(data["std"]).to(device)
         
     if rank == 0:
-        noise = torch.randn(args.num_sampling, 4, args.image_size, args.image_size).to(device)*args.sigma_max if args.fwd == "ve" else \
-            torch.randn(args.num_sampling, 4, args.image_size, args.image_size).to(device)
+        noise = torch.randn(args.num_sampling, 4, args.image_size, args.image_size).to(device)
+        noise = noise*args.sigma_max if args.fwd == "ve" else noise*args.sigma_data
         if args.num_classes < 1000:
             y_infer = torch.arange(args.num_sampling, device=device)
         else:
@@ -341,7 +342,7 @@ def main(args):
             if use_normalize:
                 if not use_label:
                     x = x/0.18215
-                x = (x - mean)/std * 0.5
+                x = (x - mean)/std * args.sigma_data
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
             if args.ot_hard:
@@ -380,10 +381,7 @@ def main(args):
                 repa_loss = losses["repa_loss"].mean()
                 loss += args.repa_lamb * repa_loss 
             else:
-                repa_loss = torch.tensor(0) 
-            
-            # after_forward = torch.cuda.memory_allocated(device)
-            
+                repa_loss = torch.tensor(0)             
             
             opt.zero_grad()
             scaler.scale(loss).backward()
@@ -400,7 +398,6 @@ def main(args):
             running_diff_loss += diff_loss.item()
             running_repa_loss += repa_loss.item()
             
-            # after_backward = torch.cuda.memory_allocated(device)
             update_ema(ema, model.module)
             if args.ict:
                 update_ema(target_model, model.module, 0)
@@ -425,10 +422,6 @@ def main(args):
                 logger.info(
                     f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, Repa Loss: {avg_repa_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, "
-                    # f"GPU Mem before forward: {before_forward/10**9:.2f}Gb, "
-                    # f"GPU Mem after forward: {after_forward/10**9:.2f}Gb, "
-                    # f"GPU Mem after backward: {after_backward/10**9:.2f}Gb"
-                    # f"Weight: {weight.min().item(), weight.max().item(), weight.mean().item()}"
                 )
                 # Reset monitoring variables:
                 running_loss = 0
@@ -437,9 +430,6 @@ def main(args):
                 running_repa_loss = 0
                 log_steps = 0
                 start_time = time()
-
-        # if not args.no_lr_decay:
-        #     scheduler.step()
 
         if rank == 0:
             # latest checkpoint
@@ -491,7 +481,6 @@ def main(args):
                                            steps=args.steps,
                                            model_kwargs=model_kwargs,
                                            device=device,
-                                           clip_denoised=args.clip_denoised,
                                            sampler=args.sampler,
                                            sigma_min=args.sigma_min,
                                            sigma_max=args.sigma_max,
@@ -513,7 +502,7 @@ def main(args):
                                          noise=noise,
                                          ts=ts,)
                 if use_normalize:
-                    sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in sample]
+                    sample = [vae.decode(x.unsqueeze(0)*std/args.sigma_data + mean).sample for x in sample]
                 else:
                     sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
@@ -527,7 +516,6 @@ def main(args):
                                         steps=args.steps,
                                         model_kwargs=model_kwargs,
                                         device=device,
-                                        clip_denoised=args.clip_denoised,
                                         sampler=args.sampler,
                                         sigma_min=args.sigma_min,
                                         sigma_max=args.sigma_max,
@@ -549,7 +537,7 @@ def main(args):
                                          noise=noise,
                                          ts=ts,)
                 if use_normalize:
-                    ema_sample = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in ema_sample]
+                    ema_sample = [vae.decode(x.unsqueeze(0)*std/args.sigma_data + mean).sample for x in ema_sample]
                 else:
                     ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
             ema_sample = torch.concat(ema_sample, dim=0)
@@ -582,6 +570,8 @@ if __name__ == "__main__":
     parser.add_argument("--num-classes", type=int, default=0)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--normalize-matrix", type=str, default=None)
+    parser.add_argument("--sigma-data", type=float, default=0.5)
+
     
     ###### model ######
     parser.add_argument("--vae", type=str, choices=["vae", "eq_vae"], default="vae")  # Choice doesn't affect training
@@ -641,6 +631,7 @@ if __name__ == "__main__":
     parser.add_argument("--global-batch-size", type=int, default=256)
     parser.add_argument("--max-grad-norm", type=float, default=0)
     parser.add_argument("--compile", action='store_true', default=False)
+    parser.add_argument("--opt", type=str, default="radam", choices=["radam", "soap"])
     
     
     ###### ploting & saving ######

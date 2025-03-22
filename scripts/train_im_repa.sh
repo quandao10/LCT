@@ -1,12 +1,12 @@
 CUDA_VISIBLE_DEVICES=2,3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10202 --nproc_per_node=2 train_cm_latent_repa.py \
-        --exp im_700ep_B_relu_eps1e-4_repa_flow_new_conditioning_trig \
+        --exp baseline_ve_relu_prevmlp \
         --datadir /common/users/qd66/repa/latent_imagenet256  \
         --dataset subset_imagenet_256 \
         --results-dir /research/cbim/medical/qd66/lct_v2/ \
         --image-size 32 \
         --num-in-channels 4 \
         --num-classes 25 \
-        --weight-schedule ict_trunc \
+        --weight-schedule ict \
         --loss-norm cauchy \
         --target-ema-mode adaptive \
         --start-ema 0.95 \
@@ -34,22 +34,24 @@ CUDA_VISIBLE_DEVICES=2,3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10202 --npr
         --linear-act relu \
         --norm-type rms \
         --projector-dim 2048 \
-        --repa-lamb 0.5 \
+        --repa-lamb 0.1 \
         --repa-enc-info 8:dinov2-vit-b \
         --repa-relu-margin 0.4 \
         --repa-timesteps full \
         --denoising-task-rate 0.5 \
         --repa-mapper repa \
         --mar-mapper-num-res-blocks 0 \
-        --use-repa \
         --num-register 0 \
-        --use-rope \
         --freq-type prev_mlp \
         --vae vae \
-        --fwd flow \
-        --diff-lamb 10 \
-        --c-type trig \
+        --fwd ve \
+        --diff-lamb 5 \
+        --c-type edm \
+        --opt radam \
+        --use-rope \
         --compile \
+        --use-repa \
+        
 
 
 

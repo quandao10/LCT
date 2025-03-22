@@ -124,7 +124,6 @@ def main(args):
                         steps=args.steps,
                         model_kwargs=model_kwargs,
                         device=device,
-                        clip_denoised=False,
                         sampler=args.sampler,
                         sigma_min=args.sigma_min,
                         sigma_max=args.sigma_max,
