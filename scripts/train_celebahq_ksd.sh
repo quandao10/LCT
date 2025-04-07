@@ -1,13 +1,12 @@
-CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10204 --nproc_per_node=1 train_cm_latent_repa.py \
-        --exp 700ep_B_repa_prevmlp_8_512_rope_ \
+CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10300 --nproc_per_node=1 train_ksd_latent.py \
+        --exp baseline_ksd \
         --datadir ~/workspace/dataset/repa/latent_celeb256  \
         --dataset latent_celeb256 \
-        --results-dir /research/cbim/medical/qd66/lct_v2/ \
+        --results-dir /research/cbim/medical/qd66/ksd_exp/ \
         --image-size 32 \
         --num-in-channels 4 \
         --num-classes 0 \
         --weight-schedule ict \
-        --loss-norm cauchy \
         --target-ema-mode adaptive \
         --start-ema 0.95 \
         --scale-mode progressive \
@@ -41,11 +40,7 @@ CUDA_VISIBLE_DEVICES=4 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10204 --nproc
         --denoising-task-rate 0.5 \
         --repa-mapper repa \
         --mar-mapper-num-res-blocks 0 \
-        --use-repa \
         --num-register 0 \
-        --freq-type prev_mlp \
+        --freq-type none \
         --ckpt-every 25 \
         --use-rope \
-        # --resume
-        # --model-ckpt /research/cbim/medical/qd66/lct_v2/latent_celeb256/700ep_L_relu_eps1e-4_repa_register_2_resume600/checkpoints/0000725.pt \
-        

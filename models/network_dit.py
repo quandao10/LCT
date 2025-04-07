@@ -33,7 +33,17 @@ def build_mlp(hidden_size, projector_dim, z_dim):
                 nn.SiLU(),
                 nn.Linear(projector_dim, z_dim),
             )
-    
+
+def l2norm(t, dim = -1):
+    return F.normalize(t, dim = dim, p = 2)
+
+class L2Norm(nn.Module):
+    def __init__(self, dim = -1):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, t):
+        return l2norm(t, dim = self.dim)
 class RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6, elementwise_affine=False):
         super().__init__()
@@ -83,6 +93,40 @@ class GaussianFourierFeatureTransform(torch.nn.Module):
     def forward(self, x):
         x = x @ self._B.to(x.device)
         x = 2 * pi * x
+        return torch.cat([torch.sin(x), torch.cos(x)], dim=1)
+    
+class GaussianFourierFeatureTransformv3(nn.Module):
+    def __init__(self, input_size, output_dim, sigma=1.0):
+        """
+        input_dim: Dimension of the input data.
+        output_dim: Number of Fourier features (embedding dimension).
+        sigma: Bandwidth of the Gaussian kernel.
+        """
+        super().__init__()
+        self.input_dim = input_size
+        self.output_dim = output_dim
+        self.sigma = sigma
+        
+        # Sample random Gaussian frequencies
+        self.register_buffer('W', torch.randn(input_size, output_dim) / sigma)
+        # Sample random phase shifts uniformly
+        self.register_buffer('b', 2 * torch.pi * torch.rand(output_dim))
+
+    def forward(self, X):
+        """
+        Transforms the input data X into the Fourier feature space.
+
+        X: Input data, shape (n_samples, input_dim)
+        Returns: Transformed data, shape (n_samples, output_dim)
+        """
+        projection = X @ self.W + self.b
+        return torch.sqrt(torch.tensor(2.0 / self.output_dim)) * torch.cos(projection)
+    
+class GaussianFourierFeatureTransformv2(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
         return torch.cat([torch.sin(x), torch.cos(x)], dim=1)
 
 class GLUFFN(nn.Module):
@@ -305,15 +349,7 @@ class DiTBlock(nn.Module): #NOTE: we are using both post and prev norm with wo_n
         elif linear_act == "gelu":
             self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=partial(nn.GELU, "tanh"), drop=0)
         elif linear_act == "gate_relu":
-            self.mlp = GLUFFN(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU)
-        # elif linear_act == "gate_fourier_relu":
-        #     self.mlp = GLUFFN_Fourier(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch)
-        # elif linear_act == "gate_pfourier_relu":
-        #     self.mlp = GLUFFN_Fourier(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=True)
-        # elif linear_act == "gate_wavelet_relu":
-        #     self.mlp = GLUFFN_Wavelet(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=False)
-        # elif linear_act == "gate_pwavelet_relu":
-        #     self.mlp = GLUFFN_Wavelet(in_features=hidden_size, hidden_features=int(2/3*mlp_hidden_dim), act_layer=nn.ReLU, patch=patch, post=True)
+            self.mlp = GLUFFN(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.ReLU)
         else:
             raise Exception("Not implementated in this code, dumbass")
         
@@ -412,6 +448,7 @@ class FinalLayer(nn.Module):
     def forward(self, x, c):
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
         x = modulate(self.norm_final(x), shift, scale)
+        # should we put layernorm here for robust
         x = self.linear(x)
         return x
 
@@ -443,8 +480,9 @@ class DiT(nn.Module):
         mar_mapper_num_res_blocks=2,
         separate_cond = False,
         use_rope = False,
-        use_freq_cond = False,
+        cond_mapping = False,
         freq_type="prev_mlp",
+        cond_mixing = False,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -456,12 +494,35 @@ class DiT(nn.Module):
         self.num_register = num_register
         self.separate_cond = separate_cond
         self.use_rope = use_rope
-        self.use_freq_cond = use_freq_cond
+        self.cond_mapping = cond_mapping
         self.freq_type = freq_type
+        self.cond_mixing = cond_mixing
+        
+        if self.cond_mixing:
+            self.cond_mixing_mlp = nn.Sequential(
+                nn.Linear(hidden_size, hidden_size),
+                nn.ReLU(),
+                # nn.Linear(hidden_size, hidden_size),
+                nn.Linear(hidden_size, 1),
+                nn.Sigmoid()
+            )
         
         # use freq condition
-        if self.use_freq_cond:
-            self.y_fred_embedder = GaussianFourierFeatureTransform(input_size=128, half_hidden_size=hidden_size//2)
+        if self.cond_mapping:
+            # self.cond_mapper = GaussianFourierFeatureTransform(input_size=hidden_size, half_hidden_size=hidden_size//2)
+            self.cond_mapper = nn.Sequential(GaussianFourierFeatureTransformv2(), 
+                                             L2Norm(dim=-1))
+            
+            # self.cond_mapper = nn.Sequential(
+            #     nn.Linear(hidden_size, hidden_size),
+            #     nn.ReLU(),
+            #     nn.Linear(hidden_size, hidden_size),
+            #     nn.ReLU(),
+            #     nn.Linear(hidden_size, hidden_size),    
+            #     nn.ReLU(),
+            #     nn.Linear(hidden_size, hidden_size),        
+            #     nn.ReLU(),
+            # )
         
         # use rotary position encoding, borrow from EVA
         if self.use_rope:
@@ -482,8 +543,8 @@ class DiT(nn.Module):
         self.attn_blk = DiTBlock
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
-        if self.use_freq_cond:
-            self.y_embedder = LabelEmbedder(num_classes, 128, class_dropout_prob)
+        if self.cond_mapping:
+            self.y_embedder = LabelEmbedder(num_classes, hidden_size//2, class_dropout_prob)
         else:
             self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         num_patches = self.x_embedder.num_patches
@@ -492,7 +553,7 @@ class DiT(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + self.num_register, hidden_size), requires_grad=False) if not self.separate_cond \
             else nn.Parameter(torch.zeros(1, num_patches + self.num_register + 1, hidden_size), requires_grad=False) # additional class dim
         if self.num_register > 0:
-            self.register_tokens = nn.Parameter(torch.rand((1, self.num_register, hidden_size)))
+            self.register_tokens = nn.Parameter(torch.randn((1, self.num_register, hidden_size)))
 
         self.blocks = nn.ModuleList([
             self.attn_blk(hidden_size, 
@@ -593,9 +654,10 @@ class DiT(nn.Module):
             y = torch.ones(x.size(0), dtype=torch.long, device=x.device) * (self.y_embedder.get_in_channels() - 1)
         x = self.x_embedder(x)                   # (N, T, D)
         t = self.t_embedder(t)                   # (N, D)
+        
         y = self.y_embedder(y, self.training)    # (N, D)
-        if self.use_freq_cond:
-            y = self.y_fred_embedder(y)
+        if self.cond_mapping:
+            y = self.cond_mapper(y)
         if self.num_register > 0:
             x = torch.cat([x, self.register_tokens.expand(x.shape[0], -1, -1)], dim=1) # (N, T+register, D)
         if self.separate_cond:
@@ -605,7 +667,11 @@ class DiT(nn.Module):
         if self.separate_cond:
             c = t
         else:
-            c = t + y                               # (N, D)
+            if self.cond_mixing:
+                alpha = self.cond_mixing_mlp(t) 
+                c = t * alpha + y
+            else:
+                c = t + y                               # (N, D)
         
         projected_feat = None
         for idx, block in enumerate(self.blocks):

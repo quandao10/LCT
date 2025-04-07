@@ -97,7 +97,6 @@ class ImageNet_subdataset(torch.utils.data.Dataset):
         # VAE
         self.base_dir = base_dir
         self.vae_path = os.path.join(base_dir, "vae_" if vae_type == "eq_vae" else "vae")
-        print(self.vae_path)
         with open("/research/cbim/vast/qd66/workspace/LCT/statistic/imagenet25_class_to_images.json") as f:
             self.items = json.load(f)
         self.class_indices = list(self.items.keys())

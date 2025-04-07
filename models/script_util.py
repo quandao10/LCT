@@ -1,12 +1,13 @@
 import argparse
 from .karras_diffusion import KarrasDenoiser, FlowDenoiser
+from .ksd_diffusion import KSD_Denoiser
 from .unet import UNetModel
 import numpy as np
 from .network_karras import SongUNet, DhariwalUNet
 from .network_dit import DiT_models
 from .network_edm2 import EDM2_models
 from .network_udit import UDiT_models
-
+from .network_nGPT import nDiT_models
 NUM_CLASSES = 1000
 
 
@@ -101,7 +102,7 @@ def create_model_and_diffusion(args):
                                              img_channels=args.num_in_channels,
                                              label_dim=args.num_classes,
                                              dropout=args.dropout)
-    elif "DiT" in args.model_type and not "U-DiT" in args.model_type:
+    elif "DiT" in args.model_type and not "U-DiT" in args.model_type and not "nDiT" in args.model_type:
         
         if args.use_repa:
             depth, _, z_dim = parse_repa_enc_info_v2(args.repa_enc_info)
@@ -119,20 +120,26 @@ def create_model_and_diffusion(args):
                                             wo_norm = args.wo_norm,
                                             num_register = args.num_register,
                                             use_repa=args.use_repa,
-                                            use_freq_cond = args.use_freq_cond,
+                                            cond_mapping = args.cond_mapping,
                                             freq_type = args.freq_type,
                                             z_depth=depth,
                                             z_dim=z_dim,
                                             separate_cond=args.separate_cond,
                                             projector_dim=args.projector_dim,
                                             repa_mapper=args.repa_mapper,
-                                            mar_mapper_num_res_blocks=args.mar_mapper_num_res_blocks)
+                                            mar_mapper_num_res_blocks=args.mar_mapper_num_res_blocks,
+                                            cond_mixing = args.cond_mixing)
     elif "U-DiT" in args.model_type:
         model = UDiT_models[args.model_type](input_size=args.image_size,
                                             in_channels=args.num_in_channels,
                                             num_classes=args.num_classes,
                                             learn_sigma=args.learn_sigma,
                                             no_scale = args.no_scale)
+    elif "nDiT" in args.model_type:
+        model = nDiT_models[args.model_type](input_size=args.image_size,
+                                            in_channels=args.num_in_channels,
+                                            num_classes=args.num_classes,
+                                            learn_sigma=args.learn_sigma)
     else:
         print("No network as define")
         exit(0)
@@ -141,6 +148,8 @@ def create_model_and_diffusion(args):
         diffusion = KarrasDenoiser(args=args, sigma_data=args.sigma_data)
     elif args.fwd == "flow":
         diffusion = FlowDenoiser(args, sigma_data=args.sigma_data)
+    elif args.fwd == "ksd":
+        diffusion = KSD_Denoiser(args=args, sigma_data=args.sigma_data)
     return model, diffusion
 
 

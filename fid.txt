@@ -516,3 +516,164 @@ Epoch = 0000600, FID = 46.12679169899894, cfg_scale = 1.5
 Epoch = 0000625, FID = 45.46112392509593, cfg_scale = 1.5
 Epoch = 0000650, FID = 45.309330259015326, cfg_scale = 1.5
 Epoch = 0000675, FID = 46.64985192162203, cfg_scale = 1.5
+
+
+DiT B/2 Imagenet25 baseline_ve_relu_prevmlp
+Epoch = 0000600, FID = 60.217763950561334, cfg_scale = 1.5
+Epoch = 0000625, FID = 58.226403875341134, cfg_scale = 1.5
+Epoch = 0000650, FID = 58.2686316138259, cfg_scale = 1.5
+Epoch = 0000675, FID = 57.49386499897821, cfg_scale = 1.5
+Epoch = 0000700, FID = 56.629418063027, cfg_scale = 1.5
+
+
+DiT B/2 Imagenet25 baseline_ve_relu_prevmlp_condmap
+Epoch = 0000600, FID = 67.35032783735983, cfg_scale = 1.5
+Epoch = 0000625, FID = 65.70044935940484, cfg_scale = 1.5
+Epoch = 0000650, FID = 65.45806153749095, cfg_scale = 1.5
+Epoch = 0000675, FID = 66.39958044494244, cfg_scale = 1.5
+Epoch = 0000700, FID = 65.0452224532288, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 baseline_ve_relu_prevmlp_condmap_v2 (sin-cos map)
+Epoch = 0000600, FID = 66.21259709088281, cfg_scale = 1.5
+Epoch = 0000625, FID = 64.28396360455713, cfg_scale = 1.5
+
+
+DiT B/2 Imagenet25 baseline_ve_gaterelu_prevmlp
+Epoch = 0000600, FID = 59.87232691316592, cfg_scale = 1.5
+Epoch = 0000625, FID = 58.71753459957324, cfg_scale = 1.5
+Epoch = 0000650, FID = 58.634021890153576, cfg_scale = 1.5
+Epoch = 0000675, FID = 58.85443807110153, cfg_scale = 1.5
+Epoch = 0000700, FID = 59.116683324135465, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 baseline_ve_gaterelu_prevmlp_condmixing
+Epoch = 0000600, FID = 55.75000414226872, cfg_scale = 1.5
+Epoch = 0000625, FID = 54.40840455324144, cfg_scale = 1.5
+Epoch = 0000650, FID = 53.84189613262322, cfg_scale = 1.5
+Epoch = 0000675, FID = 53.51457537553313, cfg_scale = 1.5
+Epoch = 0000700, FID = 53.188184093731024, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 baseline_ve_relu_mlp_condmixing
+Epoch = 0000600, FID = 66.19196742828711, cfg_scale = 1.5
+Epoch = 0000625, FID = 65.12965582165828, cfg_scale = 1.5
+Epoch = 0000650, FID = 64.13827804642489, cfg_scale = 1.5
+Epoch = 0000600, FID = 83.43616729444409, cfg_scale = 1.0
+Epoch = 0000625, FID = 80.67960277900329, cfg_scale = 1.0
+Epoch = 0000650, FID = 79.15593261779162, cfg_scale = 1.0
+Epoch = 0000675, FID = 79.00348737373412, cfg_scale = 1.0
+Epoch = 0000675, FID = 64.20396369087348, cfg_scale = 1.5
+Epoch = 0000700, FID = 64.09851915563007, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 baseline_ve_relu_condmixing
+Epoch = 0000600, FID = 68.5799242645661, cfg_scale = 1.5
+Epoch = 0000625, FID = 66.569967343055, cfg_scale = 1.5
+Epoch = 0000650, FID = 66.18719662879124, cfg_scale = 1.5
+Epoch = 0000675, FID = 66.34761574397191, cfg_scale = 1.5
+
+
+DiT B/2 Imagenet25 baseline_ve_relu_condmixing_gm
+Epoch = 0000600, FID = 102.17645954891537, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 baseline_ve_relu_condmixing_cauchy_weightdecay1e-5
+Epoch = 0000600, FID = 55.653633855607154, cfg_scale = 1.5
+Epoch = 0000625, FID = 54.37184225568819, cfg_scale = 1.5
+Epoch = 0000650, FID = 53.61967355481522, cfg_scale = 1.5
+Epoch = 0000675, FID = 53.82362570359504, cfg_scale = 1.5
+Epoch = 0000700, FID = 53.27457418199026, cfg_scale = 1.5
+
+
+DiT B/2 Imagenet25 baseline_ve_relu_condmixing_cauchy_weightdecay0
+Epoch = 0000600, FID = 62.16605416918492, cfg_scale = 1.5
+Epoch = 0000625, FID = 59.170726052686405, cfg_scale = 1.5
+Epoch = 0000650, FID = 58.14004137542162, cfg_scale = 1.5
+Epoch = 0000675, FID = 57.68815656160842, cfg_scale = 1.5
+Epoch = 0000700, FID = 57.75747761828552, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 baseline_ve_relu_condmixing_1400ep
+Epoch = 0001200, FID = 48.46311655677596, cfg_scale = 1.5
+Epoch = 0001225, FID = 48.27417250896406, cfg_scale = 1.5
+Epoch = 0001250, FID = 48.08257712374581, cfg_scale = 1.5
+Epoch = 0001275, FID = 47.85511889152667, cfg_scale = 1.5
+Epoch = 0001300, FID = 47.91832475747668, cfg_scale = 1.5
+Epoch = 0001325, FID = 48.33391189266706, cfg_scale = 1.5
+Epoch = 0001350, FID = 48.370110912786686, cfg_scale = 1.5
+Epoch = 0001375, FID = 48.89679668018579, cfg_scale = 1.5
+Epoch = 0001400, FID = 48.71650580342225, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_onescale_noot
+Epoch = 0000400, FID = 66.32628179002148, cfg_scale = 1.5
+Epoch = 0000425, FID = 64.86772638908121, cfg_scale = 1.5
+Epoch = 0000450, FID = 64.07124013070893, cfg_scale = 1.5
+Epoch = 0000475, FID = 61.89323348257699, cfg_scale = 1.5
+Epoch = 0000500, FID = 61.15569315293766, cfg_scale = 1.5
+Epoch = 0000525, FID = 59.99659076802959, cfg_scale = 1.5
+Epoch = 0000550, FID = 58.851445327151566, cfg_scale = 1.5
+Epoch = 0000575, FID = 59.38415182185935, cfg_scale = 1.5
+Epoch = 0000600, FID = 57.750984906372764, cfg_scale = 1.5
+Epoch = 0000625, FID = 56.72711725534816, cfg_scale = 1.5
+Epoch = 0000650, FID = 55.91409437818402, cfg_scale = 1.5
+Epoch = 0000675, FID = 56.092500306864906, cfg_scale = 1.5
+Epoch = 0000700, FID = 56.273797276495486, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_onescale_ot
+Epoch = 0000575, FID = 62.90285933004293, cfg_scale = 1.5
+Epoch = 0000600, FID = 61.92736939069641, cfg_scale = 1.5
+Epoch = 0000625, FID = 61.35489964999459, cfg_scale = 1.5
+Epoch = 0000650, FID = 61.410712487712885, cfg_scale = 1.5
+Epoch = 0000675, FID = 60.51487303209865, cfg_scale = 1.5
+Epoch = 0000700, FID = 60.52479826403578, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_onescale_noot_largebs
+Epoch = 0000575, FID = 84.06541157735847, cfg_scale = 1.5
+Epoch = 0000600, FID = 81.34754852039498, cfg_scale = 1.5
+Epoch = 0000625, FID = 79.63427401346075, cfg_scale = 1.5
+Epoch = 0000650, FID = 78.21827765873508, cfg_scale = 1.5
+Epoch = 0000675, FID = 76.32507174300287, cfg_scale = 1.5
+Epoch = 0000700, FID = 74.74648247997379, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot
+Epoch = 0000575, FID = 52.22483606510838, cfg_scale = 1.5
+Epoch = 0000600, FID = 50.67217729350875, cfg_scale = 1.5
+Epoch = 0000625, FID = 49.088112559121214, cfg_scale = 1.5
+Epoch = 0000650, FID = 49.10351338005978, cfg_scale = 1.5
+Epoch = 0000675, FID = 48.88346672731842, cfg_scale = 1.5
+Epoch = 0000700, FID = 48.44268940515127, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karrasmeanstd (-0.4, 1)
+Epoch = 0000600, FID = 108.19025349617942, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-1.1,3
+Epoch = 0000575, FID = 58.6764890296252, cfg_scale = 1.5
+Epoch = 0000600, FID = 58.41435571190351, cfg_scale = 1.5
+
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2
+Epoch = 0000600, FID = 51.35527448939769, cfg_scale = 1.5
+Epoch = 0000625, FID = 48.65772944777501, cfg_scale = 1.5
+Epoch = 0000650, FID = 48.38411994238771, cfg_scale = 1.5
+Epoch = 0000675, FID = 48.335903927807465, cfg_scale = 1.5
+Epoch = 0000700, FID = 47.781108564349665, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2_ict_trunc
+Epoch = 0000600, FID = 52.577355869633834, cfg_scale = 1.5
+Epoch = 0000625, FID = 51.10659622825034, cfg_scale = 1.5
+Epoch = 0000650, FID = 50.471312974545754, cfg_scale = 1.5
+Epoch = 0000675, FID = 50.04678538135795, cfg_scale = 1.5
+Epoch = 0000700, FID = 49.72764023929608, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2_noconndmix
+Epoch = 0000600, FID = 53.782268935476, cfg_scale = 1.5
+Epoch = 0000625, FID = 50.530490958837674, cfg_scale = 1.5
+Epoch = 0000650, FID = 50.51168794692495, cfg_scale = 1.5
+Epoch = 0000675, FID = 50.88142063240997, cfg_scale = 1.5
+Epoch = 0000700, FID = 50.6129950606491, cfg_scale = 1.5
+
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2.5
+Epoch = 0000600, FID = 56.09520575609514, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5
+Epoch = 0000600, FID = 47.25589851300265, cfg_scale = 1.5
+Epoch = 0000625, FID = 45.57477327172194, cfg_scale = 1.5
+Epoch = 0000650, FID = 45.8656164307497, cfg_scale = 1.5
+Epoch = 0000675, FID = 45.537631053359064, cfg_scale = 1.5
+Epoch = 0000700, FID = 44.5723927118587, cfg_scale = 1.5

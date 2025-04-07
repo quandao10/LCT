@@ -31,7 +31,6 @@ def main(args):
     # Setup DDP:
     dist.init_process_group("nccl")
     rank = dist.get_rank()
-    world_size = dist.get_world_size()
     device = rank % torch.cuda.device_count()
     seed = args.seed + rank
     torch.manual_seed(seed)
@@ -52,6 +51,8 @@ def main(args):
         real_img_dir = "pytorch_fid/lsun_bedroom_stat.npy"
     elif args.dataset in ["latent_imagenet_256", "imagenet_256"]:
         real_img_dir = "pytorch_fid/imagenet_stat.npy"
+    elif args.dataset == "subset_imagenet_256":
+        real_img_dir = "pytorch_fid/imagenet25.npy"
     else:
         real_img_dir = args.real_img_dir
 
@@ -226,8 +227,9 @@ if __name__ == "__main__":
     parser.add_argument("--num-register", type=int, default=0)
     parser.add_argument("--separate-cond", action="store_true", default=False)
     parser.add_argument("--use-rope", action="store_true", default=False)
-    parser.add_argument("--use-freq-cond", action="store_true", default=False)
+    parser.add_argument("--cond-mapping", action="store_true", default=False)
     parser.add_argument("--freq-type", type=str, default="none")
+    parser.add_argument("--cond-mixing", action="store_true", default=False)
     
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
@@ -244,9 +246,14 @@ if __name__ == "__main__":
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
+    parser.add_argument("--sigma-data", type=float, default=0.5)
     parser.add_argument("--weight-schedule", type=str, choices=["karras", "snr", "snr+1", "uniform", "truncated-snr", "ict"], default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive"], default="huber")
+    parser.add_argument("--c-type", type=str, choices=["trig", "edm"], default="edm")
+    parser.add_argument("--fwd", type=str, default="ve", choices=["vp", "ve", "flow", "cosin"])
+    parser.add_argument("--p-mean", type=float, default=-0.4)
+    parser.add_argument("--p-std", type=float, default=2.0)
     
     
     ###### dataset ######

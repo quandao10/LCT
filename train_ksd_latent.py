@@ -40,7 +40,8 @@ from models.network_edm2 import EDM2_models
 from sampler.random_util import get_generator
 from models.optimal_transport import OTPlanSampler
 from optimizer.soap import SOAP
-from models.network_nGPT import nDiT_models
+TORCHDYNAMO_VERBOSE=1
+
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -199,14 +200,7 @@ def main(args):
     
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
-    logger.info(f"p_mean: {args.p_mean}, p_std: {args.p_std}")
-    logger.info(type(args.p_mean))
-    logger.info(type(args.p_std))
-    if args.custom_constant_c > 0.0:
-        diffusion.c = torch.tensor(args.custom_constant_c)
-    else:
-        diffusion.c = torch.tensor(0.00054*math.sqrt(args.num_in_channels*args.image_size**2))
-    logger.info("c in huber loss is {}".format(diffusion.c.item()))
+
     # create ema for training model
     logger.info("creating the ema model")
     ema = deepcopy(model)  # Create an EMA of the model for use after training
@@ -283,15 +277,15 @@ def main(args):
 
     # create ema schedule
     logger.info("creating model and diffusion and ema scale function")
-    ema_scale_fn = create_ema_and_scales_fn(
-        target_ema_mode=args.target_ema_mode,
-        start_ema=args.start_ema,
-        scale_mode=args.scale_mode,
-        start_scales=args.start_scales,
-        end_scales=args.end_scales,
-        total_steps=args.total_training_steps,
-        ict=args.ict,
-    )
+    # ema_scale_fn = create_ema_and_scales_fn(
+    #     target_ema_mode=args.target_ema_mode,
+    #     start_ema=args.start_ema,
+    #     scale_mode=args.scale_mode,
+    #     start_scales=args.start_scales,
+    #     end_scales=args.end_scales,
+    #     total_steps=args.total_training_steps,
+    #     ict=args.ict,
+    # )
 
     # OT sampler
     if args.ot_hard:
@@ -302,10 +296,9 @@ def main(args):
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
-    running_cm_loss = 0
+    running_ksd_loss = 0
     running_diff_loss = 0
     running_repa_loss = 0
-    running_grad_penalty = 0
     start_time = time()
     use_label = True if "imagenet" in args.dataset else False
     use_normalize = args.normalize_matrix is not None
@@ -328,10 +321,6 @@ def main(args):
         
     scaler = torch.cuda.amp.GradScaler()
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
-    if args.end_scales == 640:
-        constant_c = construct_constant_c()
-    elif args.end_scales == 512:
-        constant_c = construct_constant_c_v2()
     
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
@@ -350,54 +339,32 @@ def main(args):
             n = torch.randn_like(x)
             if args.ot_hard:
                 x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
-                
-            if args.gradient_penalty_iters > 0:
-                x = x.requires_grad_(True)
-                
-            if not args.stage2:
-                ema_rate, num_scales = ema_scale_fn(train_steps)
-            else:
-                ema_rate, num_scales = 0, args.end_scales+1
-            diffusion.c = constant_c[num_scales]
 
             model_kwargs = dict(y=y)
             # before_forward = torch.cuda.memory_allocated(device)
-            # with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
             with torch.autocast(device_type="cuda", dtype=torch.float16):
-                losses = diffusion.consistency_losses(model,
-                                                    x,
-                                                    num_scales,
-                                                    target_model=target_model,
-                                                    model_kwargs=model_kwargs,
-                                                    noise=n,
-                                                    ssl_feat_truth=ssl_feat_truth,
-                                                    gradient_penalty=(args.gradient_penalty_iters > 0 and i % args.gradient_penalty_iters == 0))
+                losses = diffusion.ksd_losses(model,
+                                            x,
+                                            num_scales = 100,
+                                            target_model=target_model,
+                                            model_kwargs=model_kwargs,
+                                            noise=n,
+                                            group_size=2)
             # CALCULATE LOSS FUNC HERE
-            cm_loss = losses["loss"].mean()
-            # check diff loss
-            if args.use_diffloss:
-                if losses["diff_loss"].size(0) == 0:
-                    diff_loss = torch.tensor(0)
-                else:
-                    diff_loss = losses["diff_loss"].mean()
-                loss = cm_loss + args.diff_lamb*diff_loss
-            else:
-                loss = cm_loss
-                diff_loss = torch.tensor(0)
+            ksd_loss = losses["ksd_loss"].mean()
+            diff_loss = losses["diff_loss"].mean()
+            loss = ksd_loss + args.diff_lamb*diff_loss
+            
+            # print("diff: ", diff_loss)
+            # print("ksd: ", ksd_loss)
+            
             # check repa loss
             if args.use_repa:
                 repa_loss = losses["repa_loss"].mean()
                 loss += args.repa_lamb * repa_loss 
             else:
-                repa_loss = torch.tensor(0)  
-                
-            if args.gradient_penalty_iters > 0:
-                grad_penalty = losses["grad_penalty"]
-                loss += args.gradient_penalty_lamb * grad_penalty
-            else:
-                grad_penalty = torch.tensor(0)
+                repa_loss = torch.tensor(0)             
             
-            # print(f"grad_penalty: {grad_penalty.item()}")
             opt.zero_grad()
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
@@ -409,16 +376,13 @@ def main(args):
             scaler.step(opt)
             scaler.update()
             running_loss += loss.item()
-            running_cm_loss += cm_loss.item()
+            running_ksd_loss += ksd_loss.item()
             running_diff_loss += diff_loss.item()
             running_repa_loss += repa_loss.item()
-            running_grad_penalty += grad_penalty.item()
+            
             update_ema(ema, model.module)
-            if args.ict:
-                update_ema(target_model, model.module, 0)
-            else:
-                update_ema(target_model, model.module, ema_rate)
-
+            update_ema(target_model, model.module, 0)
+            
             # Log loss values:
             log_steps += 1
             train_steps += 1
@@ -429,23 +393,21 @@ def main(args):
                 steps_per_sec = log_steps / (end_time - start_time)
                 # Reduce loss history over all processes:
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                avg_cm_loss = torch.tensor(running_cm_loss / log_steps, device=device)
+                avg_ksd_loss = torch.tensor(running_ksd_loss / log_steps, device=device)
                 avg_diff_loss = torch.tensor(running_diff_loss / log_steps, device=device)
-                avg_repa_loss = torch.tensor(running_repa_loss / log_steps, device=device)  
-                avg_grad_penalty = torch.tensor(running_grad_penalty / log_steps, device=device)
+                avg_repa_loss = torch.tensor(running_repa_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, Repa Loss: {avg_repa_loss:.4f}, "
-                    f"Train Steps/Sec: {steps_per_sec:.2f}, " 
-                    f"Grad Penalty: {avg_grad_penalty:.4f}"
+                    f"(step={train_steps:07d}, nfe={100}, Train Loss: {avg_loss:.4f} \
+                        KSD Loss: {avg_ksd_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, Repa Loss: {avg_repa_loss:.4f}, "
+                    f"Train Steps/Sec: {steps_per_sec:.2f}, "
                 )
                 # Reset monitoring variables:
                 running_loss = 0
-                running_cm_loss = 0
+                running_ksd_loss = 0
                 running_diff_loss = 0
                 running_repa_loss = 0
-                running_grad_penalty = 0
                 log_steps = 0
                 start_time = time()
 
@@ -491,7 +453,7 @@ def main(args):
             with torch.no_grad():
                 if use_label:
                     model_kwargs["y"] = y_infer
-                if args.fwd == "ve":
+                if args.fwd == "ve" or args.fwd == "ksd":
                     sample = karras_sample(diffusion,
                                            generator,
                                            model,
@@ -525,7 +487,7 @@ def main(args):
                     sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
             with torch.no_grad():
-                if args.fwd == "ve":
+                if args.fwd == "ve" or args.fwd == "ksd":
                     ema_sample = karras_sample(
                                         diffusion,
                                         generator,
@@ -607,32 +569,28 @@ if __name__ == "__main__":
     parser.add_argument("--use-fp16", action="store_true", default=False)
     parser.add_argument("--use-new-attention-order", action="store_true", default=False)
     parser.add_argument("--learn-sigma", action="store_true", default=False)
-    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys())+list(UDiT_models.keys())+list(nDiT_models.keys()), default="openai_unet")
+    parser.add_argument("--model-type", type=str, choices=["openai_unet", "song_unet", "dhariwal_unet"]+list(DiT_models.keys())+list(EDM2_models.keys())+list(UDiT_models.keys()), default="openai_unet")
     parser.add_argument("--wo-norm", action="store_true", default=False)
     parser.add_argument("--linear-act", type=str, default="silu")
     parser.add_argument("--norm-type", type=str, default="layer")
     parser.add_argument("--num-register", type=int, default=0)
     parser.add_argument("--use-rope", action="store_true", default=False)
     parser.add_argument("--separate-cond", action="store_true", default=False)
-    parser.add_argument("--cond-mapping", action="store_true", default=False)
+    parser.add_argument("--use-freq-cond", action="store_true", default=False)
     parser.add_argument("--freq-type", type=str, default="prev_mlp")
-    parser.add_argument("--cond-mixing", action="store_true", default=False)
+    
     
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
-    parser.add_argument("--fwd", type=str, default="ve", choices=["vp", "ve", "flow", "cosin"])
+    parser.add_argument("--fwd", type=str, default="ksd")
     parser.add_argument("--weight-schedule", type=str, default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
-    parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "gm", "huber_new", "cauchy_new", "gm_new"], default="huber")
     parser.add_argument("--ot-hard", action="store_true", default=False)
     parser.add_argument("--c-by-loss-std", action="store_true", default=False)
     parser.add_argument("--custom-constant-c", type=float, default=0.0)
-    parser.add_argument("--diff-lamb", type=float, default=5.0)
+    parser.add_argument("--diff-lamb", type=float, default=20.0)
     parser.add_argument("--c-type", type=str, choices=["trig", "edm"], default="edm")
-    parser.add_argument("--p-mean", type=float, default=-0.4)
-    parser.add_argument("--p-std", type=float, default=2.0)
-    
     
     ###### consistency ######
     parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
@@ -662,8 +620,7 @@ if __name__ == "__main__":
     parser.add_argument("--plot-every", type=int, default=5)
     parser.add_argument("--exp", type=str, required=True)
     parser.add_argument("--results-dir", type=str, default="results")
-    parser.add_argument("--gradient-penalty-iters", type=int, default=-1)
-    parser.add_argument("--gradient-penalty-lamb", type=float, default=0.02)
+    
     ###### resume ######
     parser.add_argument("--model-ckpt", type=str, default='')
     parser.add_argument("--resume", action="store_true", default=False)

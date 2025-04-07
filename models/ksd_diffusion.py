@@ -28,268 +28,159 @@ def get_weightings(weight_schedule, snrs, sigma_data, next_t=-1e-4, t=0):
         raise NotImplementedError()
     return weightings
 
-class FlowDenoiser:
-    def __init__(self,
-                args,
-                sigma_data: float = 0.5):
-        
-        self.args = args
-        self.sigma_data = sigma_data
-        self.sigma_max = args.sigma_max
-        self.sigma_min = args.sigma_min
-        self.weight_schedule = args.weight_schedule
-        self.loss_norm = args.loss_norm
-        self.p_mean = -1.1
-        self.p_std = 2.0
-        self.c = th.tensor(3.45)
-        self.use_repa = args.use_repa
-        self.repa_timesteps = args.repa_timesteps
-        self.c_type = args.c_type
+def pairwise_distance(X, Y):
+    """
+    Compute pairwise Euclidean distances between rows of X and Y.
 
-    def get_snr(self, t):
-        return ((1-t)/t)**2
+    Args:
+        X: Tensor of shape (n, d)
+        Y: Tensor of shape (m, d)
+
+    Returns:
+        distances: Tensor of shape (n, m) where distances[i, j] = ||X[i] - Y[j]||.
+    """
+    # Compute differences using broadcasting
+    diff = X.unsqueeze(1) - Y.unsqueeze(0)  # shape: (n, m, d)
+    distances = th.sqrt(th.sum(diff ** 2, dim=2) + 1e-8)  # (n, m)
+    return distances
+
+def energy_distance(X, Y):
+    """
+    Compute the energy distance between two distributions given samples X and Y.
+
+    Energy distance is defined as:
+        D(P, Q) = 2 E||X - Y|| - E||X - X'|| - E||Y - Y'||,
+    where expectations are estimated over pairs of samples.
+
+    Args:
+        X: Tensor of shape (n, d) representing samples from distribution P.
+        Y: Tensor of shape (m, d) representing samples from distribution Q.
+
+    Returns:
+        energy_dist: Scalar tensor representing the energy distance.
+    """
+    # Compute the average distance between samples from different distributions
+    dXY = pairwise_distance(X, Y).mean()
+    # Compute the average distance between samples within X
+    dXX = pairwise_distance(X, X).mean()
+    # Compute the average distance between samples within Y
+    dYY = pairwise_distance(Y, Y).mean()
     
-    def get_scalings_for_boundary_condition(self, t):
-        if self.c_type == "trig":
-            c_skip = th.ones_like(t)
-            c_out = -t*self.sigma_data
-            c_in = 1 /(self.sigma_data * (t**2 + (1-t)**2)**0.5)
-        elif self.c_type == "edm":
-            temp = (1-t)**2 + t**2
-            c_skip = (1-t)/temp
-            c_out = -(self.sigma_data * t)/th.sqrt(temp)
-            c_in = 1/(self.sigma_data*th.sqrt(temp))
-        return c_skip, c_out, c_in
+    # Combine them using the energy distance formula
+    energy_dist = 2 * dXY - dXX - dYY
+    return energy_dist
+
+def compute_pairwise_differences(X):
+    """
+    Compute pairwise differences and squared Euclidean distances.
     
-    def consistency_losses(
-        self,
-        model,
-        x_start,
-        num_scales,
-        model_kwargs=None,
-        target_model=None,
-        noise=None,
-        ssl_feat_truth=None,
-    ):
-        if model_kwargs is None:
-            model_kwargs = {}
-        if noise is None:
-            noise = th.randn_like(x_start) * self.sigma_data
-        else:
-            noise = noise * self.sigma_data
-
-        dims = x_start.ndim
-
-        def denoise_fn(x, t):
-            model_output, denoised, ssl_feat_pred = self.denoise(
-                model, x, t, **model_kwargs
-            )
-            return denoised, ssl_feat_pred, model_output
-
-        @th.no_grad()
-        def target_denoise_fn(x, t):
-            return self.denoise(target_model, x, t, **model_kwargs)[1]
-
-        indices = th.randint(0, num_scales - 1, (x_start.shape[0],), device=x_start.device)
-        diff_indices = indices <= int(num_scales*0.25)
+    Args:
+        X: Tensor of shape (n, c, h, w)
         
-        ### need check here since yang song using the difference scheduler compared to karras: dunno why ? Yang Song code differently from paper check carefully
-        t = (indices + 1)/num_scales
-        t1 = indices/num_scales
-        
-        # t2 < t, indices > indices + 1
-        x_t = append_dims(1-t, dims) * x_start + noise * append_dims(t, dims)
-        x_t1 = append_dims(1-t1, dims) * x_start + noise * append_dims(t1, dims)
-        x_t1 = x_t1.detach()
+    Returns:
+        diff: Tensor of shape (n, n, d) where diff[i, j] = X[i] - X[j]
+        sq_dists: Tensor of shape (n, n) with squared Euclidean distances.
+    """
+    # Expand dimensions to compute differences
+    X1 = X.unsqueeze(1)  # (n, 1, d)
+    X2 = X.unsqueeze(0)  # (1, n, d)
+    diff = X1 - X2       # (n, n, d)
+    sq_dists = th.sum(diff ** 2, dim=2)  # (n, n)
+    return diff, sq_dists
 
-        dropout_state = th.get_rng_state()
-        distiller, ssl_feat_pred, model_output = denoise_fn(x_t, t)
+def kernel_stein_group(samples, scores, kernel_type='imq'):
+    N, K, _ = samples.shape
+    loss = th.tensor(0.0, device=samples.device)
+    for i in range(N):
+        loss += kernel_stein_discrepancy(samples[i], scores[i], kernel_type=kernel_type)
+    return loss/N
 
-        th.set_rng_state(dropout_state)
-        distiller_target = target_denoise_fn(x_t1, t1)
-        distiller_target = distiller_target.detach()
 
-        snrs = self.get_snr(t)
-        lamb = th.log(snrs)
-        weights = 0.5 * F.sigmoid(2-lamb) * (2 / (t-t**2)) * (1-t)/((1-t)**2+t**2)
-        # weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, t1, t, cout) # ICT: weighting 1/(t2-t)
-        
-        # compute diff losses
-        if self.c_type == "edm":
-            # vt = (noise - x_start)/append_dims(th.sqrt(t**2 + (1-t)**2), dims)
-            diff_loss = mean_flat((distiller - x_start)**2)[diff_indices] * th.clamp(snrs[diff_indices], min=1.0, max=5.0)
-        elif self.c_type == "trig":
-            # similar with above but more stable I think
-            vt = noise - x_start
-            diff_loss = mean_flat((self.sigma_data * model_output - vt)**2)[diff_indices]
-        
-        # compute consistency losses
-        if self.loss_norm == "l1":
-            diffs = th.abs(distiller - distiller_target)
-            loss = mean_flat(diffs) * weights
-        elif self.loss_norm == "huber":
-            diffs = (distiller - distiller_target) ** 2
-            loss = (th.sqrt(mean_flat(diffs)+self.c**2)-self.c) * weights
-        elif self.loss_norm == "huber_new":
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(th.sqrt(diffs+self.c**2)-self.c) * weights
-        elif self.loss_norm == "cauchy":
-            diffs = (distiller - distiller_target) ** 2
-            loss = (th.log(0.5*mean_flat(diffs)+self.c**2) - 2*th.log(self.c)) * weights
-        elif self.loss_norm == "cauchy_new":
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(th.log(0.5*diffs+self.c**2) - 2*th.log(self.c)) * weights
-        elif self.loss_norm == "gm":
-            diffs = (distiller - distiller_target) ** 2
-            loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2) * weights
-        elif self.loss_norm == "gm_new":
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(2 * diffs / (diffs + 4 * self.c**2)) * weights
-        elif self.loss_norm == "l2":
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(diffs) * weights
-        elif self.loss_norm == "l2-32":
-            distiller = F.interpolate(distiller, size=32, mode="bilinear")
-            distiller_target = F.interpolate(
-                distiller_target,
-                size=32,
-                mode="bilinear",
-            )
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(diffs) * weights
-        elif self.loss_norm == "lpips":
-            if x_start.shape[-1] < 256:
-                distiller = F.interpolate(distiller, size=224, mode="bilinear")
-                distiller_target = F.interpolate(
-                    distiller_target, size=224, mode="bilinear"
-                )
-
-            loss = (
-                self.lpips_loss(
-                    (distiller + 1) / 2.0,
-                    (distiller_target + 1) / 2.0,
-                )
-                * weights
-            )
-        else:
-            raise ValueError(f"Unknown loss norm {self.loss_norm}")
-        
-        
-        # REPA loss
-        repa_loss = th.tensor(0)
-        if self.use_repa and (ssl_feat_truth is not None):
-            bound = int(num_scales * (1 - self.args.denoising_task_rate))
-            z = th.nn.functional.normalize(ssl_feat_truth, dim=-1)
-            z_tilde = th.nn.functional.normalize(ssl_feat_pred, dim=-1)
-            numerator = z * z_tilde
-            numerator = th.nn.functional.relu(1 - self.args.repa_relu_margin - numerator.sum(dim=-1))
-            repa_loss = mean_flat(numerator)
+def kernel_stein_discrepancy(samples, scores, kernel_type='rbf', **kwargs):
+    """
+    Compute the Kernel Stein Discrepancy (KSD) for a set of samples using PyTorch.
+    
+    The Stein kernel u_P(x,y) is defined differently for each kernel:
+    
+    RBF kernel:
+      k(x,y) = exp(-||x-y||^2/(2*h^2))
+      
+      u_P(x,y) = k(x,y) * [ s(x)^T s(y)
+                           - (1/h^2)*( s(y)^T (x-y) - s(x)^T (x-y) )
+                           + d/h^2 - ||x-y||^2/h^4 ]
+    
+    IMQ kernel:
+      k(x,y) = (c + ||x-y||^2)^(-beta)
+      
+      u_P(x,y) = k(x,y) * [ s(x)^T s(y)
+                           - (2*beta/(c+||x-y||^2))*( s(y)^T (x-y) - s(x)^T (x-y) )
+                           + (2*beta*d)/(c+||x-y||^2)
+                           - (4*beta*(beta+1)||x-y||^2)/(c+||x-y||^2)^2 ]
+    
+    Args:
+        samples: Tensor of shape (n, d) containing the samples.
+        score_fn: A function that takes a tensor of shape (n, d) and returns the score s_P(x) (tensor of shape (n, d)).
+        kernel_type: Either 'rbf' or 'imq' to choose the kernel.
+        kwargs: Additional keyword arguments for the kernel parameters.
+            For 'rbf': h (bandwidth, default=1.0).
+            For 'imq': c (default=1.0) and beta (default=0.5).
             
-            # REPA mask
-            if self.args.repa_timesteps == "full":
-                repa_mask = th.ones_like(indices)
-            elif self.args.repa_timesteps == "denoising":
-                repa_mask = indices >= bound 
-            elif self.args.repa_timesteps == "generation":
-                repa_mask = indices < bound
-            else:
-                raise NotImplementedError()
-
-            if repa_mask.sum() == 0:
-                repa_loss = repa_loss - repa_loss.detach() # NOTE: avoid unused param when computing repa but not backward any grad.
-            else:
-                repa_loss = repa_loss[repa_mask]
-
-        terms = {}
-        terms["loss"] = loss
-        terms["diff_loss"] = diff_loss
-        terms["repa_loss"] = repa_loss
-        terms["t"] = t
-        return terms
-
-    def denoise(self, model, x_t, t, **model_kwargs):
-        c_skip, c_out, c_in = [
-            append_dims(x, x_t.ndim)
-            for x in self.get_scalings_for_boundary_condition(t)
-        ]
-        rescaled_t = 1000 * t
-        model_output, ssl_feat_pred = model(c_in * x_t, rescaled_t, **model_kwargs)
-        denoised = c_out * model_output + c_skip * x_t
-        return model_output, denoised, ssl_feat_pred
+    Returns:
+        ksd: Scalar tensor representing the KSD.
+    """
+    n, d = samples.shape    
+    diff, sq_dists = compute_pairwise_differences(samples)  # diff: (n, n, d), sq_dists: (n, n)
+    # print(samples)
+    # print(scores)
+    # print(sq_dists)
     
-
-def flow_sample(
-    diffusion,
-    generator,
-    model,
-    shape,
-    steps,
-    progress=False,
-    model_kwargs=None,
-    device=None,
-    sampler="heun",
-    noise=None,
-    ts=None,):
-    if noise is None:
-        x_T = generator.randn(*shape, device=device) * 0.5
+    # Compute score dot products: s(x)^T s(y) for each pair
+    score_dot = th.matmul(scores, scores.t())  # (n, n)
+    # print(score_dot)
+    
+    # Compute s(x)^T (x-y) and s(y)^T (x-y)
+    # score_diff: for each pair (i,j): s(x_i)^T (x_i - x_j)
+    score_diff = (scores.unsqueeze(1) * diff).sum(dim=2)  # (n, n)
+    # score_diff_y: for each pair (i,j): s(x_j)^T (x_i - x_j)
+    score_diff_y = (scores.unsqueeze(0) * diff).sum(dim=2)  # (n, n)
+    
+    # print(score_diff)
+    # print(score_diff_y)
+    
+    if kernel_type == 'rbf':
+        h = kwargs.get('h', 1.0)
+        # RBF kernel: k(x,y) = exp(-||x-y||^2 / (2*h^2))
+        K = th.exp(-sq_dists / (2 * h**2))
+        # print(K)
+        U = K * ( score_dot
+                 - (1/h**2) * (score_diff_y - score_diff)
+                 + (d / h**2)
+                 - (sq_dists / h**4) )
+    elif kernel_type == 'imq':
+        c = kwargs.get('c', 1.0)
+        beta = kwargs.get('beta', 0.5)
+        # IMQ kernel: k(x,y) = (c + ||x-y||^2)^(-beta)
+        denom = c + sq_dists
+        K = denom.pow(-beta)
+        U = K * ( score_dot - (2 * beta / denom) * (score_diff_y - score_diff) + (2 * beta * d) / denom - (4 * beta * (beta + 1) * sq_dists) / (denom**2) )
     else:
-        x_T = noise
-
-    t = th.linspace(1, 0, steps)
+        raise ValueError("Unsupported kernel_type. Choose 'rbf' or 'imq'.")
     
-    @th.no_grad()
-    def sample_onestep(
-        distiller,
-        x,
-        t,
-        progress=False):
-        """Single-step generation from a distilled model."""
-        return distiller(x, th.ones([x.shape[0],], device=x.device))
-    
-    @th.no_grad()
-    def iterative_sampler(
-        distiller,
-        x,
-        t,
-        ts,
-        progress=False,
-        steps=40,
-    ):
-        ts = reversed(ts)/(steps - 1)
-        for i in range(len(ts) - 1):
-            x0 = distiller(x, ts[i])
-            next_t = ts[i + 1]
-            x = (1-next_t) * x0 + next_t * th.randn_like(x)
-        return x
+    # Average over all pairs (including diagonal)
+    ksd_sq = U.mean()
+    if th.isnan(ksd_sq) or th.isinf(ksd_sq):
+        print(K)
+        print(samples)
+        print(sq_dists)
+        print(score_dot)
+        print(score_diff_y, score_diff)
+        exit()
+    # Return the square root if ksd_sq is non-negative (numerically it should be)
+    ksd = th.sqrt(ksd_sq) if ksd_sq >= 0 else th.tensor(float('nan'))
+    return ksd
 
-    sample_fn = {
-        "onestep": sample_onestep,
-        "multistep": iterative_sampler,
-    }[sampler]
 
-    def denoiser(x_t, t):
-        _, denoised, _ = diffusion.denoise(model, x_t, t, **model_kwargs)
-        return denoised
-
-    if sampler in ["multistep"] :
-        x_0 = sample_fn(
-            denoiser,
-            x_T,
-            t,
-            progress=progress,
-            ts=ts,
-            steps=steps
-        )
-    else:
-        x_0 = sample_fn(
-            denoiser,
-            x_T,
-            t,
-            progress=progress,
-        )
-    return x_0
-
-class KarrasDenoiser:
+class KSD_Denoiser:
     def __init__(
         self,
         args,
@@ -301,11 +192,9 @@ class KarrasDenoiser:
         self.sigma_max = args.sigma_max
         self.sigma_min = args.sigma_min
         self.weight_schedule = args.weight_schedule
-        self.loss_norm = args.loss_norm
         self.rho = rho
-        self.p_mean = args.p_mean
-        self.p_std = args.p_std
-        self.c = th.tensor(3.45)
+        self.p_mean = -1.1
+        self.p_std = 2.0
         self.use_repa = args.use_repa
         self.repa_timesteps = args.repa_timesteps
         
@@ -323,38 +212,6 @@ class KarrasDenoiser:
         )
         c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
         return c_skip, c_out, c_in
-
-    # def diffusion_losses(self, model, x_start, num_scales, model_kwargs=None, noise=None):
-    #     if model_kwargs is None:
-    #         model_kwargs = {}
-    #     if noise is None:
-    #         noise = th.randn_like(x_start)
-
-    #     terms = {}
-    #     indices = th.randint(0, num_scales, (x_start.shape[0],), device=x_start.device)
-    #     # indices = th.randint(int(num_scales*0.00), num_scales, (x_start.shape[0],), device=x_start.device)
-    #     t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
-    #         self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
-    #     )
-    #     t = t**self.rho
-
-    #     dims = x_start.ndim
-    #     x_t = x_start + noise * append_dims(t, dims)
-    #     model_output, denoised = self.denoise(model, x_t, t, **model_kwargs)
-
-    #     snrs = self.get_snr(t)
-    #     weights = append_dims(
-    #         get_weightings("karras", snrs, self.sigma_data), dims
-    #     )
-    #     terms["xs_mse"] = mean_flat((denoised - x_start) ** 2)
-    #     terms["mse"] = mean_flat(weights * (denoised - x_start) ** 2)
-    #     terms["cauchy"] = (th.log(0.5*mean_flat((denoised - x_start) ** 2)+self.c**2) - 2*th.log(self.c)) * weights
-
-    #     if "vb" in terms:
-    #         terms["loss"] = terms["mse"] + terms["vb"]
-    #     else:
-    #         terms["loss"] = terms["mse"]
-    #     return terms
     
     def icm_dist(self, num_scales):
         indices = th.Tensor(range(num_scales))
@@ -367,16 +224,15 @@ class KarrasDenoiser:
         dist = th.distributions.categorical.Categorical(probs=unnorm_prob)
         return dist
 
-    def consistency_losses(
+    def ksd_losses(
         self,
         model,
         x_start,
+        group_size,
         num_scales,
         model_kwargs=None,
         target_model=None,
         noise=None,
-        ssl_feat_truth=None,
-        gradient_penalty=False,
     ):
         if model_kwargs is None:
             model_kwargs = {}
@@ -384,6 +240,7 @@ class KarrasDenoiser:
             noise = th.randn_like(x_start)
 
         dims = x_start.ndim
+        bs = x_start.shape[0]
 
         def denoise_fn(x, t):
             model_output, denoised, ssl_feat_pred = self.denoise(
@@ -396,94 +253,40 @@ class KarrasDenoiser:
             return self.denoise(target_model, x, t, **model_kwargs)[1]
 
         if self.args.noise_sampler == "ict":
-            indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0],)).to(x_start.device)
+            indices = self.icm_dist(num_scales).sample(sample_shape=(x_start.shape[0]//group_size,)).to(x_start.device)
         else:
-            indices = th.randint(0, num_scales - 1, (x_start.shape[0],), device=x_start.device)
-            
-        diff_indices = indices >= int(num_scales*0.75)
-        
+            indices = th.randint(0, num_scales - 2, (x_start.shape[0]//group_size,), device=x_start.device)
+        indices = indices.reshape(indices.size(0), 1).repeat(1, group_size).flatten()
+        indices_Tm2 = th.randint(int(0.75*num_scales), num_scales - 1, (x_start.shape[0],), device=x_start.device)
         ### need check here since yang song using the difference scheduler compared to karras: dunno why ? Yang Song code differently from paper check carefully
         t = self.sigma_max ** (1 / self.rho) + indices / (num_scales - 1) * (
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
         )
-        next_t = self.sigma_max ** (1 / self.rho) + (indices + 1) / (num_scales - 1) * (
+        tp1 = self.sigma_max ** (1 / self.rho) + (indices + 1) / (num_scales - 1) * (
             self.sigma_min ** (1 / self.rho) - self.sigma_max ** (1 / self.rho)
         )
         t = t**self.rho
-        next_t = next_t**self.rho
-        
+        tp1 = tp1**self.rho
+        Tm2 = indices_Tm2**self.rho
         # next_t < t, indices > indices + 1
         
-        # model prediction
-        x_t = x_start + noise * append_dims(t, dims)
-        x_next_t = x_start + noise * append_dims(next_t, dims).detach()
-        distiller, ssl_feat_pred = denoise_fn(x_t, t)
-        distiller_target = target_denoise_fn(x_next_t, next_t).detach()
+        # perturb and feed through model
+        x_t = x_start + noise * append_dims(t, dims) # x_t (t > 2)
+        x_Tm2 = x_start + noise * append_dims(Tm2, dims) # x_2
+        x_merge, _ = denoise_fn(th.cat([x_t, x_Tm2]), th.cat([t, Tm2]))
+        x_0t, x_0Tm2 = x_merge.chunk(2, dim=0)
         
-        # setup weight
-        snrs = self.get_snr(t)
-        weights = get_weightings(self.weight_schedule, snrs, self.sigma_data, next_t, t) # ICT: weighting 1/(t_next-t)
-        diff_weights = get_weightings("karras", snrs, self.sigma_data)[diff_indices]
-        
-        # compte diffusion loss
-        diff_loss = mean_flat((distiller - x_start)**2)[diff_indices]*diff_weights
-        
-        # compute consistency losses
-        if self.loss_norm == "l1":
-            diffs = th.abs(distiller - distiller_target)
-            loss = mean_flat(diffs) * weights
-        elif self.loss_norm == "huber":
-            diffs = (distiller - distiller_target) ** 2
-            loss = (th.sqrt(mean_flat(diffs)+self.c**2)-self.c) * weights
-        elif self.loss_norm == "cauchy":
-            diffs = (distiller - distiller_target) ** 2
-            loss = (th.log(0.5*mean_flat(diffs)+self.c**2) - 2*th.log(self.c)) * weights
-        elif self.loss_norm == "gm":
-            diffs = (distiller - distiller_target) ** 2
-            loss = 2 * mean_flat(diffs) / (mean_flat(diffs) + 4 * self.c**2) * weights
-        elif self.loss_norm == "l2":
-            diffs = (distiller - distiller_target) ** 2
-            loss = mean_flat(diffs) * weights
-        else:
-            raise ValueError(f"Unknown loss norm {self.loss_norm}")
-        
-        # REPA loss
-        repa_loss = th.tensor(0)
-        if self.use_repa and (ssl_feat_truth is not None):
-            bound = int(num_scales * (1 - self.args.denoising_task_rate))
-            z = th.nn.functional.normalize(ssl_feat_truth, dim=-1)
-            z_tilde = th.nn.functional.normalize(ssl_feat_pred, dim=-1)
-            numerator = z * z_tilde
-            numerator = th.nn.functional.relu(1 - self.args.repa_relu_margin - numerator.sum(dim=-1))
-            repa_loss = mean_flat(numerator)
-            
-            # REPA mask
-            if self.args.repa_timesteps == "full":
-                repa_mask = th.ones_like(indices)
-            elif self.args.repa_timesteps == "denoising":
-                repa_mask = indices >= bound 
-            elif self.args.repa_timesteps == "generation":
-                repa_mask = indices < bound
-            else:
-                raise NotImplementedError()
-
-            if repa_mask.sum() == 0:
-                repa_loss = repa_loss - repa_loss.detach() # NOTE: avoid unused param when computing repa but not backward any grad.
-            else:
-                repa_loss = repa_loss[repa_mask]
-                
-        if gradient_penalty:
-            grad = th.autograd.grad(loss.mean(), x_t, create_graph=True, retain_graph=True)[0]
-            grad_penalty = th.norm(grad.reshape(grad.shape[0], -1), p=2, dim=1).mean()
-        else:
-            grad_penalty = th.tensor(0)
-
+        # ksd loss
+        x_tp1 = x_0t + (x_t-x_0t)/append_dims(t, dims) * append_dims(tp1, dims)
+        x_0tp1 = target_denoise_fn(x_tp1.detach(), tp1).detach()
+        score_x_tp1 = (x_tp1 - x_0tp1)/append_dims(tp1, dims)        
+        ksd_loss = kernel_stein_group(x_tp1.reshape(bs//group_size, group_size,-1), score_x_tp1.reshape(bs//group_size, group_size, -1))
+        # diff loss
+        diff_loss = mean_flat((x_0Tm2 - x_start)**2)
         terms = {}
-        terms["loss"] = loss
+        terms["ksd_loss"] = ksd_loss * 0.1
         terms["diff_loss"] = diff_loss
-        terms["repa_loss"] = repa_loss
         terms["t"] = t
-        terms["grad_penalty"] = grad_penalty
         return terms
 
 
