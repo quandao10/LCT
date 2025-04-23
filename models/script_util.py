@@ -1,5 +1,5 @@
 import argparse
-from .karras_diffusion import KarrasDenoiser, FlowDenoiser
+from .karras_diffusion import KarrasDenoiser, FlowDenoiser, ContinuousKarrasDenoiser
 from .ksd_diffusion import KSD_Denoiser
 from .unet import UNetModel
 import numpy as np
@@ -128,6 +128,7 @@ def create_model_and_diffusion(args):
                                             projector_dim=args.projector_dim,
                                             repa_mapper=args.repa_mapper,
                                             mar_mapper_num_res_blocks=args.mar_mapper_num_res_blocks,
+                                            uw=args.uw,
                                             cond_mixing = args.cond_mixing)
     elif "U-DiT" in args.model_type:
         model = UDiT_models[args.model_type](input_size=args.image_size,
@@ -145,7 +146,9 @@ def create_model_and_diffusion(args):
         exit(0)
             
     if args.fwd == "ve":
-        diffusion = KarrasDenoiser(args=args, sigma_data=args.sigma_data)
+        diffusion = KarrasDenoiser(args=args, sigma_data=args.sigma_data, rho=args.rho)
+    elif args.fwd == "ve_cont":
+        diffusion = ContinuousKarrasDenoiser(args=args, sigma_data=args.sigma_data)
     elif args.fwd == "flow":
         diffusion = FlowDenoiser(args, sigma_data=args.sigma_data)
     elif args.fwd == "ksd":

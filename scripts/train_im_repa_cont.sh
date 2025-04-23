@@ -1,0 +1,50 @@
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10200 --nproc_per_node=2 train_cm_latent_repa_cont.py \
+        --exp test_cont \
+        --datadir /common/users/qd66/repa/latent_imagenet256  \
+        --dataset subset_imagenet_256 \
+        --results-dir /research/cbim/medical/qd66/lct_v2_cont/ \
+        --image-size 32 \
+        --num-in-channels 4 \
+        --num-classes 25 \
+        --loss-norm cauchy \
+        --noise-sampler ict \
+        --global-batch-size $((48)) \
+        --epochs $((700*1)) \
+        --lr 1e-4 \
+        --num-sampling 8 \
+        --num-channels 128 \
+        --num-head-channels 64 \
+        --num-res-blocks 4 \
+        --resblock-updown \
+        --max-grad-norm 100 \
+        --model-type DiT-B/2 \
+        --channel-mult 1,2,3,4 \
+        --attention-resolutions 16,8 \
+        --normalize-matrix statistic/stats_25.npy \
+        --use-diffloss \
+        --linear-act gate_relu \
+        --norm-type rms \
+        --projector-dim 2048 \
+        --repa-lamb 0.1 \
+        --repa-enc-info 8:dinov2-vit-b \
+        --repa-relu-margin 0.4 \
+        --repa-timesteps full \
+        --denoising-task-rate 0.5 \
+        --repa-mapper repa \
+        --mar-mapper-num-res-blocks 0 \
+        --num-register 0 \
+        --freq-type prev_mlp \
+        --vae vae \
+        --fwd ve_cont \
+        --diff-lamb 5 \
+        --c-type edm \
+        --opt radam \
+        --use-rope \
+        --cond-mixing \
+        --p-mean -0.8 \
+        --p-std 1.5 \
+        --sigma-data 0.5 \
+        --use-repa \
+        --diff-sigma 0.3 \
+        --rho 7 \
+        # --compile \

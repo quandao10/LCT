@@ -26,7 +26,7 @@
 #                 --ema \
 #                 --linear-act relu \
 #                 --num-register 0 \
-#                 --norm-type rms \
+#                 --norm-type rms \ 
 #                 --freq-type prev_mlp \
 #                 --use-rope \
 #                 --cfg-scale 1.5 \
@@ -40,10 +40,10 @@
 # subset imagenet 256
 export MASTER_PORT=10132
 
-for epoch in 600 625 650 675 700
+for epoch in 625 650 675 700
 do
         CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=4 test_cm_latent_ddp.py \
-                --ckpt /research/cbim/medical/qd66/lct_v2/subset_imagenet_256/DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5/checkpoints/0000${epoch}.pt \
+                --ckpt /research/cbim/medical/qd66/lct_v2_new/subset_imagenet_256/DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_rho7_karrasnorm/checkpoints/0000${epoch}.pt \
                 --seed 42 \
                 --dataset subset_imagenet_256 \
                 --image-size 32 \
@@ -71,8 +71,11 @@ do
                 --cfg-scale 1.5 \
                 --c-type edm \
                 --fwd ve \
-                --p-mean -0.4 \
+                --p-mean -0.8 \
                 --p-std 1.5 \
+                --sigma-data 0.5 \
+                --rho 7 \
+                --use-karras-normalization \
                 # --cond-mixing \
                 # --wo-norm \
                 # --no-scale \

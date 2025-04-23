@@ -51,28 +51,21 @@ class RecordLoss:
     # record loss across time
     def __init__(self, save_dir, scale):
         self.losses = {}
-        self.losses_cm = {}
-        # self.losses_balance = {}
         self.diff_losses = {}
         self.save_dir = os.path.join(save_dir, "losses")
         self.scale = scale
         os.makedirs(self.save_dir, exist_ok=True)
     
-    def __call__(self, loss, loss_cm, t):
+    def __call__(self, loss, diff_loss, t, t_diff):
         for i in range(len(loss)):
             if t[i].item() not in self.losses:
                 self.losses[t[i].item()] = []
             self.losses[t[i].item()].append(loss[i])
-            
-        for i in range(len(loss_cm)):
-            if t[i].item() not in self.losses_cm:
-                self.losses_cm[t[i].item()] = []
-            self.losses_cm[t[i].item()].append(loss_cm[i])
         
-        # for i in range(len(loss_balance)):
-        #     if t[i].item() not in self.losses_balance:
-        #         self.losses_balance[t[i].item()] = []
-        #     self.losses_balance[t[i].item()].append(loss_balance[i])
+        for i in range(len(diff_loss)):
+            if t_diff[i].item() not in self.diff_losses:
+                self.diff_losses[t_diff[i].item()] = []
+            self.diff_losses[t_diff[i].item()].append(diff_loss[i])
         
     def get_loss(self, t):
         return torch.tensor(self.losses[t]).mean()
@@ -80,20 +73,17 @@ class RecordLoss:
     def get_loss_std(self, t):
         return torch.tensor(self.losses[t]).std()
     
-    # def get_loss_balance(self, t):
-    #     return torch.tensor(self.losses_balance[t]).mean()
+    def get_diff_loss(self, t):
+        return torch.tensor(self.diff_losses[t]).mean()
     
-    # def get_loss_balance_std(self, t):
-    #     return torch.tensor(self.losses_balance[t]).std()
+    def get_diff_loss_std(self, t):
+        return torch.tensor(self.diff_losses[t]).std()
     
-    def get_loss_cm(self, t):
-        return torch.tensor(self.losses_cm[t]).mean()
+    def get_all_losses(self):
+        return self.losses
     
-    def get_loss_cm_std(self, t):
-        return torch.tensor(self.losses_cm[t]).std()
-    
-    def get_reverse_weight(self):
-        return torch.tensor([1./(self.get_loss(t)+1e-44) for t in sorted(self.losses.keys())])
+    def get_all_diff_losses(self):
+        return self.diff_losses
     
     def plot_loss_bar(self, epoch): # plot line loss across time   
         plt.figure(figsize=(10, 5))
@@ -103,56 +93,35 @@ class RecordLoss:
         plt.bar(self.losses.keys(), [self.get_loss(t) for t in self.losses.keys()])
         
         plt.subplot(1, 2, 2)
-        plt.title("Consistency Loss across time")   
-        plt.bar(self.losses_cm.keys(), [self.get_loss_cm(t) for t in self.losses_cm.keys()])
+        plt.title("Diff loss across time")
+        # plt.plot(self.diff_losses.keys(), [self.get_diff_loss(t) for t in self.diff_losses.keys()])
+        plt.bar(self.diff_losses.keys(), [self.get_diff_loss(t) for t in self.diff_losses.keys()])
         
         plt.tight_layout()
         plt.savefig(f"{self.save_dir}/losses_ep{epoch}_sl{self.scale}.png")
         plt.close()
         
     def plot_loss_line(self, epoch): # plot line loss across time   
-        plt.figure(figsize=(15, 5))
+        plt.figure(figsize=(10, 5))
         plt.subplot(1, 2, 1)
         plt.title("Consistency Loss across time")   
         # need to sort the keys
         sorted_keys = sorted(self.losses.keys())
-        mean_loss = torch.tensor([self.get_loss(t) for t in sorted_keys])
-        std_loss = torch.tensor([self.get_loss_std(t) for t in sorted_keys])
-        plt.plot(sorted_keys, mean_loss)
-        plt.fill_between(sorted_keys, mean_loss - std_loss, 
-                         mean_loss + std_loss, alpha=0.2)
-        # save the mean, std, and keys in a text file
-     
+        plt.plot(sorted_keys, [self.get_loss(t) for t in sorted_keys])
+        # plot the variance of the loss
+        plt.fill_between(sorted_keys, [self.get_loss(t) - self.get_loss_std(t) for t in sorted_keys], 
+                         [self.get_loss(t) + self.get_loss_std(t) for t in sorted_keys], alpha=0.2)
+        
         plt.subplot(1, 2, 2)
-        plt.title("Consistency Loss Weighted across time")   
-        sorted_keys = sorted(self.losses_cm.keys())
-        mean_loss_cm = torch.tensor([self.get_loss_cm(t) for t in sorted_keys])
-        std_loss_cm = torch.tensor([self.get_loss_cm_std(t) for t in sorted_keys])
-        plt.plot(sorted_keys, mean_loss_cm)
-        plt.fill_between(sorted_keys, mean_loss_cm - std_loss_cm, 
-                         mean_loss_cm + std_loss_cm, alpha=0.2)
-        
-            
-        # plt.subplot(1, 3, 3)
-        # plt.title("Balance Loss across time")
-        # sorted_keys = sorted(self.losses_balance.keys())
-        # mean_loss_balance = torch.tensor([self.get_loss_balance(t) for t in sorted_keys])
-        # std_loss_balance = torch.tensor([self.get_loss_balance_std(t) for t in sorted_keys])
-        # plt.plot(sorted_keys, mean_loss_balance)
-        # plt.fill_between(sorted_keys, mean_loss_balance - std_loss_balance, 
-        #                  mean_loss_balance + std_loss_balance, alpha=0.2)
-        
-        # write every loss in a text file
-        # in format: key, loss, loss_cm, loss_balance
-        with open(f"{self.save_dir}/losses_ep{epoch}_sl{self.scale}.txt", "w") as f:
-            for key, loss, loss_cm in zip(sorted_keys, mean_loss.numpy(), mean_loss_cm.numpy()):
-                f.write(f"{key}, {loss}, {loss_cm}\n")
+        plt.title("Diff loss across time")
+        sorted_keys = sorted(self.diff_losses.keys())
+        plt.plot(sorted_keys, [self.get_diff_loss(t) for t in sorted_keys])
+        plt.fill_between(sorted_keys, [self.get_diff_loss(t) - self.get_diff_loss_std(t) for t in sorted_keys], 
+                         [self.get_diff_loss(t) + self.get_diff_loss_std(t) for t in sorted_keys], alpha=0.2)
         
         plt.tight_layout()
         plt.savefig(f"{self.save_dir}/losses_ep{epoch}_sl{self.scale}.png")
         plt.close()
-        
-        
     def set_scale(self, scale):
         if scale != self.scale:
             self.scale = scale
@@ -369,7 +338,6 @@ def main(args):
     ema.eval()
 
     dataset = get_repa_dataset(args)
-    
     if rank == 0:
         logger.info(f"Dataset contains {args.num_classes} classes")
     sampler = DistributedSampler(
@@ -397,22 +365,6 @@ def main(args):
 
     # create ema schedule
     logger.info("creating model and diffusion and ema scale function")
-    ema_scale_fn = create_ema_and_scales_fn(
-        target_ema_mode=args.target_ema_mode,
-        start_ema=args.start_ema,
-        scale_mode=args.scale_mode,
-        start_scales=args.start_scales,
-        end_scales=args.end_scales,
-        total_steps=args.total_training_steps,
-        ict=args.ict,
-    )
-
-    # OT sampler
-    if args.ot_hard:
-        ot_sampler = OTPlanSampler(method="exact", normalize_cost=True)
-    else:
-        ot_sampler = None
-    
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
@@ -430,12 +382,6 @@ def main(args):
         except:
             mean = torch.tensor(data["mean"]).to(device)
             std = torch.tensor(data["std"]).to(device)
-    
-    # scale and bias for imagenet
-    if "imagenet" in args.dataset and args.use_karras_normalization:
-        logger.info("using karras normalization for imagenet")
-        mean = torch.tensor([5.81, 3.25, 0.12, -2.15]).view(1, -1, 1, 1).to(device)
-        std =  torch.tensor([4.17, 4.62, 3.71, 3.28]).view(1, -1, 1, 1).to(device)
         
     if rank == 0:
         noise = torch.randn(args.num_sampling, 4, args.image_size, args.image_size).to(device)
@@ -447,14 +393,10 @@ def main(args):
         
     scaler = torch.cuda.amp.GradScaler()
     logger.info(f"Training for {args.epochs} epochs which is {args.total_training_steps} iterations...")
-    if args.end_scales == 640:
-        constant_c = construct_constant_c()
-    elif args.end_scales == 512:
-        constant_c = construct_constant_c_v2()
     if args.record_loss:
         record_loss = RecordLoss(experiment_dir, args.start_scales)
-  
-    
+    number_of_scales = 7
+    d = args.total_training_steps//number_of_scales 
     for epoch in range(init_epoch, args.epochs+1):
         sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
@@ -470,26 +412,25 @@ def main(args):
                 x = (x - mean)/std * args.sigma_data
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
-            if args.ot_hard:
-                x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
                 
-            if not args.stage2:
-                ema_rate, num_scales = ema_scale_fn(train_steps)
-            else:
-                ema_rate, num_scales = 0, args.end_scales+1
-            diffusion.c = constant_c[num_scales]
+            # ema_rate, num_scales = ema_scale_fn(train_steps)
+            stage = train_steps // d
+            if args.record_loss:
+                record_loss.set_scale(stage)
+
             model_kwargs = dict(y=y)            
+            diffusion.update_schedule(stage)
+            
             with torch.autocast(device_type="cuda", dtype=torch.float16):
                 losses = diffusion.consistency_losses(model,
                                                     x,
-                                                    num_scales,
                                                     target_model=target_model,
                                                     model_kwargs=model_kwargs,
                                                     noise=n,
                                                     ssl_feat_truth=ssl_feat_truth,)
             # update reocord loss
             if args.record_loss:
-                record_loss(losses["raw_cm_loss"], losses["loss"], losses["t"])
+                record_loss(losses["raw_cm_loss"], losses["raw_diff_loss"], losses["t"], losses["t_diff"])
             
             # CALCULATE LOSS FUNC HERE
             cm_loss = losses["loss"].mean()
@@ -510,6 +451,7 @@ def main(args):
             else:
                 repa_loss = torch.tensor(0)  
             
+            # print(f"grad_penalty: {grad_penalty.item()}")
             opt.zero_grad()
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
@@ -525,10 +467,7 @@ def main(args):
             running_diff_loss += diff_loss.item()
             running_repa_loss += repa_loss.item()
             update_ema(ema, model.module)
-            if args.ict:
-                update_ema(target_model, model.module, 0)
-            else:
-                update_ema(target_model, model.module, ema_rate)
+            update_ema(target_model, model.module, 0)
 
             # Log loss values:
             log_steps += 1
@@ -546,7 +485,7 @@ def main(args):
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
                 logger.info(
-                    f"(step={train_steps:07d}, nfe={num_scales}, c={diffusion.c}) Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, Repa Loss: {avg_repa_loss:.4f}, "
+                    f"(step={train_steps:07d}, stage={stage}, c={diffusion.c}), Train Loss: {avg_loss:.4f} CM Loss: {avg_cm_loss:.4f} Diff Loss: {avg_diff_loss:.4f}, Repa Loss: {avg_repa_loss:.4f}, "
                     f"Train Steps/Sec: {steps_per_sec:.2f}, " 
                 )
                 # Reset monitoring variables:
@@ -602,7 +541,7 @@ def main(args):
             with torch.no_grad():
                 if use_label:
                     model_kwargs["y"] = y_infer
-                if args.fwd == "ve":
+                if args.fwd == "ve" or args.fwd == "ve_cont":
                     sample = karras_sample(diffusion,
                                            generator,
                                            model,
@@ -636,7 +575,7 @@ def main(args):
                     sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
             sample = torch.concat(sample, dim=0)
             with torch.no_grad():
-                if args.fwd == "ve":
+                if args.fwd == "ve" or args.fwd == "ve_cont":
                     ema_sample = karras_sample(
                                         diffusion,
                                         generator,
@@ -700,7 +639,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--normalize-matrix", type=str, default=None)
     parser.add_argument("--sigma-data", type=float, default=0.5)
-    parser.add_argument("--use-karras-normalization", action="store_true", default=False)
+
     
     ###### model ######
     parser.add_argument("--vae", type=str, choices=["vae", "eq_vae"], default="vae")  # Choice doesn't affect training
@@ -733,7 +672,7 @@ if __name__ == "__main__":
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)
-    parser.add_argument("--fwd", type=str, default="ve", choices=["vp", "ve", "flow", "cosin"])
+    parser.add_argument("--fwd", type=str, default="ve", choices=["vp", "ve", "flow", "cosin", "ve_cont"])
     parser.add_argument("--weight-schedule", type=str, default="uniform")
     parser.add_argument("--noise-sampler", type=str, choices=["uniform", "ict"], default="ict")
     parser.add_argument("--loss-norm", type=str, choices=["l1", "l2", "lpips", "huber", "adaptive", "cauchy", "gm", "huber_new", "cauchy_new", "gm_new"], default="huber")
@@ -744,17 +683,13 @@ if __name__ == "__main__":
     parser.add_argument("--c-type", type=str, choices=["trig", "edm"], default="edm")
     parser.add_argument("--p-mean", type=float, default=-0.4)
     parser.add_argument("--p-std", type=float, default=2.0)
-    parser.add_argument("--diff-rate", type=float, default=0.75)
+    parser.add_argument("--diff-sigma", type=float, default=0.3) # equivalent to diff_rate=0.70
     
     ###### consistency ######
-    parser.add_argument("--target-ema-mode", type=str, choices=["adaptive", "fixed"], default="fixed")
-    parser.add_argument("--scale-mode", type=str, choices=["progressive", "fixed"], default="fixed")
-    parser.add_argument("--start-ema", type=float, default=0.0)
-    parser.add_argument("--start-scales", type=float, default=40)
-    parser.add_argument("--end-scales", type=float, default=40)
-    parser.add_argument("--ict", action="store_true", default=False)
     parser.add_argument("--use-diffloss", action="store_true", default=False)
-    parser.add_argument("--stage2", action="store_true", default=False)
+    parser.add_argument("--q", type=float, default=2)
+    parser.add_argument("--k", type=float, default=8)
+    parser.add_argument("--b", type=float, default=1)
     
     
     ###### training ######
@@ -766,8 +701,6 @@ if __name__ == "__main__":
     parser.add_argument("--compile", action='store_true', default=False)
     parser.add_argument("--opt", type=str, default="radam", choices=["radam", "soap"])
     parser.add_argument("--tau", type=float, default=20)
-    parser.add_argument("--a", type=float, default=0.9299)
-    parser.add_argument("--b", type=float, default=0.9246)
     parser.add_argument("--rho", type=float, default=7)
     
     

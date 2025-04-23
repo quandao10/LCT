@@ -356,27 +356,21 @@ class DiTBlock(nn.Module): #NOTE: we are using both post and prev norm with wo_n
         if "prev_mlp" in self.freq_type:
             self.prev_mlp = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
                 torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
-            print("prev_mlp")
         if "post_mlp" in self.freq_type:
             self.post_mlp = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
                 torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
-            print("post_mlp")
         if "prev_norm_mlp" in self.freq_type:
             self.prev_norm_mlp = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
                 torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
-            print("prev_norm_mlp")
         if "prev_norm_attn" in self.freq_type:
             self.prev_norm_attn = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
                 torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
-            print("prev_norm_attn")
         if "prev_attn" in self.freq_type:
             self.prev_attn = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
                 torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
-            print("prev_attn")
         if "post_attn" in self.freq_type:
             self.post_attn = nn.Parameter(torch.cat([torch.ones((hidden_size, patch, patch // 2 + 1, 1)), \
                 torch.zeros((hidden_size, patch, patch // 2 + 1, 1))], dim=-1))
-            print("post_attn")
         
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
@@ -451,6 +445,20 @@ class FinalLayer(nn.Module):
         # should we put layernorm here for robust
         x = self.linear(x)
         return x
+    
+# @persistence.persistent_class
+class MPFourier(torch.nn.Module):
+    def __init__(self, num_channels=128, bandwidth=1):
+        super().__init__()
+        self.register_buffer('freqs', 2 * np.pi * torch.randn(num_channels) * bandwidth)
+        self.register_buffer('phases', 2 * np.pi * torch.rand(num_channels))
+
+    def forward(self, x):
+        y = x.to(torch.float32)
+        y = y.ger(self.freqs.to(torch.float32))
+        y = y + self.phases.to(torch.float32)
+        y = y.cos() * np.sqrt(2)
+        return y.to(x.dtype)
 
 class DiT(nn.Module):
     """
@@ -483,6 +491,7 @@ class DiT(nn.Module):
         cond_mapping = False,
         freq_type="prev_mlp",
         cond_mixing = False,
+        uw = False,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -497,6 +506,13 @@ class DiT(nn.Module):
         self.cond_mapping = cond_mapping
         self.freq_type = freq_type
         self.cond_mixing = cond_mixing
+        self.uw = uw   
+        
+        if self.uw:
+            self.uw_mlp = nn.Sequential(
+                MPFourier(),
+                nn.Linear(128, 1),
+            )
         
         if self.cond_mixing:
             self.cond_mixing_mlp = nn.Sequential(
@@ -512,17 +528,6 @@ class DiT(nn.Module):
             # self.cond_mapper = GaussianFourierFeatureTransform(input_size=hidden_size, half_hidden_size=hidden_size//2)
             self.cond_mapper = nn.Sequential(GaussianFourierFeatureTransformv2(), 
                                              L2Norm(dim=-1))
-            
-            # self.cond_mapper = nn.Sequential(
-            #     nn.Linear(hidden_size, hidden_size),
-            #     nn.ReLU(),
-            #     nn.Linear(hidden_size, hidden_size),
-            #     nn.ReLU(),
-            #     nn.Linear(hidden_size, hidden_size),    
-            #     nn.ReLU(),
-            #     nn.Linear(hidden_size, hidden_size),        
-            #     nn.ReLU(),
-            # )
         
         # use rotary position encoding, borrow from EVA
         if self.use_rope:
@@ -650,6 +655,7 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
+        t_ = t.clone()
         if y is None:
             y = torch.ones(x.size(0), dtype=torch.long, device=x.device) * (self.y_embedder.get_in_channels() - 1)
         x = self.x_embedder(x)                   # (N, T, D)
@@ -688,7 +694,10 @@ class DiT(nn.Module):
         
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
-        return x, projected_feat
+        if self.uw:
+            uw = self.uw_mlp(t_)
+            return x, projected_feat, uw
+        return x, projected_feat, None
 
     def forward_with_cfg(self, x, t, cfg_scale=1.0, y=None):
         """
@@ -697,7 +706,7 @@ class DiT(nn.Module):
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
-        model_out, _ = self.forward(combined, t, y)
+        model_out, _, _ = self.forward(combined, t, y)
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
         # This can be done by uncommenting the following line and commenting-out the line following that.
@@ -706,7 +715,7 @@ class DiT(nn.Module):
         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
-        return torch.cat([eps, rest], dim=1), _
+        return torch.cat([eps, rest], dim=1), _, _
 
 
 #################################################################################

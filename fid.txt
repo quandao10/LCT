@@ -677,3 +677,206 @@ Epoch = 0000625, FID = 45.57477327172194, cfg_scale = 1.5
 Epoch = 0000650, FID = 45.8656164307497, cfg_scale = 1.5
 Epoch = 0000675, FID = 45.537631053359064, cfg_scale = 1.5
 Epoch = 0000700, FID = 44.5723927118587, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.75
+Epoch = 0000600, FID = 49.65764444973581, cfg_scale = 1.5
+Epoch = 0000625, FID = 47.248338263201674, cfg_scale = 1.5
+Epoch = 0000650, FID = 47.79626077724572, cfg_scale = 1.5
+Epoch = 0000675, FID = 47.311552250882755, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.25
+Epoch = 0000600, FID = 59.04676088010012, cfg_scale = 1.5
+Epoch = 0000625, FID = 55.203467027950865, cfg_scale = 1.5
+Epoch = 0000650, FID = 53.44083285625345, cfg_scale = 1.5
+Epoch = 0000675, FID = 52.04246846551996, cfg_scale = 1.5
+Epoch = 0000700, FID = 50.734201548531985, cfg_scale = 1.5
+Epoch = 0000725, FID = 50.56957337638238, cfg_scale = 1.5
+Epoch = 0000750, FID = 49.9826974845372, cfg_scale = 1.5
+Epoch = 0000775, FID = 48.490772718591245, cfg_scale = 1.5
+Epoch = 0000800, FID = 47.948222424559674, cfg_scale = 1.5
+
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2_gp
+Epoch = 0000600, FID = 51.69369054289996, cfg_scale = 1.5
+Epoch = 0000625, FID = 49.729154510720605, cfg_scale = 1.5
+Epoch = 0000650, FID = 48.96532805345743, cfg_scale = 1.5
+Epoch = 0000675, FID = 49.24127824817174, cfg_scale = 1.5
+Epoch = 0000700, FID = 49.40083927472108, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5_data1.0
+Epoch = 0000600, FID = 51.59412041444915, cfg_scale = 1.5
+Epoch = 0000625, FID = 49.649756058674654, cfg_scale = 1.5
+Epoch = 0000650, FID = 50.01368631747937, cfg_scale = 1.5
+Epoch = 0000675, FID = 50.654285462459484, cfg_scale = 1.5
+Epoch = 0000700, FID = 50.364690855167964, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5_data0.75
+Epoch = 0000600, FID = 48.55183096208725, cfg_scale = 1.5
+Epoch = 0000625, FID = 47.17212710052371, cfg_scale = 1.5
+Epoch = 0000650, FID = 46.243388135866894, cfg_scale = 1.5
+Epoch = 0000675, FID = 46.0256207472363, cfg_scale = 1.5
+Epoch = 0000700, FID = 45.87842098770824, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5_data1.5
+Epoch = 0000600, FID = 65.90314980473477, cfg_scale = 1.5
+Epoch = 0000625, FID = 63.76709911884109, cfg_scale = 1.5
+Epoch = 0000650, FID = 63.520749136825486, cfg_scale = 1.5
+Epoch = 0000675, FID = 63.58956866447954, cfg_scale = 1.5
+Epoch = 0000700, FID = 62.18392954985762, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.6
+Epoch = 0000600, FID = 47.53296536020224, cfg_scale = 1.5
+Epoch = 0000625, FID = 45.43350048592799, cfg_scale = 1.5
+Epoch = 0000650, FID = 45.698882215438516, cfg_scale = 1.5
+Epoch = 0000675, FID = 45.60421743551956, cfg_scale = 1.5
+Epoch = 0000700, FID = 44.91429496982806, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5_worepa
+Epoch = 0000700, FID = 49.27055607191312, cfg_scale = 1.5
+Epoch = 0000725, FID = 50.0931691900613, cfg_scale = 1.5
+Epoch = 0000750, FID = 49.83189863664148, cfg_scale = 1.5
+Epoch = 0000775, FID = 49.503071879934964, cfg_scale = 1.5
+Epoch = 0000800, FID = 49.659329984022634, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5
+Epoch = 0000700, FID = 44.57610410635914, cfg_scale = 1.5
+Epoch = 0000725, FID = 44.021795156982535, cfg_scale = 1.5
+Epoch = 0000750, FID = 42.48531217958174, cfg_scale = 1.5
+Epoch = 0000775, FID = 42.773822798184995, cfg_scale = 1.5
+Epoch = 0000800, FID = 41.79714585524653, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5_record_loss
+Epoch = 0000700, FID = 44.64388169008879, cfg_scale = 1.5
+Epoch = 0000725, FID = 45.13409953044902, cfg_scale = 1.5
+Epoch = 0000750, FID = 44.60100521122047, cfg_scale = 1.5
+Epoch = 0000775, FID = 44.717402010031606, cfg_scale = 1.5
+Epoch = 0000800, FID = 43.94771487783743, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.4_record_loss
+Epoch = 0000600, FID = 52.573001069315694, cfg_scale = 1.5
+Epoch = 0000625, FID = 50.22836323626245, cfg_scale = 1.5
+Epoch = 0000650, FID = 49.37950999815462, cfg_scale = 1.5
+Epoch = 0000675, FID = 47.63460489384147, cfg_scale = 1.5
+Epoch = 0000700, FID = 47.324458041190155, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5_uniformw
+Epoch = 0000600, FID = 111.39069929055768, cfg_scale = 1.5
+Epoch = 0000625, FID = 110.57238852466628, cfg_scale = 1.5
+Epoch = 0000650, FID = 111.27966538261762, cfg_scale = 1.5
+Epoch = 0000675, FID = 110.90343617100308, cfg_scale = 1.5
+Epoch = 0000700, FID = 110.81711777347289, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5_diff_0.81
+Epoch = 0000600, FID = 71.09739767190388, cfg_scale = 1.5
+Epoch = 0000625, FID = 68.68904474395788, cfg_scale = 1.5
+Epoch = 0000650, FID = 68.90212592924217, cfg_scale = 1.5
+Epoch = 0000675, FID = 68.3946682146053, cfg_scale = 1.5
+Epoch = 0000700, FID = 68.02827316463214, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70
+Epoch = 0000600, FID = 45.17445409823591, cfg_scale = 1.5
+Epoch = 0000625, FID = 42.75826007301532, cfg_scale = 1.5
+Epoch = 0000650, FID = 42.056098251189155, cfg_scale = 1.5
+Epoch = 0000675, FID = 41.96231428137082, cfg_scale = 1.5
+Epoch = 0000700, FID = 42.0201522233383, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.60
+Epoch = 0000600, FID = 48.01684427023065, cfg_scale = 1.5
+Epoch = 0000625, FID = 45.510294937578806, cfg_scale = 1.5
+Epoch = 0000650, FID = 44.731790342199645, cfg_scale = 1.5
+Epoch = 0000675, FID = 44.828620868369626, cfg_scale = 1.5
+Epoch = 0000700, FID = 45.03746607567882, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_min-snr_10
+Epoch = 0000600, FID = 46.791275168314996, cfg_scale = 1.5
+Epoch = 0000625, FID = 44.0691671394606, cfg_scale = 1.5
+Epoch = 0000650, FID = 45.290061281150315, cfg_scale = 1.5
+Epoch = 0000675, FID = 44.95962066089419, cfg_scale = 1.5
+Epoch = 0000700, FID = 44.815424252111825, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_min-snr_20
+Epoch = 0000600, FID = 45.411490093116015, cfg_scale = 1.5
+Epoch = 0000625, FID = 42.906822064241965, cfg_scale = 1.5
+Epoch = 0000650, FID = 43.210656212069125, cfg_scale = 1.5
+Epoch = 0000675, FID = 43.71288125422154, cfg_scale = 1.5
+Epoch = 0000700, FID = 43.46352196121268, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_min-snr_5
+Epoch = 0000600, FID = 52.004257796052684, cfg_scale = 1.5
+Epoch = 0000625, FID = 49.08560621613378, cfg_scale = 1.5
+Epoch = 0000650, FID = 49.884664423604136, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.72
+Epoch = 0000600, FID = 46.41157906833382, cfg_scale = 1.5
+Epoch = 0000625, FID = 44.23339576284707, cfg_scale = 1.5
+Epoch = 0000650, FID = 42.59984379657658, cfg_scale = 1.5
+Epoch = 0000675, FID = 43.35337434453686, cfg_scale = 1.5
+Epoch = 0000700, FID = 43.548943349051285, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.72_min-snr_40
+Epoch = 0000600, FID = 49.36676570708141, cfg_scale = 1.5
+Epoch = 0000625, FID = 48.3733578282297, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.72_min-snr_30
+Epoch = 0000600, FID = 47.129964897777086, cfg_scale = 1.5
+Epoch = 0000625, FID = 49.1326256714305, cfg_scale = 1.5
+Epoch = 0000650, FID = 63.1079058917972, cfg_scale = 1.5
+Epoch = 0000675, FID = 181.07985185207406, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.72_softmin-snr_20
+Epoch = 0000600, FID = 49.60945409682239, cfg_scale = 1.5
+Epoch = 0000625, FID = 49.92607599935343, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.65_min-snr_20
+Epoch = 0000600, FID = 45.996952539146946, cfg_scale = 1.5
+Epoch = 0000625, FID = 44.54392164682895, cfg_scale = 1.5
+Epoch = 0000650, FID = 43.94309951028197, cfg_scale = 1.5
+Epoch = 0000675, FID = 43.95065641119493, cfg_scale = 1.5
+Epoch = 0000700, FID = 43.60219034724065, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_log-snr
+Epoch = 0000600, FID = 61.28311538234834, cfg_scale = 1.5
+Epoch = 0000625, FID = 59.535871352985055, cfg_scale = 1.5
+Epoch = 0000650, FID = 60.033929333385345, cfg_scale = 1.5
+Epoch = 0000675, FID = 58.578381965324525, cfg_scale = 1.5
+Epoch = 0000700, FID = 58.510868341821435, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_exp-decay_0.93,0.925_40
+Epoch = 0000600, FID = 86.07882487843563, cfg_scale = 1.5
+Epoch = 0000625, FID = 82.89644593130811, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_exp-decay_0.80,0.925_60
+Epoch = 0000600, FID = 84.32392530792356, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_exp-decay_1.0,0.925
+Epoch = 0000600, FID = 83.21306312600393, cfg_scale = 1.5
+Epoch = 0000625, FID = 81.85074007135165, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_exp-decay_0.93,0.925_40
+Epoch = 0000600, FID = 74.49454970337746, cfg_scale = 1.5
+Epoch = 0000625, FID = 72.16011463046055, cfg_scale = 1.5
+Epoch = 0000650, FID = 73.74201375380244, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_exp-decay_0.93,0.925_60
+Epoch = 0000600, FID = 68.38621811273254, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_karras
+Epoch = 0000600, FID = 69.29818430728449, cfg_scale = 1.5
+Epoch = 0000625, FID = 68.67830702700957, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_exp-decay_0.93,0.925_100
+Epoch = 0000600, FID = 64.36828265677701, cfg_scale = 1.5
+Epoch = 0000625, FID = 63.8925048132744, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_rho8
+Epoch = 0000600, FID = 44.79960077687025, cfg_scale = 1.5
+Epoch = 0000625, FID = 43.515537777316524, cfg_scale = 1.5
+Epoch = 0000650, FID = 43.35137080502176, cfg_scale = 1.5
+Epoch = 0000675, FID = 44.634108430620586, cfg_scale = 1.5
+Epoch = 0000700, FID = 44.29479241985183, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_rho7_karrasnorm
+Epoch = 0000625, FID = 43.56866076235701, cfg_scale = 1.5
+Epoch = 0000650, FID = 44.8274754626529, cfg_scale = 1.5
+Epoch = 0000675, FID = 44.671018400259356, cfg_scale = 1.5
+Epoch = 0000700, FID = 44.35261157240609, cfg_scale = 1.5

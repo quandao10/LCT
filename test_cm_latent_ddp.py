@@ -94,6 +94,11 @@ def main(args):
         data = np.load(args.normalize_matrix, allow_pickle=True).item()
         mean = data["mean"].to(device)
         std = data["std"].to(device)
+        
+    if "imagenet" in args.dataset and args.use_karras_normalization:
+        print("using karras normalization for imagenet")
+        mean = torch.tensor([5.81, 3.25, 0.12, -2.15]).view(1, -1, 1, 1).to(device)
+        std =  torch.tensor([4.17, 4.62, 3.71, 3.28]).view(1, -1, 1, 1).to(device)
 
     def run_sampling(num_samples, generator):
         noise = generator.randn(num_samples, 4, args.image_size, args.image_size).to(device)*args.sigma_max if args.fwd == "ve" else \
@@ -138,7 +143,7 @@ def main(args):
         if args.cfg_scale > 1.0:
             fake_sample, _ = fake_sample.chunk(2, dim=0)  # Remove null class samples        
         if use_normalize:
-            fake_image = [vae.decode(x.unsqueeze(0)*std/0.5 + mean).sample for x in fake_sample] # careful here
+            fake_image = [vae.decode(x.unsqueeze(0)*std/args.sigma_data + mean).sample for x in fake_sample] # careful here
         else:
             fake_image = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in fake_sample]
         fake_image = [torch.clamp(x, -1, 1) for x in fake_image]
@@ -203,6 +208,7 @@ if __name__ == "__main__":
     parser.add_argument("--ema", action="store_true", default=False)
     parser.add_argument("--test-interval", action="store_true", default=False)
     parser.add_argument("--batch-size", type=int, default=64, help="sample generating batch size")
+    parser.add_argument("--use-karras-normalization", action="store_true", default=False)
     
     ###### model ######
     parser.add_argument("--vae", type=str, choices=["vae", "eq_vae"], default="vae")  # Choice doesn't affect training
@@ -230,6 +236,7 @@ if __name__ == "__main__":
     parser.add_argument("--cond-mapping", action="store_true", default=False)
     parser.add_argument("--freq-type", type=str, default="none")
     parser.add_argument("--cond-mixing", action="store_true", default=False)
+    parser.add_argument("--uw", action="store_true", default=False)
     
     ###### sampling ######
     parser.add_argument("--cfg-scale", type=float, default=1.)
@@ -254,6 +261,7 @@ if __name__ == "__main__":
     parser.add_argument("--fwd", type=str, default="ve", choices=["vp", "ve", "flow", "cosin"])
     parser.add_argument("--p-mean", type=float, default=-0.4)
     parser.add_argument("--p-std", type=float, default=2.0)
+    parser.add_argument("--rho", type=float, default=7)
     
     
     ###### dataset ######

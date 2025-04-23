@@ -1,12 +1,11 @@
-CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10204 --nproc_per_node=2 train_cm_latent_repa.py \
-        --exp DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.75 \
+CUDA_VISIBLE_DEVICES=2,3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10202 --nproc_per_node=2 train_cm_latent_repa.py \
+        --exp DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_rho7_ict_trunc \
         --datadir /common/users/qd66/repa/latent_imagenet256  \
         --dataset subset_imagenet_256 \
-        --results-dir /research/cbim/medical/qd66/lct_v2/ \
+        --results-dir /research/cbim/medical/qd66/lct_v2_new/ \
         --image-size 32 \
         --num-in-channels 4 \
         --num-classes 25 \
-        --weight-schedule ict \
         --loss-norm cauchy \
         --target-ema-mode adaptive \
         --start-ema 0.95 \
@@ -48,14 +47,22 @@ CUDA_VISIBLE_DEVICES=4,5 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10204 --npr
         --c-type edm \
         --opt radam \
         --use-rope \
-        --use-repa \
         --cond-mixing \
-        --p-mean -0.4 \
-        --p-std 1.75 \
-        --gradient-penalty-iters -1 \
-        --gradient-penalty-lamb 10.0 \
-        --compile \
-        # --ot-hard \
+        --p-mean -0.8 \
+        --p-std 1.5 \
+        --sigma-data 0.5 \
+        --use-repa \
+        --diff-rate 0.70 \
+        --tau 20 \
+        --weight-schedule ict \
+        --a 0.9 \
+        --b 0.9 \
+        --rho 7 \
+        --record-loss \
+        # --compile \
+        # --use-karras-normalization \
+        # --record-loss \
+        
         
 
 
