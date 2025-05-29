@@ -12,3 +12,4 @@ dataset/
 logs/
 notebook/
 *.json
+*pt

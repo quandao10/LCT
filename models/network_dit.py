@@ -144,6 +144,9 @@ class GLUFFN(nn.Module):
         self.act_layer = act_layer()
         self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
         self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
+        # apply init
+        # nn.init.kaiming_normal_(self.w12.weight)
+        # nn.init.kaiming_normal_(self.w3.weight)
 
     def forward(self, x):
         x12 = self.w12(x)
@@ -655,6 +658,9 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
+        
+        # print(x.shape, t.shape, y)
+        
         t_ = t.clone()
         if y is None:
             y = torch.ones(x.size(0), dtype=torch.long, device=x.device) * (self.y_embedder.get_in_channels() - 1)
@@ -678,7 +684,7 @@ class DiT(nn.Module):
                 c = t * alpha + y
             else:
                 c = t + y                               # (N, D)
-        
+        # print(c.shape)
         projected_feat = None
         for idx, block in enumerate(self.blocks):
             x = block(x, c, feat_rope=self.feat_rope)

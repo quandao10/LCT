@@ -34,7 +34,7 @@ def largest_weight_per_curriculum(args, num_scales):
     sigmas = sigmas**args.rho
     weights = 1/(sigmas[:-1] - sigmas[1:])
     max_weight = th.max(weights)
-    print(f"max weight: {max_weight}")
+    # print(f"max weight: {max_weight}")
     return max_weight
     
 
@@ -46,7 +46,7 @@ def get_weightings(args, weight_schedule, snrs, sigma_data, next_t=-1e-4, t=0, n
     elif weight_schedule == "log-snr":
         weightings = th.log(snrs+1) + 1
     elif weight_schedule == "min-snr":
-        weightings = th.min(snrs, th.tensor(args.tau))+ 1
+        weightings = th.min(snrs, th.tensor(args.tau)) + 1
     elif weight_schedule == "softmin-snr":
         weightings = 1/(snrs**-1 + args.tau**-1) + 1
     elif weight_schedule == "karras":
@@ -54,10 +54,24 @@ def get_weightings(args, weight_schedule, snrs, sigma_data, next_t=-1e-4, t=0, n
     elif weight_schedule == "uniform":
         weightings = th.ones_like(snrs)
     ### ICT weighting
+    elif weight_schedule == "f_weighting":
+        lamb = th.log(snrs)
+        weightings = F.sigmoid(2-lamb)
+    elif weight_schedule == "eps_weighting":
+        lamb = th.log(snrs)
+        weightings = F.sigmoid(2-lamb) * 1/t
+    elif weight_schedule == "eps_weighting_new":
+        lamb = th.log(snrs)
+        weightings = F.sigmoid(2-lamb) * 1/t * th.exp(lamb)
+    elif weight_schedule == "eps_correct":
+        lamb = th.log(snrs)
+        weightings = F.sigmoid(2-lamb) * th.exp(lamb)
     elif weight_schedule == "ict":
-        max_weight = largest_weight_per_curriculum(args, num_scales)
-        scale_rate = 1 if max_weight < 1000 else 1000/max_weight
-        weightings = 1/(t-next_t) * scale_rate
+        # max_weight = largest_weight_per_curriculum(args, num_scales)
+        # scale_rate = 1 if max_weight < 1000 else 1000/max_weight
+        weightings = 1/(t-next_t) #* scale_rate + 1
+    elif weight_schedule == "ict_scale":
+        weightings = 1/(t-next_t)**args.tau
     elif weight_schedule == "exp-decay":
         weightings = exp_decay_weight(args, t, num_scales)
     else:
@@ -729,6 +743,7 @@ def karras_sample(
     s_tmax=float("inf"),
     s_noise=1.0,
     noise=None,
+    shift=0,
     ts=None,):
     if noise is None:
         x_T = generator.randn(*shape, device=device) * sigma_max
@@ -742,6 +757,7 @@ def karras_sample(
         "onestep": sample_onestep,
         "euler": sample_euler,
         "multistep": stochastic_iterative_sampler,
+        "onestep_shift": sample_onestep_shift,
     }[sampler]
 
     if sampler in ["heun", "dpm"]:
@@ -751,6 +767,10 @@ def karras_sample(
     elif sampler == "multistep":
         sampler_args = dict(
             ts=ts, t_min=sigma_min, t_max=sigma_max, rho=diffusion.rho, steps=steps, generator=generator,
+        )
+    elif sampler == "onestep_shift":
+        sampler_args = dict(
+            shift=shift,
         )
     else:
         sampler_args = {}
@@ -1013,6 +1033,21 @@ def sample_onestep(
     s_in = x.new_ones([x.shape[0]])
     return distiller(x, sigmas[0] * s_in)
 
+@th.no_grad()
+def sample_onestep_shift(
+    distiller,
+    x,
+    sigmas,
+    generator,
+    progress=False,
+    callback=None,
+    shift=0,
+):
+    """Single-step generation from a distilled model."""
+    s_in = x.new_ones([x.shape[0]])
+    x = x/sigmas[0]*sigmas[shift]
+    print(sigmas[shift], sigmas[0])
+    return distiller(x, sigmas[shift] * s_in)
 
 @th.no_grad()
 def stochastic_iterative_sampler(

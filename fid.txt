@@ -638,20 +638,9 @@ Epoch = 0000650, FID = 49.10351338005978, cfg_scale = 1.5
 Epoch = 0000675, FID = 48.88346672731842, cfg_scale = 1.5
 Epoch = 0000700, FID = 48.44268940515127, cfg_scale = 1.5
 
-DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karrasmeanstd (-0.4, 1)
-Epoch = 0000600, FID = 108.19025349617942, cfg_scale = 1.5
-
-DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-1.1,3
-Epoch = 0000575, FID = 58.6764890296252, cfg_scale = 1.5
-Epoch = 0000600, FID = 58.41435571190351, cfg_scale = 1.5
 
 
-DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2
-Epoch = 0000600, FID = 51.35527448939769, cfg_scale = 1.5
-Epoch = 0000625, FID = 48.65772944777501, cfg_scale = 1.5
-Epoch = 0000650, FID = 48.38411994238771, cfg_scale = 1.5
-Epoch = 0000675, FID = 48.335903927807465, cfg_scale = 1.5
-Epoch = 0000700, FID = 47.781108564349665, cfg_scale = 1.5
+
 
 DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2_ict_trunc
 Epoch = 0000600, FID = 52.577355869633834, cfg_scale = 1.5
@@ -668,8 +657,27 @@ Epoch = 0000675, FID = 50.88142063240997, cfg_scale = 1.5
 Epoch = 0000700, FID = 50.6129950606491, cfg_scale = 1.5
 
 
-DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2.5
-Epoch = 0000600, FID = 56.09520575609514, cfg_scale = 1.5
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-1.1,3
+Epoch = 0000575, FID = 58.6764890296252, cfg_scale = 1.5
+Epoch = 0000600, FID = 58.41435571190351, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karrasmeanstd (-0.4, 1)
+Epoch = 0000600, FID = 108.19025349617942, cfg_scale = 1.5
+Epoch = 0000625, FID = 97.63795081346795, cfg_scale = 1.5
+Epoch = 0000650, FID = 89.04679678135795, cfg_scale = 1.5
+Epoch = 0000675, FID = 79.43129747950865, cfg_scale = 1.5
+
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.25
+Epoch = 0000600, FID = 59.04676088010012, cfg_scale = 1.5
+Epoch = 0000625, FID = 55.203467027950865, cfg_scale = 1.5
+Epoch = 0000650, FID = 53.44083285625345, cfg_scale = 1.5
+Epoch = 0000675, FID = 52.04246846551996, cfg_scale = 1.5
+Epoch = 0000700, FID = 50.734201548531985, cfg_scale = 1.5
+Epoch = 0000725, FID = 50.56957337638238, cfg_scale = 1.5
+Epoch = 0000750, FID = 49.9826974845372, cfg_scale = 1.5
+Epoch = 0000775, FID = 48.490772718591245, cfg_scale = 1.5
+Epoch = 0000800, FID = 47.948222424559674, cfg_scale = 1.5
 
 DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5
 Epoch = 0000600, FID = 47.25589851300265, cfg_scale = 1.5
@@ -684,16 +692,22 @@ Epoch = 0000625, FID = 47.248338263201674, cfg_scale = 1.5
 Epoch = 0000650, FID = 47.79626077724572, cfg_scale = 1.5
 Epoch = 0000675, FID = 47.311552250882755, cfg_scale = 1.5
 
-DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.25
-Epoch = 0000600, FID = 59.04676088010012, cfg_scale = 1.5
-Epoch = 0000625, FID = 55.203467027950865, cfg_scale = 1.5
-Epoch = 0000650, FID = 53.44083285625345, cfg_scale = 1.5
-Epoch = 0000675, FID = 52.04246846551996, cfg_scale = 1.5
-Epoch = 0000700, FID = 50.734201548531985, cfg_scale = 1.5
-Epoch = 0000725, FID = 50.56957337638238, cfg_scale = 1.5
-Epoch = 0000750, FID = 49.9826974845372, cfg_scale = 1.5
-Epoch = 0000775, FID = 48.490772718591245, cfg_scale = 1.5
-Epoch = 0000800, FID = 47.948222424559674, cfg_scale = 1.5
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2
+Epoch = 0000600, FID = 51.35527448939769, cfg_scale = 1.5
+Epoch = 0000625, FID = 48.65772944777501, cfg_scale = 1.5
+Epoch = 0000650, FID = 48.38411994238771, cfg_scale = 1.5
+Epoch = 0000675, FID = 48.335903927807465, cfg_scale = 1.5
+Epoch = 0000700, FID = 47.781108564349665, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2.5
+Epoch = 0000600, FID = 56.09520575609514, cfg_scale = 1.5
+
+DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5
+Epoch = 0000700, FID = 44.57610410635914, cfg_scale = 1.5
+Epoch = 0000725, FID = 44.021795156982535, cfg_scale = 1.5
+Epoch = 0000750, FID = 42.48531217958174, cfg_scale = 1.5
+Epoch = 0000775, FID = 42.773822798184995, cfg_scale = 1.5
+Epoch = 0000800, FID = 41.79714585524653, cfg_scale = 1.5
 
 
 DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,2_gp
@@ -737,13 +751,6 @@ Epoch = 0000725, FID = 50.0931691900613, cfg_scale = 1.5
 Epoch = 0000750, FID = 49.83189863664148, cfg_scale = 1.5
 Epoch = 0000775, FID = 49.503071879934964, cfg_scale = 1.5
 Epoch = 0000800, FID = 49.659329984022634, cfg_scale = 1.5
-
-DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5
-Epoch = 0000700, FID = 44.57610410635914, cfg_scale = 1.5
-Epoch = 0000725, FID = 44.021795156982535, cfg_scale = 1.5
-Epoch = 0000750, FID = 42.48531217958174, cfg_scale = 1.5
-Epoch = 0000775, FID = 42.773822798184995, cfg_scale = 1.5
-Epoch = 0000800, FID = 41.79714585524653, cfg_scale = 1.5
 
 DiT B/2 Imagenet25 DiT_ve_repa_register_0_B_premlp_noot_karras-0.4,1.5_record_loss
 Epoch = 0000700, FID = 44.64388169008879, cfg_scale = 1.5
@@ -880,3 +887,272 @@ Epoch = 0000625, FID = 43.56866076235701, cfg_scale = 1.5
 Epoch = 0000650, FID = 44.8274754626529, cfg_scale = 1.5
 Epoch = 0000675, FID = 44.671018400259356, cfg_scale = 1.5
 Epoch = 0000700, FID = 44.35261157240609, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_rho7_ict_trunc
+Epoch = 0000600, FID = 46.29804806201787, cfg_scale = 1.5
+
+DiT_ve_repa_register_0_B_premlp_noot_karras-0.8,1.5_diff_0.70_rho7_ict_trunc_v2
+Epoch = 0000600, FID = 51.780833280130764, cfg_scale = 1.5
+
+B/2
+Epoch = 0000600, FID = 38.5567850306868, cfg_scale = 1.5
+Epoch = 0000625, FID = 37.306876386569286, cfg_scale = 1.5
+Epoch = 0000650, FID = 37.272763142959036, cfg_scale = 1.5
+Epoch = 0000675, FID = 37.20509834395466, cfg_scale = 1.5
+Epoch = 0000700, FID = 36.39812894232972, cfg_scale = 1.5
+
+Epoch = 0000600, FID = 32.293812449395034, cfg_scale = 1.5
+Epoch = 0000625, FID = 31.86773782882807, cfg_scale = 1.5
+Epoch = 0000650, FID = 30.960897284600208, cfg_scale = 1.5
+
+Epoch = 0000600, FID = 27.371193930470895, cfg_scale = 1.25
+Epoch = 0000625, FID = 26.740516790015704, cfg_scale = 1.25
+Epoch = 0000650, FID = 25.60180563742705, cfg_scale = 1.25
+
+
+Epoch = 0000100, FID = 313.2538905349997, cfg_scale = 1.0
+Epoch = 0000125, FID = 269.60321347876055, cfg_scale = 1.0
+Epoch = 0000150, FID = 183.8805302345774, cfg_scale = 1.0
+Epoch = 0000175, FID = 162.80964218691201, cfg_scale = 1.0
+Epoch = 0000200, FID = 159.1664273775118, cfg_scale = 1.0
+Epoch = 0000225, FID = 141.1340153622287, cfg_scale = 1.0
+Epoch = 0000250, FID = 154.4773021385477, cfg_scale = 1.0
+Epoch = 0000275, FID = 152.46870855187785, cfg_scale = 1.0
+Epoch = 0000300, FID = 150.2112373587699, cfg_scale = 1.0
+Epoch = 0000325, FID = 116.9865295720868, cfg_scale = 1.0
+Epoch = 0000350, FID = 125.76019560737546, cfg_scale = 1.0
+Epoch = 0000375, FID = 115.5038751855896, cfg_scale = 1.0
+Epoch = 0000400, FID = 86.48245682960811, cfg_scale = 1.0
+Epoch = 0000425, FID = 48.37908144877258, cfg_scale = 1.0
+Epoch = 0000450, FID = 42.956410699461, cfg_scale = 1.0
+Epoch = 0000475, FID = 36.37790347570876, cfg_scale = 1.0
+Epoch = 0000495, FID = 34.69471146818967, cfg_scale = 1.0
+Epoch = 0000500, FID = 34.68916418871021, cfg_scale = 1.0
+Epoch = 0000525, FID = 29.125661700305443, cfg_scale = 1.0
+Epoch = 0000550, FID = 26.178396654781693, cfg_scale = 1.0
+Epoch = 0000575, FID = 25.864664339003525, cfg_scale = 1.0
+Epoch = 0000585, FID = 26.10327718079452, cfg_scale = 1.0
+Epoch = 0000595, FID = 26.340333880091976, cfg_scale = 1.0
+Epoch = 0000600, FID = 26.53116290575639, cfg_scale = 1.0
+Epoch = 0000625, FID = 25.988735263168735, cfg_scale = 1.0
+Epoch = 0000650, FID = 24.464219056441834, cfg_scale = 1.0
+Epoch = 0000675, FID = 24.635575037232115, cfg_scale = 1.0
+Epoch = 0000700, FID = 24.674284158101557, cfg_scale = 1.0
+
+
+Epoch = 0000600, FID = 49.4343487022598, cfg_scale = 1.0
+Epoch = 0000600, FID = 42.13857892733034, cfg_scale = 1.25
+Epoch = 0000600, FID = 38.55769775202356, cfg_scale = 1.5
+Epoch = 0000600, FID = 37.26185810020456, cfg_scale = 1.75
+
+Epoch = 0000675, FID = 24.538215969448345, cfg_scale = 1.1
+Epoch = 0000675, FID = 24.73579776862664, cfg_scale = 1.15
+Epoch = 0000675, FID = 24.514387917605916, cfg_scale = 1.05
+
+
+
+Epoch = 0000525, FID = 18.89838686793462, cfg_scale = 1.0
+Epoch = 0000530, FID = 18.576989107532086, cfg_scale = 1.0
+Epoch = 0000550, FID = 25.452932653104767, cfg_scale = 1.0
+Epoch = 0000575, FID = 21.398973080429244, cfg_scale = 1.0
+Epoch = 0000585, FID = 21.061017596660633, cfg_scale = 1.0
+Epoch = 0000590, FID = 21.009654787042393, cfg_scale = 1.0
+Epoch = 0000600, FID = 20.484992693864, cfg_scale = 1.0
+Epoch = 0000605, FID = 20.077220497032044, cfg_scale = 1.0
+Epoch = 0000610, FID = 20.411473754724682, cfg_scale = 1.0
+Epoch = 0000625, FID = 19.964834095334993, cfg_scale = 1.0
+Epoch = 0000650, FID = 17.712926959356935, cfg_scale = 1.0
+Epoch = 0000655, FID = 19.024473483412407, cfg_scale = 1.0
+Epoch = 0000645, FID = 18.232481997346554, cfg_scale = 1.0
+Epoch = 0000646, FID = 18.135106557829715, cfg_scale = 1.0
+Epoch = 0000647, FID = 17.985416589142233, cfg_scale = 1.0
+Epoch = 0000648, FID = 17.862107650839505, cfg_scale = 1.0
+Epoch = 0000649, FID = 17.755904114244174, cfg_scale = 1.0
+Epoch = 0000651, FID = 17.785187084024187, cfg_scale = 1.0
+
+snr20 mlp
+Epoch = 0000600, FID = 56.099925756674, cfg_scale = 1.5
+Epoch = 0000625, FID = 54.66795995477759, cfg_scale = 1.5
+Epoch = 0000650, FID = 54.16006339672691, cfg_scale = 1.5
+
+snr18
+Epoch = 0000600, FID = 48.41030995798832, cfg_scale = 1.5
+Epoch = 0000625, FID = 46.8471917195576, cfg_scale = 1.5
+Epoch = 0000650, FID = 46.215073154510264, cfg_scale = 1.5
+
+snr22
+Epoch = 0000600, FID = 46.016702946432076, cfg_scale = 1.5
+Epoch = 0000625, FID = 45.2028216906545, cfg_scale = 1.5
+Epoch = 0000650, FID = 45.42374577409436, cfg_scale = 1.5
+Epoch = 0000675, FID = 44.41158005214112, cfg_scale = 1.5
+Epoch = 0000700, FID = 43.972191378629645, cfg_scale = 1.5
+
+
+Epoch = 0000524, FID = 26.06577645474374, cfg_scale = 1.0
+Epoch = 0000526, FID = 25.687414637250015, cfg_scale = 1.0
+Epoch = 0000528, FID = 25.367453753438667, cfg_scale = 1.0
+Epoch = 0000530, FID = 25.086460866438188, cfg_scale = 1.0
+Epoch = 0000532, FID = 25.20738071905288, cfg_scale = 1.0
+
+
+Epoch = 0000515, FID = 27.33553011017176, cfg_scale = 1.0
+Epoch = 0000520, FID = 26.021995787205128, cfg_scale = 1.0
+Epoch = 0000525, FID = 25.281757227783714, cfg_scale = 1.0
+Epoch = 0000530, FID = 24.776364682830263, cfg_scale = 1.0
+Epoch = 0000550, FID = 24.33595903070534, cfg_scale = 1.0
+
+lower c, ict
+Epoch = 0000515, FID = 27.97981461129183, cfg_scale = 1.0
+Epoch = 0000550, FID = 23.129942662844883, cfg_scale = 1.0
+Epoch = 0000570, FID = 23.90479149292321, cfg_scale = 1.0
+Epoch = 0000575, FID = 26.29919439889295, cfg_scale = 1.0
+Epoch = 0000580, FID = 26.195276389320895, cfg_scale = 1.0
+Epoch = 0000582, FID = 25.575849741621937, cfg_scale = 1.0
+Epoch = 0000584, FID = 24.996432760545645, cfg_scale = 1.0
+Epoch = 0000586, FID = 24.635165819237386, cfg_scale = 1.0
+
+ict resume 525
+Epoch = 0000525, FID = 18.89838686793462, cfg_scale = 1.0
+Epoch = 0000530, FID = 18.631219272292014, cfg_scale = 1.0
+Epoch = 0000535, FID = 19.500525715241793, cfg_scale = 1.0
+
+ict resume 525 lower c lower null class
+Epoch = 0000526, FID = 18.799708685560745, cfg_scale = 1.0
+Epoch = 0000528, FID = 18.64126557258976, cfg_scale = 1.0
+Epoch = 0000530, FID = 18.60658780745638, cfg_scale = 1.0
+Epoch = 0000532, FID = 18.800002907977046, cfg_scale = 1.0
+Epoch = 0000534, FID = 19.307034166376468, cfg_scale = 1.0
+
+ict resume 530 jump
+Epoch = 0000531, FID = 18.809781573702878, cfg_scale = 1.0
+Epoch = 0000533, FID = 19.070008847443376, cfg_scale = 1.0
+Epoch = 0000535, FID = 19.571215257023766, cfg_scale = 1.0
+Epoch = 0000536, FID = 19.89225507429245, cfg_scale = 1.0
+Epoch = 0000540, FID = 21.35363022429101, cfg_scale = 1.0
+Epoch = 0000550, FID = 25.145346228785343, cfg_scale = 1.0
+Epoch = 0000560, FID = 22.281129373387557, cfg_scale = 1.0
+Epoch = 0000563, FID = 21.594609900066814, cfg_scale = 1.0
+Epoch = 0000565, FID = 21.36153397434913, cfg_scale = 1.0
+Epoch = 0000567, FID = 21.21694520609907, cfg_scale = 1.0
+Epoch = 0000570, FID = 20.974615471667505, cfg_scale = 1.0
+Epoch = 0000572, FID = 20.872781496533776, cfg_scale = 1.0
+Epoch = 0000575, FID = 20.6888159338435, cfg_scale = 1.0
+Epoch = 0000577, FID = 20.647418475504423, cfg_scale = 1.0
+Epoch = 0000580, FID = 20.31127104313009, cfg_scale = 1.0
+Epoch = 0000585, FID = 20.010303642646704, cfg_scale = 1.0
+Epoch = 0000590, FID = 19.84449116193457, cfg_scale = 1.0
+Epoch = 0000593, FID = 19.888049243517912, cfg_scale = 1.0
+Epoch = 0000595, FID = 19.843973148442444, cfg_scale = 1.0
+Epoch = 0000599, FID = 19.913299636425563, cfg_scale = 1.0
+Epoch = 0000601, FID = 19.88911554300074, cfg_scale = 1.0
+Epoch = 0000605, FID = 19.82773999357744, cfg_scale = 1.0
+Epoch = 0000610, FID = 20.20881336416926, cfg_scale = 1.0
+Epoch = 0000612, FID = 20.375960562357022, cfg_scale = 1.0
+Epoch = 0000614, FID = 20.420931312956725, cfg_scale = 1.0
+
+ict resume 530 diff 10 p_mean -1.1
+Epoch = 0000532, FID = 18.807097731058434, cfg_scale = 1.0
+Epoch = 0000535, FID = 19.584511874197858, cfg_scale = 1.0
+Epoch = 0000539, FID = 21.031213784839508, cfg_scale = 1.0
+Epoch = 0000540, FID = 21.378959810035212, cfg_scale = 1.0
+
+ict resume 650 clip 600
+
+Epoch = 0000655, FID = 17.969544494900617, cfg_scale = 1.0
+Epoch = 0000660, FID = 18.009803087449313, cfg_scale = 1.0
+Epoch = 0000665, FID = 18.013176848310195, cfg_scale = 1.0
+Epoch = 0000675, FID = 17.771918653756018, cfg_scale = 1.0
+Epoch = 0000680, FID = 17.793234569408696, cfg_scale = 1.0
+Epoch = 0000680, FID = 16.197848984633993, cfg_scale = 1.0
+Epoch = 0000680, FID = 14.519469390254528, cfg_scale = 1.0
+Epoch = 0000685, FID = 17.9002210535499, cfg_scale = 1.0
+Epoch = 0000690, FID = 17.90186910598777, cfg_scale = 1.0
+
+Epoch = 0000655, FID = 18.344507878128184, cfg_scale = 1.0
+Epoch = 0000660, FID = 18.646667021545227, cfg_scale = 1.0
+Epoch = 0000665, FID = 18.608336002519593, cfg_scale = 1.0
+Epoch = 0000670, FID = 19.02639156848386, cfg_scale = 1.0
+Epoch = 0000675, FID = 19.076501453747824, cfg_scale = 1.0
+Epoch = 0000680, FID = 19.312538948496865, cfg_scale = 1.0
+Epoch = 0000685, FID = 19.69986428018143, cfg_scale = 1.0
+Epoch = 0000690, FID = 19.966399311994905, cfg_scale = 1.0
+
+Epoch = 0000530, FID = 18.537393504291458, cfg_scale = 1.0
+Epoch = 0000535, FID = 19.50989218371717, cfg_scale = 1.0
+Epoch = 0000540, FID = 21.192958142398652, cfg_scale = 1.0
+Epoch = 0000550, FID = 25.140978870416745, cfg_scale = 1.0
+
+
+Epoch = 0000250, FID = 18.290377791124143, cfg_scale = 1.0
+Epoch = 0000275, FID = 12.331280443904888, cfg_scale = 1.0
+Epoch = 0000300, FID = 10.839758584483064, cfg_scale = 1.0
+Epoch = 0000325, FID = 9.400691035113226, cfg_scale = 1.0
+Epoch = 0000350, FID = 9.44883353075656, cfg_scale = 1.0
+
+Epoch = 0000325, FID = 7.316341490485286, cfg_scale = 1.0
+Epoch = 0000675, FID = 5.834245468662999, cfg_scale = 1.0
+Epoch = 0000700, FID = 5.799368851861914, cfg_scale = 1.0
+Epoch = 0000700, FID = 6.44077894458178, cfg_scale = 1.0
+
+Epoch = 0000425, FID = 24.393313831371472, cfg_scale = 1.0
+Epoch = 0000450, FID = 23.362224609402915, cfg_scale = 1.0
+Epoch = 0000455, FID = 23.706114188627396, cfg_scale = 1.0
+Epoch = 0000460, FID = 24.031461438370343, cfg_scale = 1.0
+Epoch = 0000468, FID = 25.376196223589545, cfg_scale = 1.0
+Epoch = 0000440, FID = 24.050198865904235, cfg_scale = 1.0
+Epoch = 0000445, FID = 24.039808080584635, cfg_scale = 1.0
+Epoch = 0000448, FID = 24.13142635029891, cfg_scale = 1.0
+Epoch = 0000450, FID = 23.923928887319732, cfg_scale = 1.0
+Epoch = 0000459, FID = 23.652686165474222, cfg_scale = 1.0
+
+Epoch = 0000475, FID = 41.15913726784328, cfg_scale = 1.0
+Epoch = 0000480, FID = 33.05476837557302, cfg_scale = 1.0
+Epoch = 0000485, FID = 28.72380399535797, cfg_scale = 1.0
+Epoch = 0000490, FID = 26.684241581087747, cfg_scale = 1.0
+Epoch = 0000495, FID = 25.359866344132968, cfg_scale = 1.0
+Epoch = 0000500, FID = 24.290322612057935, cfg_scale = 1.0
+Epoch = 0000505, FID = 23.15120296672785, cfg_scale = 1.0
+Epoch = 0000510, FID = 22.225379835421847, cfg_scale = 1.0
+Epoch = 0000515, FID = 21.501797451729317, cfg_scale = 1.0
+Epoch = 0000520, FID = 20.977535271744898, cfg_scale = 1.0
+Epoch = 0000525, FID = 20.540705645455375, cfg_scale = 1.0
+Epoch = 0000530, FID = 20.415124621238988, cfg_scale = 1.0
+Epoch = 0000535, FID = 21.14349013912829, cfg_scale = 1.0
+Epoch = 0000540, FID = 21.27199396091015, cfg_scale = 1.0
+Epoch = 0000545, FID = 21.324578343534142, cfg_scale = 1.0
+Epoch = 0000550, FID = 23.93356488885422, cfg_scale = 1.0
+Epoch = 0000555, FID = 31.27039124493126, cfg_scale = 1.0
+Epoch = 0000560, FID = 28.792692928397912, cfg_scale = 1.0
+Epoch = 0000565, FID = 22.521582980523817, cfg_scale = 1.0
+Epoch = 0000570, FID = 20.55596394017192, cfg_scale = 1.0
+Epoch = 0000575, FID = 19.446638679937166, cfg_scale = 1.0
+Epoch = 0000580, FID = 19.032530328940254, cfg_scale = 1.0
+Epoch = 0000585, FID = 19.270442637447843, cfg_scale = 1.0
+Epoch = 0000590, FID = 19.291335554984585, cfg_scale = 1.0
+Epoch = 0000595, FID = 21.06570105752445, cfg_scale = 1.0
+Epoch = 0000595, FID = 20.590356032588943, cfg_scale = 1.0
+Epoch = 0000595, FID = 20.114758745830727, cfg_scale = 1.0
+
+Epoch = 0000650, FID = 17.325801975565184, cfg_scale = 1.0
+Epoch = 0000650, FID = 17.17125613851249, cfg_scale = 1.0
+Epoch = 0000650, FID = 17.23327403872787, cfg_scale = 1.0
+Epoch = 0000650, FID = 13.95948921705525, cfg_scale = 1.0
+Epoch = 0000650, FID = 13.366768966067582, cfg_scale = 1.2
+Epoch = 0000650, FID = 12.984787911316118, cfg_scale = 1.5
+
+
+
+Epoch = 0000600, FID = 9.591431142919646, cfg_scale = 1.0
+Epoch = 0000625, FID = 7.700493392853076, cfg_scale = 1.0
+Epoch = 0000650, FID = 7.093769062195747, cfg_scale = 1.0
+
+Epoch = 0000600, FID = 13.512407148497147, cfg_scale = 1.0
+Epoch = 0000625, FID = 8.759719021807769, cfg_scale = 1.0
+Epoch = 0000650, FID = 8.130252579540354, cfg_scale = 1.0
+Epoch = 0000675, FID = 12.73113970310311, cfg_scale = 1.0
+Epoch = 0000700, FID = 13.241041720271426, cfg_scale = 1.0
+
+Epoch = 0000550, FID = 22.464514533583383, cfg_scale = 1.0
+Epoch = 0000575, FID = 21.791791483982877, cfg_scale = 1.0
+Epoch = 0000600, FID = 21.295091976846606, cfg_scale = 1.0
+Epoch = 0000625, FID = 20.69484334927313, cfg_scale = 1.0

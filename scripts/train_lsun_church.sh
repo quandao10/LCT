@@ -1,0 +1,56 @@
+CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:10204 --nproc_per_node=4 train_cm_latent_repa.py \
+        --exp 700ep_B_repa_prevmlp_8_512_rope_700ep \
+        --datadir ~/workspace/dataset/repa/latent_lsun_church  \
+        --dataset latent_church256_flip \
+        --results-dir /research/cbim/medical/qd66/lct_v2/ \
+        --image-size 32 \
+        --num-in-channels 4 \
+        --num-classes 0 \
+        --weight-schedule ict \
+        --loss-norm cauchy \
+        --target-ema-mode adaptive \
+        --start-ema 0.95 \
+        --scale-mode progressive \
+        --start-scales 8 \
+        --end-scales 512 \
+        --noise-sampler ict \
+        --global-batch-size $((96*4)) \
+        --epochs $((700*1)) \
+        --lr 1e-4 \
+        --num-sampling 8 \
+        --num-channels 128 \
+        --num-head-channels 64 \
+        --num-res-blocks 4 \
+        --resblock-updown \
+        --ict \
+        --max-grad-norm -1 \
+        --model-type DiT-B/2 \
+        --channel-mult 1,2,3,4 \
+        --attention-resolutions 16,8 \
+        --normalize-matrix statistic/latent_church256_flip_stat.npy \
+        --use-diffloss \
+        --c-by-loss-std \
+        --linear-act relu \
+        --norm-type rms \
+        --projector-dim 2048 \
+        --repa-lamb 0.1 \
+        --repa-enc-info 4:dinov2-vit-b \
+        --repa-relu-margin 0.4 \
+        --repa-timesteps generation \
+        --denoising-task-rate 0.5 \
+        --repa-mapper repa \
+        --mar-mapper-num-res-blocks 0 \
+        --num-register 0 \
+        --freq-type prev_mlp \
+        --ckpt-every 25 \
+        --use-rope \
+        --diff-lamb 5 \
+        --c-type edm \
+        --fwd ve \
+        --p-mean -0.8 \
+        --p-std 1.5 \
+        --sigma-data 0.5 \
+        --diff-rate 0.75 \
+        --opt radam \
+        --compile \
+        # --use-repa \

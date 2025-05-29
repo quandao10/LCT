@@ -1,11 +1,11 @@
 export MASTER_PORT=10132
 
-for epoch in 700
+for epoch in 600 625 650 675 700
 do
         CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nnodes=1 --rdzv_endpoint 0.0.0.0:$MASTER_PORT --nproc_per_node=4 test_cm_latent_ddp.py \
-                --ckpt /research/cbim/medical/qd66/lct_v2/latent_celeb256/700ep_B_repa_prevattn_8_512_rope/checkpoints/0000${epoch}.pt \
+                --ckpt /research/cbim/medical/qd66/lct_v2/latent_church256_flip/700ep_B_repa_prevmlp_8_512_rope_700ep/checkpoints/0000${epoch}.pt \
                 --seed 42 \
-                --dataset latent_celeb256 \
+                --dataset lsun_church \
                 --image-size 32 \
                 --num-in-channels 4 \
                 --num-classes 0 \
@@ -20,8 +20,8 @@ do
                 --attention-resolutions 16,8 \
                 --sampler onestep \
                 --ts 0,256,512 \
-                --normalize-matrix statistic/celeb256_stat.npy \
-                --real-img-dir ../real_samples/celeba_256/ \
+                --normalize-matrix statistic/latent_church256_flip_stat.npy \
+                --real-img-dir ../real_samples/lsun/ \
                 --ema \
                 --linear-act relu \
                 --num-register 0 \
@@ -29,7 +29,7 @@ do
                 --freq-type prev_mlp \
                 --use-rope \
                 --vae vae \
-                # --compute-fid \
-                # --wo-norm \
-                # --no-scale \
+                 --compute-fid \
+
+                
 done

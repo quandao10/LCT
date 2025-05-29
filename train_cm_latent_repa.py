@@ -42,6 +42,7 @@ from models.optimal_transport import OTPlanSampler
 from optimizer.soap import SOAP
 from models.network_nGPT import nDiT_models
 import matplotlib.pyplot as plt
+from tokenizer.vavae import VA_VAE
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
@@ -260,6 +261,15 @@ nfe_to_c = {
     641: 0.004
 }
 
+def decode_image(vae, latent, vae_name):
+    latent = latent.unsqueeze(0)
+    if vae_name == "vae" or vae_name == "eq_vae":
+        return vae.decode(latent).sample
+    elif vae_name == "va_vae":
+        return vae.decode_to_images(latent)
+    else:
+        raise ValueError(f"Invalid vae name: {vae_name}")
+
 def construct_constant_c(scales=[11, 21, 41, 81, 161, 321, 641], intial_c=0.0345):
     scale_dict = {}
     for scale in scales:
@@ -310,7 +320,10 @@ def main(args):
         vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     elif args.vae == "eq_vae":
         vae = AutoencoderKL.from_pretrained(f"zelaki/eq-vae").to(device)
-    
+    elif args.vae == "va_vae":
+        vae = VA_VAE(
+            f'tokenizer/configs/vavae_f16d32.yaml',
+        )
     # create diffusion and model
     model, diffusion = create_model_and_diffusion(args)
     logger.info(f"p_mean: {args.p_mean}, p_std: {args.p_std}")
@@ -345,7 +358,8 @@ def main(args):
         epoch = init_epoch = checkpoint["epoch"]
         model.module.load_state_dict(checkpoint["model"])
         ema.load_state_dict(checkpoint["ema"])
-        opt.load_state_dict(checkpoint["opt"])
+        if not args.skip_opt:
+            opt.load_state_dict(checkpoint["opt"])
         target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
         logger.info("=> loaded checkpoint (epoch {})".format(epoch))
@@ -356,7 +370,8 @@ def main(args):
         init_epoch = checkpoint["epoch"]
         epoch = init_epoch
         model.module.load_state_dict(checkpoint["model"])
-        opt.load_state_dict(checkpoint["opt"])
+        if not args.skip_opt:
+            opt.load_state_dict(checkpoint["opt"])
         ema.load_state_dict(checkpoint["ema"])
         target_model.load_state_dict(checkpoint["target"])
         train_steps = checkpoint["train_steps"]
@@ -423,7 +438,12 @@ def main(args):
     use_label = True if "imagenet" in args.dataset else False
     use_normalize = args.normalize_matrix is not None
     if use_normalize:
-        data = np.load(args.normalize_matrix, allow_pickle=True).item()
+        if args.normalize_matrix.endswith(".npy"):
+            data = np.load(args.normalize_matrix, allow_pickle=True).item()
+        elif args.normalize_matrix.endswith(".pt"):
+            data = torch.load(args.normalize_matrix)
+        else:
+            raise ValueError(f"Invalid normalize matrix file: {args.normalize_matrix}")
         try:
             mean = data["mean"].to(device)
             std = data["std"].to(device)
@@ -438,7 +458,7 @@ def main(args):
         std =  torch.tensor([4.17, 4.62, 3.71, 3.28]).view(1, -1, 1, 1).to(device)
         
     if rank == 0:
-        noise = torch.randn(args.num_sampling, 4, args.image_size, args.image_size).to(device)
+        noise = torch.randn(args.num_sampling, args.num_in_channels, args.image_size, args.image_size).to(device)
         noise = noise*args.sigma_max if args.fwd == "ve" else noise*args.sigma_data
         if args.num_classes < 1000:
             y_infer = torch.arange(args.num_sampling, device=device)
@@ -465,21 +485,17 @@ def main(args):
                 ssl_feat_truth = None
             x = x.to(device)
             if use_normalize:
-                if not use_label:
-                    x = x/0.18215
                 x = (x - mean)/std * args.sigma_data
             y = None if not use_label else y.to(device)
             n = torch.randn_like(x)
             if args.ot_hard:
                 x, n, y, _ = ot_sampler.sample_plan_with_labels(x0=x, x1=n, y0=y, y1=None, replace=False)
                 
-            if not args.stage2:
-                ema_rate, num_scales = ema_scale_fn(train_steps)
-            else:
-                ema_rate, num_scales = 0, args.end_scales+1
+            ema_rate, num_scales = ema_scale_fn(train_steps)
             diffusion.c = constant_c[num_scales]
+            
             model_kwargs = dict(y=y)            
-            with torch.autocast(device_type="cuda", dtype=torch.float16):
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 losses = diffusion.consistency_losses(model,
                                                     x,
                                                     num_scales,
@@ -510,12 +526,12 @@ def main(args):
             else:
                 repa_loss = torch.tensor(0)  
             
-            opt.zero_grad()
+            opt.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
-            # for param in model.parameters():
-            #     if param.grad is not None:
-            #         torch.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad) # this is interesting
+            for param in model.parameters():
+                if param.grad is not None:
+                    torch.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad) # this is interesting
             if args.max_grad_norm > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             scaler.step(opt)
@@ -525,10 +541,7 @@ def main(args):
             running_diff_loss += diff_loss.item()
             running_repa_loss += repa_loss.item()
             update_ema(ema, model.module)
-            if args.ict:
-                update_ema(target_model, model.module, 0)
-            else:
-                update_ema(target_model, model.module, ema_rate)
+            update_ema(target_model, model.module, 0)
 
             # Log loss values:
             log_steps += 1
@@ -556,7 +569,93 @@ def main(args):
                 running_repa_loss = 0
                 log_steps = 0
                 start_time = time()
+            # dist.barrier()
 
+        if rank == 0 and epoch % args.plot_every == 0:
+            logger.info(f"Plotting losses for epoch {epoch}...")
+            if args.record_loss:
+                record_loss.plot_loss_line(epoch)
+            logger.info("Generating EMA samples...")
+            generator = get_generator("dummy", 4, seed)
+            if args.sampler == "multistep":
+                assert len(args.ts) > 0
+                ts = tuple(int(x) for x in args.ts.split(","))
+            else:
+                ts = None
+            with torch.no_grad():
+                if use_label:
+                    model_kwargs["y"] = y_infer
+                if args.fwd == "ve":
+                    sample = karras_sample(diffusion,
+                                        generator,
+                                        model,
+                                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                                        steps=args.steps,
+                                        model_kwargs=model_kwargs,
+                                        device=device,
+                                        sampler=args.sampler,
+                                        sigma_min=args.sigma_min,
+                                        sigma_max=args.sigma_max,
+                                        s_churn=args.s_churn,
+                                        s_tmin=args.s_tmin,
+                                        s_tmax=args.s_tmax,
+                                        s_noise=args.s_noise,
+                                        noise=noise,
+                                        ts=ts)
+                elif args.fwd == "flow":
+                    sample = flow_sample(diffusion,
+                                        generator,
+                                        model,
+                                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                                        steps=args.steps,
+                                        model_kwargs=model_kwargs,
+                                        device=device,
+                                        sampler=args.sampler,
+                                        noise=noise,
+                                        ts=ts,)
+                sample = sample*std/args.sigma_data + mean
+                sample = [decode_image(vae, x, args.vae) for x in sample]
+                sample = torch.concat(sample, dim=0)
+                
+                # decode ema sample
+                
+                if args.fwd == "ve":
+                    ema_sample = karras_sample(
+                                        diffusion,
+                                        generator,
+                                        ema,
+                                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                                        steps=args.steps,
+                                        model_kwargs=model_kwargs,
+                                        device=device,
+                                        sampler=args.sampler,
+                                        sigma_min=args.sigma_min,
+                                        sigma_max=args.sigma_max,
+                                        s_churn=args.s_churn,
+                                        s_tmin=args.s_tmin,
+                                        s_tmax=args.s_tmax,
+                                        s_noise=args.s_noise,
+                                        noise=noise,
+                                        ts=ts,)
+                elif args.fwd == "flow":
+                    ema_sample = flow_sample(diffusion,
+                                        generator,
+                                        ema,
+                                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
+                                        steps=args.steps,
+                                        model_kwargs=model_kwargs,
+                                        device=device,
+                                        sampler=args.sampler,
+                                        noise=noise,
+                                        ts=ts,)
+                ema_sample = ema_sample*std/args.sigma_data + mean
+                ema_sample = [decode_image(vae, x, args.vae) for x in ema_sample]
+                ema_sample = torch.concat(ema_sample, dim=0)
+                # save sample
+                sample_to_save = torch.concat([sample, ema_sample], dim=0)
+                save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
+                del sample, ema_sample, sample_to_save
+                
         if rank == 0:
             # latest checkpoint
             if epoch % args.save_content_every == 0:
@@ -586,93 +685,6 @@ def main(args):
                 checkpoint_path = f"{checkpoint_dir}/{epoch:07d}.pt"
                 torch.save(checkpoint, checkpoint_path)
                 logger.info(f"Saved checkpoint to {checkpoint_path}")
-            # dist.barrier()
-
-        if rank == 0 and epoch % args.plot_every == 0:
-            logger.info(f"Plotting losses for epoch {epoch}...")
-            if args.record_loss:
-                record_loss.plot_loss_line(epoch)
-            logger.info("Generating EMA samples...")
-            generator = get_generator("dummy", 4, seed)
-            if args.sampler == "multistep":
-                assert len(args.ts) > 0
-                ts = tuple(int(x) for x in args.ts.split(","))
-            else:
-                ts = None
-            with torch.no_grad():
-                if use_label:
-                    model_kwargs["y"] = y_infer
-                if args.fwd == "ve":
-                    sample = karras_sample(diffusion,
-                                           generator,
-                                           model,
-                                           (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                                           steps=args.steps,
-                                           model_kwargs=model_kwargs,
-                                           device=device,
-                                           sampler=args.sampler,
-                                           sigma_min=args.sigma_min,
-                                           sigma_max=args.sigma_max,
-                                           s_churn=args.s_churn,
-                                           s_tmin=args.s_tmin,
-                                           s_tmax=args.s_tmax,
-                                           s_noise=args.s_noise,
-                                           noise=noise,
-                                           ts=ts)
-                elif args.fwd == "flow":
-                    sample = flow_sample(diffusion,
-                                         generator,
-                                         model,
-                                         (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                                         steps=args.steps,
-                                         model_kwargs=model_kwargs,
-                                         device=device,
-                                         sampler=args.sampler,
-                                         noise=noise,
-                                         ts=ts,)
-                if use_normalize:
-                    sample = [vae.decode(x.unsqueeze(0)*std/args.sigma_data + mean).sample for x in sample]
-                else:
-                    sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in sample]
-            sample = torch.concat(sample, dim=0)
-            with torch.no_grad():
-                if args.fwd == "ve":
-                    ema_sample = karras_sample(
-                                        diffusion,
-                                        generator,
-                                        ema,
-                                        (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                                        steps=args.steps,
-                                        model_kwargs=model_kwargs,
-                                        device=device,
-                                        sampler=args.sampler,
-                                        sigma_min=args.sigma_min,
-                                        sigma_max=args.sigma_max,
-                                        s_churn=args.s_churn,
-                                        s_tmin=args.s_tmin,
-                                        s_tmax=args.s_tmax,
-                                        s_noise=args.s_noise,
-                                        noise=noise,
-                                        ts=ts,)
-                elif args.fwd == "flow":
-                    ema_sample = flow_sample(diffusion,
-                                         generator,
-                                         ema,
-                                         (args.num_sampling, args.num_in_channels, args.image_size, args.image_size),
-                                         steps=args.steps,
-                                         model_kwargs=model_kwargs,
-                                         device=device,
-                                         sampler=args.sampler,
-                                         noise=noise,
-                                         ts=ts,)
-                if use_normalize:
-                    ema_sample = [vae.decode(x.unsqueeze(0)*std/args.sigma_data + mean).sample for x in ema_sample]
-                else:
-                    ema_sample = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in ema_sample]
-            ema_sample = torch.concat(ema_sample, dim=0)
-            sample_to_save = torch.concat([sample, ema_sample], dim=0)
-            save_image(sample_to_save, f"{sample_dir}/image_{epoch:07d}.jpg", nrow=4, normalize=True, value_range=(-1, 1))
-            del sample
         # dist.barrier()
     model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
@@ -703,7 +715,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-karras-normalization", action="store_true", default=False)
     
     ###### model ######
-    parser.add_argument("--vae", type=str, choices=["vae", "eq_vae"], default="vae")  # Choice doesn't affect training
+    parser.add_argument("--vae", type=str, choices=["vae", "eq_vae", "va_vae"], default="vae")  # Choice doesn't affect training
     parser.add_argument("--num-channels", type=int, default=128)
     parser.add_argument("--num-res-blocks", type=int, default=2)
     parser.add_argument("--num-heads", type=int, default=4)
@@ -769,12 +781,12 @@ if __name__ == "__main__":
     parser.add_argument("--a", type=float, default=0.9299)
     parser.add_argument("--b", type=float, default=0.9246)
     parser.add_argument("--rho", type=float, default=7)
-    
+    parser.add_argument("--skip-opt", action="store_true", default=False)
     
     ###### ploting & saving ######
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--ckpt-every", type=int, default=25)
-    parser.add_argument("--save-content-every", type=int, default=5)
+    parser.add_argument("--save-content-every", type=int, default=25)
     parser.add_argument("--plot-every", type=int, default=5)
     parser.add_argument("--exp", type=str, required=True)
     parser.add_argument("--results-dir", type=str, default="results")

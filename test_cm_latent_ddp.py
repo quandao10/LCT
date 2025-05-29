@@ -23,7 +23,17 @@ from models.script_util import (
 from models.karras_diffusion import karras_sample
 import numpy as np
 from tqdm import tqdm
+from tokenizer.vavae import VA_VAE
+from calflops import calculate_flops
 
+def decode_image(vae, latent, vae_name):
+    latent = latent.unsqueeze(0)
+    if vae_name == "vae" or vae_name == "eq_vae":
+        return vae.decode(latent).sample
+    elif vae_name == "va_vae":
+        return vae.decode_to_images(latent)
+    else:
+        raise ValueError(f"Invalid vae name: {vae_name}")
 
 def main(args):
     torch.backends.cuda.matmul.allow_tf32 = True  # True: fast but may lead to some small numerical differences
@@ -49,7 +59,7 @@ def main(args):
         real_img_dir = "pytorch_fid/ffhq_stat.npy"
     elif args.dataset == "lsun_bedroom":
         real_img_dir = "pytorch_fid/lsun_bedroom_stat.npy"
-    elif args.dataset in ["latent_imagenet_256", "imagenet_256"]:
+    elif args.dataset in ["latent_imagenet_256", "imagenet_256", "imagenet_256_va"]:
         real_img_dir = "pytorch_fid/imagenet_stat.npy"
     elif args.dataset == "subset_imagenet_256":
         real_img_dir = "pytorch_fid/imagenet25.npy"
@@ -59,11 +69,25 @@ def main(args):
     to_range_0_1 = lambda x: (x + 1.0) / 2.0
 
     model, diffusion = create_model_and_diffusion(args)
+    # total_params = sum(p.numel() for p in model.parameters())
+    # print(f"Number of parameters: {total_params}") 
+    # x = torch.randn(1, args.num_in_channels, args.image_size, args.image_size).to(device)
+    # t = torch.zeros(1).to(device)
+    # c = torch.zeros(1).to(device, dtype=torch.int) 
+    # flops, macs, params = calculate_flops(
+    #     model=model, kwargs={"x": x, "t": t, "y": c}, output_as_string=False, output_precision=4
+    # )
+    # print("GFLOPs:%.2f Params:%.2fM \n" % (flops / 2 / 10**9, params / 10**6))
+    # exit(0)
     model.to(device=device)
     if args.vae == "vae":
         vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
     elif args.vae == "eq_vae":
         vae = AutoencoderKL.from_pretrained(f"zelaki/eq-vae").to(device)
+    elif args.vae == "va_vae":
+        vae = VA_VAE(
+            f'tokenizer/configs/vavae_f16d32.yaml',
+        )
     ckpt = torch.load(args.ckpt, map_location=torch.device(f'cuda:{device}'))
     print("Finish loading model")
     # loading weights from ddp in single gpu
@@ -91,18 +115,55 @@ def main(args):
     use_label = True if "imagenet" in args.dataset else False
     use_normalize = args.normalize_matrix is not None
     if use_normalize:
-        data = np.load(args.normalize_matrix, allow_pickle=True).item()
-        mean = data["mean"].to(device)
-        std = data["std"].to(device)
+        if args.normalize_matrix.endswith(".npy"):
+            data = np.load(args.normalize_matrix, allow_pickle=True).item()
+        elif args.normalize_matrix.endswith(".pt"):
+            data = torch.load(args.normalize_matrix)
+        else:
+            raise ValueError(f"Invalid normalize matrix file: {args.normalize_matrix}")
+        try:
+            mean = data["mean"].to(device)
+            std = data["std"].to(device)
+        except:
+            mean = torch.tensor(data["mean"]).to(device)
+            std = torch.tensor(data["std"]).to(device)
         
     if "imagenet" in args.dataset and args.use_karras_normalization:
         print("using karras normalization for imagenet")
         mean = torch.tensor([5.81, 3.25, 0.12, -2.15]).view(1, -1, 1, 1).to(device)
         std =  torch.tensor([4.17, 4.62, 3.71, 3.28]).view(1, -1, 1, 1).to(device)
+    
+    # from models.nn import append_zero
+    # # import numpy as np
+    # def get_sigmas_karras(n, sigma_min, sigma_max, rho=7.0, device="cpu"):
+    #     """Constructs the noise schedule of Karras et al. (2022)."""
+    #     ramp = torch.linspace(0, 1, n)
+    #     min_inv_rho = sigma_min ** (1 / rho)
+    #     max_inv_rho = sigma_max ** (1 / rho)
+    #     sigmas = (max_inv_rho + ramp * (min_inv_rho - max_inv_rho)) ** rho
+    #     return append_zero(sigmas).to(device)
+    
+    # sigmas = get_sigmas_karras(512, args.sigma_min, args.sigma_max, device=device)
+    # print(sigmas)
+    # # print(sigmas.shape)
+    # time_data = 1000 * 0.25 * torch.log(sigmas + 1e-44)
+    # # print(time_data.shape)
+    # time_embed = model.t_embedder
+    # time_mlp = model.cond_mixing_mlp
+    # lambda_mlp = time_mlp(time_embed(time_data))
+    # import matplotlib.pyplot as plt
+    # plt.figure(figsize=(6, 5))
+    # plt.plot(-2*np.log(sigmas.detach().cpu().numpy()), lambda_mlp.detach().cpu().numpy())
+    # plt.xlabel("snr(t)")
+    # plt.ylabel("λ")
+    # plt.tight_layout()
+    # # plt.title("λ vs snr(t)")
+    # plt.savefig("lambda_mlp.png")
+    # exit(0)
 
     def run_sampling(num_samples, generator):
-        noise = generator.randn(num_samples, 4, args.image_size, args.image_size).to(device)*args.sigma_max if args.fwd == "ve" else \
-            generator.randn(num_samples, 4, args.image_size, args.image_size).to(device)
+        noise = generator.randn(num_samples, args.num_in_channels, args.image_size, args.image_size).to(device)*args.sigma_max if args.fwd == "ve" else \
+            generator.randn(num_samples, args.num_in_channels, args.image_size, args.image_size).to(device)
         if not use_label:
             model_kwargs = dict(y=None)
         else:
@@ -138,15 +199,15 @@ def main(args):
                         s_tmax=args.s_tmax,
                         s_noise=args.s_noise,
                         noise=noise,
+                        shift=args.shift,
                         ts=ts,
                     )
         if args.cfg_scale > 1.0:
-            fake_sample, _ = fake_sample.chunk(2, dim=0)  # Remove null class samples        
-        if use_normalize:
-            fake_image = [vae.decode(x.unsqueeze(0)*std/args.sigma_data + mean).sample for x in fake_sample] # careful here
-        else:
-            fake_image = [vae.decode(x.unsqueeze(0) / 0.18215).sample for x in fake_sample]
-        fake_image = [torch.clamp(x, -1, 1) for x in fake_image]
+            fake_sample, _ = fake_sample.chunk(2, dim=0)  
+            # Remove null class samples       
+        fake_sample = fake_sample*std/args.sigma_data + mean 
+        fake_sample = [decode_image(vae, x, args.vae) for x in fake_sample]
+        fake_image = [torch.clamp(x, -1, 1) for x in fake_sample]
         return fake_image
     
     if args.compute_fid:
@@ -195,7 +256,7 @@ def main(args):
         fake_image = run_sampling(args.batch_size, generator)
         fake_image = torch.cat(fake_image)
         ema = "" if not args.ema else "_ema"
-        torchvision.utils.save_image(fake_image, f'{args.exp}_{args.epoch_id}{ema}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
+        torchvision.utils.save_image(fake_image, f'{args.exp}_{args.epoch_id}{ema}.jpg', nrow=8, normalize=True, value_range=(-1, 1))
         dist.barrier()
         dist.destroy_process_group()
 
@@ -211,7 +272,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-karras-normalization", action="store_true", default=False)
     
     ###### model ######
-    parser.add_argument("--vae", type=str, choices=["vae", "eq_vae"], default="vae")  # Choice doesn't affect training
+    parser.add_argument("--vae", type=str, choices=["vae", "eq_vae", "va_vae"], default="vae")  # Choice doesn't affect training
     parser.add_argument("--num-channels", type=int, default=128)
     parser.add_argument("--num-res-blocks", type=int, default=2)
     parser.add_argument("--num-heads", type=int, default=4)
@@ -249,7 +310,7 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=40)
     parser.add_argument("--num-sampling", type=int, default=50000)
     parser.add_argument("--ts", type=str, default="0,22,39")
-    
+    parser.add_argument("--shift", type=int, default=0)
     ###### diffusion ######
     parser.add_argument("--sigma-min", type=float, default=0.002)
     parser.add_argument("--sigma-max", type=float, default=80.0)

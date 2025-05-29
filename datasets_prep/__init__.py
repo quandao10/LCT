@@ -11,7 +11,8 @@ import os
 from models.script_util import parse_repa_enc_info, parse_repa_enc_info_v2
 from tqdm import tqdm
 import json
-
+from glob import glob
+from safetensors.torch import safe_open
 
 class CustomDataset(Dataset):
     def __init__(self, dataset, features_dir, labels_dir=None):
@@ -43,8 +44,8 @@ class CustomDataset(Dataset):
         if self.labels_dir is not None:
             labels = np.load(os.path.join(self.labels_dir, file_id))
         else:
-            return torch.from_numpy(features), torch.tensor(0)
-        return torch.from_numpy(features.copy()), torch.from_numpy(labels)
+            return torch.from_numpy(features), torch.tensor(0), torch.tensor(0)
+        return torch.from_numpy(features.copy()), torch.from_numpy(labels), torch.from_numpy(labels)
 
 
 class RepaDataset(Dataset):
@@ -91,6 +92,80 @@ class RepaDataset(Dataset):
         return latent, ssl_feat, label
 
 
+class VAImgLatentDataset(Dataset):
+    def __init__(self, data_dir, latent_norm=True):
+        self.data_dir = data_dir
+        self.latent_norm = latent_norm
+
+        self.files = sorted(glob(os.path.join(data_dir, "*.safetensors")))
+        self.img_to_file_map = self.get_img_to_safefile_map()
+        
+        if latent_norm:
+            self._latent_mean, self._latent_std = self.get_latent_stats()
+
+    def get_img_to_safefile_map(self):
+        img_to_file = {}
+        for safe_file in self.files:
+            with safe_open(safe_file, framework="pt", device="cpu") as f:
+                labels = f.get_slice('labels')
+                labels_shape = labels.get_shape()
+                num_imgs = labels_shape[0]
+                cur_len = len(img_to_file)
+                for i in range(num_imgs):
+                    img_to_file[cur_len+i] = {
+                        'safe_file': safe_file,
+                        'idx_in_file': i
+                    }
+        return img_to_file
+
+    def get_latent_stats(self):
+        latent_stats_cache_file = os.path.join(self.data_dir, "latents_stats.pt")
+        if not os.path.exists(latent_stats_cache_file):
+            latent_stats = self.compute_latent_stats()
+            torch.save(latent_stats, latent_stats_cache_file)
+        else:
+            latent_stats = torch.load(latent_stats_cache_file)
+        return latent_stats['mean'], latent_stats['std']
+    
+    def compute_latent_stats(self):
+        num_samples = min(10000, len(self.img_to_file_map))
+        random_indices = np.random.choice(len(self.img_to_file_map), num_samples, replace=False)
+        latents = []
+        for idx in tqdm(random_indices):
+            img_info = self.img_to_file_map[idx]
+            safe_file, img_idx = img_info['safe_file'], img_info['idx_in_file']
+            with safe_open(safe_file, framework="pt", device="cpu") as f:
+                features = f.get_slice('latents')
+                feature = features[img_idx:img_idx+1]
+                latents.append(feature)
+        latents = torch.cat(latents, dim=0)
+        mean = latents.mean(dim=[0, 2, 3], keepdim=True)
+        std = latents.std(dim=[0, 2, 3], keepdim=True)
+        latent_stats = {'mean': mean, 'std': std}
+        print(latent_stats)
+        return latent_stats
+
+    def __len__(self):
+        return len(self.img_to_file_map.keys())
+
+    def __getitem__(self, idx):
+        img_info = self.img_to_file_map[idx]
+        safe_file, img_idx = img_info['safe_file'], img_info['idx_in_file']
+        with safe_open(safe_file, framework="pt", device="cpu") as f:
+            tensor_key = "latents" if np.random.uniform(0, 1) > 0.5 else "latents_flip"
+            features = f.get_slice(tensor_key)
+            labels = f.get_slice('labels')
+            feature = features[img_idx:img_idx+1]
+            label = labels[img_idx:img_idx+1]
+
+        if self.latent_norm:
+            feature = (feature - self._latent_mean) / self._latent_std
+        
+        # remove the first batch dimension (=1) kept by get_slice()
+        feature = feature.squeeze(0)
+        label = label.squeeze(0)
+        ssl_feat = torch.ones_like(feature)
+        return feature, ssl_feat, label
 
 class ImageNet_subdataset(torch.utils.data.Dataset):
     def __init__(self, base_dir, vae_type, repa_enc_info=None):
@@ -152,7 +227,7 @@ class ImageNet_dataset(torch.utils.data.Dataset):
         with open(self.meta_file, 'r') as file:
             self.meta_data = json.load(file)["labels"]
         self.use_repa = repa_enc_info is not None
-        
+                
         if repa_enc_info is not None:
             depth, enc, z_dim = parse_repa_enc_info_v2(repa_enc_info)
             self.ssl_feat_dir = os.path.join(self.base_dir, f"ssl_feat_{enc}")
@@ -185,6 +260,13 @@ def get_repa_dataset(args):
     elif args.dataset == "imagenet_256":
         dataset = ImageNet_dataset("/research/cbim/vast/qd66/workspace/dataset/repa/latent_imagenet256/", 
                                    vae_type=args.vae, repa_enc_info=args.repa_enc_info if args.use_repa else None)
+        return dataset
+    elif args.dataset == "imagenet_256_va":
+        dataset = VAImgLatentDataset("/research/cbim/vast/qd66/workspace/dataset/repa/latent_va_imagenet256/imagenet_train_256", 
+                                     latent_norm=False)
+        return dataset
+    elif args.dataset == "latent_church256_flip":
+        dataset = CustomDataset("church256_flip", "/research/cbim/vast/qd66/workspace/dataset/features/lsun_church")
         return dataset
     else:
         return RepaDataset(args.datadir, args.repa_enc_info)
